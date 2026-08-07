@@ -428,58 +428,7 @@ class _StudentDirectoryViewState extends ConsumerState<StudentDirectoryView>
                             borderRadius: BorderRadius.circular(4)),
                       ),
                     ),
-                    const SizedBox(width: 12),
 
-                    OutlinedButton.icon(
-                      onPressed: () async {
-                        try {
-                          final seeder = DatabaseSeeder();
-                          await seeder.seedSampleStudents();
-                          if (context.mounted) {
-                            ref.invalidate(studentDirectoryProvider);
-                            ref.invalidate(studentsListProvider);
-                            ref.invalidate(dashboardMetricsProvider);
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
-                                content: Text(
-                                    'Added 10 sample student records with initial invoices!',
-                                    style: GoogleFonts.poppins(
-                                        color: Colors.white,
-                                        fontWeight: FontWeight.w600)),
-                                backgroundColor: AppTheme.primaryPurple,
-                              ),
-                            );
-                          }
-                        } catch (e) {
-                          if (context.mounted) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
-                                  content: Text('Error seeding demo data: $e',
-                                      style: GoogleFonts.poppins()),
-                                  backgroundColor: AppTheme.error),
-                            );
-                          }
-                        }
-                      },
-                      icon: const Icon(Icons.group_add_rounded, size: 16),
-                      label: Text(
-                        'ADD 10 SAMPLE STUDENTS',
-                        style: GoogleFonts.poppins(
-                          fontWeight: FontWeight.w600,
-                          letterSpacing: 1.0,
-                          fontSize: 11,
-                        ),
-                      ),
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: AppTheme.primaryPurple,
-                        side: const BorderSide(color: AppTheme.primaryPurple),
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 16, vertical: 16),
-                        shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(4)),
-                      ),
-                    ),
-                    const SizedBox(width: 12),
 
                     OutlinedButton.icon(
                       onPressed: () {
