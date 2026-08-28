@@ -106,8 +106,9 @@ class _UpdateDialogState extends State<UpdateDialog> {
       // /SILENT and /SP- are Inno Setup arguments for background install
       await Process.start(
         installerPath,
-        ['/SILENT', '/SP-'],
+        [],
         mode: ProcessStartMode.detached,
+        runInShell: true,
       );
       
       // Exit the current app so installer can overwrite files
