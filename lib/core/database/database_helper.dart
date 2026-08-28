@@ -26,8 +26,20 @@ class DatabaseHelper {
         await newDir.create(recursive: true);
       }
       
-      // Copy database file
+      
+      // Copy database file and WAL files
       await legacyDb.copy(newDb.path);
+      
+      final legacyWal = File('${legacyDb.path}-wal');
+      if (await legacyWal.exists()) {
+        await legacyWal.copy('${newDb.path}-wal');
+      }
+      
+      final legacyShm = File('${legacyDb.path}-shm');
+      if (await legacyShm.exists()) {
+        await legacyShm.copy('${newDb.path}-shm');
+      }
+
       
       // Also attempt to migrate Receipts, Backups, Reports, etc. if they exist
       final legacyFolders = ['Receipts', 'Backups', 'ReportCards', 'Logs', 'Media', 'ID_Cards', 'Certificates'];
