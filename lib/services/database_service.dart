@@ -424,6 +424,9 @@ class DatabaseService {
   Future<void> promoteStudentsBatch({
     required List<String> studentIds,
     required String targetGrade,
+    String? classId,
+    String? sectionId,
+    String? sectionName,
     bool markAsAlumni = false,
   }) async {
     final db = await _db;
@@ -441,12 +444,17 @@ class DatabaseService {
             whereArgs: [id],
           );
         } else {
+          final Map<String, Object?> updates = {
+            'grade_level': targetGrade,
+            'updated_at': DateTime.now().toIso8601String(),
+          };
+          if (classId != null) updates['class_id'] = classId;
+          if (sectionId != null) updates['section_id'] = sectionId;
+          if (sectionName != null) updates['section'] = sectionName;
+          
           await _updateLogged(txn, 
             'students',
-            {
-              'grade_level': targetGrade,
-              'updated_at': DateTime.now().toIso8601String(),
-            },
+            updates,
             where: 'id = ?',
             whereArgs: [id],
           );

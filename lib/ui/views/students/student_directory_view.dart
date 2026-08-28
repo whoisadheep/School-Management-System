@@ -2317,25 +2317,57 @@ class _StudentDirectoryViewState extends ConsumerState<StudentDirectoryView>
   }
 
   void _showClassPromotionDialog(BuildContext context) {
-    String fromGrade = 'Grade 1';
-    String toGrade = 'Grade 2';
+    String fromGrade = 'LKG';
+    String toGrade = 'UKG';
     List<Student> currentStudents = [];
     Set<String> selectedStudentIds = {};
+    
+    List<ClassModel> allClasses = [];
+    List<Section> classSections = [];
+    String? targetClassId;
+    String? targetSectionId;
+    String? targetSectionName;
+    
     bool isLoading = true;
+    bool isLoadingSections = false;
 
     showDialog(
       context: context,
       builder: (context) => StatefulBuilder(
         builder: (context, setDialogState) {
           if (isLoading) {
-            ref.read(databaseServiceProvider).getStudentsByGrade(fromGrade).then((list) {
+            final dbService = ref.read(databaseServiceProvider);
+            Future.wait([
+              dbService.getStudentsByGrade(fromGrade),
+              dbService.getAllClasses(),
+            ]).then((results) {
               setDialogState(() {
-                currentStudents = list;
-                selectedStudentIds = list.map((s) => s.id).toSet();
+                currentStudents = results[0] as List<Student>;
+                selectedStudentIds = currentStudents.map((s) => s.id).toSet();
+                allClasses = results[1] as List<ClassModel>;
                 isLoading = false;
+                
+                // Try to auto-match target class based on toGrade
+                try {
+                   final match = allClasses.firstWhere((c) => c.name == toGrade);
+                   targetClassId = match.id;
+                   isLoadingSections = true;
+                   dbService.getSectionsForClass(match.id).then((secs) {
+                     setDialogState(() {
+                       classSections = secs;
+                       isLoadingSections = false;
+                       if (secs.isNotEmpty) {
+                         targetSectionId = secs.first.id;
+                         targetSectionName = secs.first.name;
+                       }
+                     });
+                   });
+                } catch(_) {}
               });
             });
           }
+
+          final isAlumni = toGrade == 'Alumni / Graduated';
 
           return AlertDialog(
             backgroundColor: Colors.white,
@@ -2343,16 +2375,16 @@ class _StudentDirectoryViewState extends ConsumerState<StudentDirectoryView>
               children: [
                 const Icon(Icons.published_with_changes_rounded, color: AppTheme.primaryPurple),
                 const SizedBox(width: 10),
-                Text('STUDENT CLASS PROMOTION TOOL', style: GoogleFonts.poppins(fontWeight: FontWeight.bold, fontSize: 14)),
+                Text('STUDENT PROMOTION TOOL', style: GoogleFonts.poppins(fontWeight: FontWeight.bold, fontSize: 14)),
               ],
             ),
             content: ConstrainedBox(
-              constraints: BoxConstraints(maxWidth: 600, maxHeight: MediaQuery.of(context).size.height * 0.7),
+              constraints: BoxConstraints(maxWidth: 650, maxHeight: MediaQuery.of(context).size.height * 0.7),
               child: SingleChildScrollView(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text('Promote students from one academic grade to the next class or mark as Alumni.', style: GoogleFonts.poppins(fontSize: 12, color: AppTheme.textSecondary)),
+                    Text('Promote students to a new academic session and assign them to a class/section.', style: GoogleFonts.poppins(fontSize: 12, color: AppTheme.textSecondary)),
                     const SizedBox(height: 16),
                     Row(
                       children: [
@@ -2380,12 +2412,102 @@ class _StudentDirectoryViewState extends ConsumerState<StudentDirectoryView>
                             decoration: const InputDecoration(labelText: 'To Grade (Target)'),
                             items: [..._grades.where((g) => g != 'All'), 'Alumni / Graduated'].map((g) => DropdownMenuItem(value: g, child: Text(g))).toList(),
                             onChanged: (val) {
-                              if (val != null) setDialogState(() => toGrade = val);
+                              if (val != null) {
+                                setDialogState(() {
+                                  toGrade = val;
+                                  targetClassId = null;
+                                  targetSectionId = null;
+                                  classSections.clear();
+                                  
+                                  if (val != 'Alumni / Graduated') {
+                                    try {
+                                       final match = allClasses.firstWhere((c) => c.name == val);
+                                       targetClassId = match.id;
+                                       isLoadingSections = true;
+                                       ref.read(databaseServiceProvider).getSectionsForClass(match.id).then((secs) {
+                                         setDialogState(() {
+                                           classSections = secs;
+                                           isLoadingSections = false;
+                                           if (secs.isNotEmpty) {
+                                             targetSectionId = secs.first.id;
+                                             targetSectionName = secs.first.name;
+                                           }
+                                         });
+                                       });
+                                    } catch(_) {}
+                                  }
+                                });
+                              }
                             },
                           ),
                         ),
                       ],
                     ),
+                    if (!isAlumni) ...[
+                      const SizedBox(height: 16),
+                      Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(color: Colors.blue.shade50, borderRadius: BorderRadius.circular(8), border: Border.all(color: Colors.blue.shade100)),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text('Assignment Details (Optional but Recommended)', style: GoogleFonts.poppins(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.blue.shade800)),
+                            const SizedBox(height: 8),
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: DropdownButtonFormField<String>(
+                                    value: targetClassId,
+                                    style: GoogleFonts.poppins(color: AppTheme.textPrimary),
+                                    decoration: const InputDecoration(labelText: 'Target Class (Session)', filled: true, fillColor: Colors.white),
+                                    items: allClasses.map((c) => DropdownMenuItem(value: c.id, child: Text('${c.name} (${c.academicYear ?? "Any Session"})'))).toList(),
+                                    onChanged: (val) {
+                                      if (val != null) {
+                                        setDialogState(() {
+                                          targetClassId = val;
+                                          targetSectionId = null;
+                                          targetSectionName = null;
+                                          isLoadingSections = true;
+                                          ref.read(databaseServiceProvider).getSectionsForClass(val).then((secs) {
+                                            setDialogState(() {
+                                              classSections = secs;
+                                              isLoadingSections = false;
+                                              if (secs.isNotEmpty) {
+                                                targetSectionId = secs.first.id;
+                                                targetSectionName = secs.first.name;
+                                              }
+                                            });
+                                          });
+                                        });
+                                      }
+                                    },
+                                  ),
+                                ),
+                                const SizedBox(width: 16),
+                                Expanded(
+                                  child: isLoadingSections
+                                      ? const Center(child: CircularProgressIndicator())
+                                      : DropdownButtonFormField<String>(
+                                          value: targetSectionId,
+                                          style: GoogleFonts.poppins(color: AppTheme.textPrimary),
+                                          decoration: const InputDecoration(labelText: 'Target Section', filled: true, fillColor: Colors.white),
+                                          items: classSections.map((s) => DropdownMenuItem(value: s.id, child: Text(s.name))).toList(),
+                                          onChanged: (val) {
+                                            if (val != null) {
+                                              setDialogState(() {
+                                                targetSectionId = val;
+                                                targetSectionName = classSections.firstWhere((s) => s.id == val).name;
+                                              });
+                                            }
+                                          },
+                                        ),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
                     const SizedBox(height: 16),
                     if (isLoading)
                       const Padding(
@@ -2447,15 +2569,17 @@ class _StudentDirectoryViewState extends ConsumerState<StudentDirectoryView>
                 child: const Text('Cancel'),
               ),
               ElevatedButton.icon(
-                onPressed: selectedStudentIds.isEmpty
+                onPressed: selectedStudentIds.isEmpty || (isLoading || isLoadingSections)
                     ? null
                     : () async {
-                        final isAlumni = toGrade == 'Alumni / Graduated';
                         try {
                           final dbService = ref.read(databaseServiceProvider);
                           await dbService.promoteStudentsBatch(
                             studentIds: selectedStudentIds.toList(),
                             targetGrade: isAlumni ? fromGrade : toGrade,
+                            classId: isAlumni ? null : targetClassId,
+                            sectionId: isAlumni ? null : targetSectionId,
+                            sectionName: isAlumni ? null : targetSectionName,
                             markAsAlumni: isAlumni,
                           );
 
