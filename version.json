@@ -1,6 +1,6 @@
 {
   "latest_version": "1.0.1",
-  "download_url": "https://github.com/whoisadheep/School-Management-System/releases/download/v1.0.0/SchoolManagementSystem-Installer.exe",
+  "download_url": "https://github.com/whoisadheep/School-Management-System/releases/download/v1.0.1/SchoolManagementSystem-Installer.exe",
   "sha256": "",
   "changelog": "Initial setup of auto-updater release.",
   "mandatory_update": false
