@@ -47,7 +47,7 @@ class SettingsService {
     } catch (_) {}
   }
 
-  /// Get configured receipt export path or default to Documents/SchoolManagementSystem/Receipts/
+  /// Get configured receipt export path or default to Documents/Eduvia/Receipts/
   Future<String> getReceiptExportPath() async {
     final configuredPath = await getSetting('receipt_export_path');
     if (configuredPath != null && configuredPath.isNotEmpty) {
@@ -55,7 +55,7 @@ class SettingsService {
     }
 
     final docsDir = await getApplicationDocumentsDirectory();
-    return p.join(docsDir.path, 'SchoolManagementSystem', 'Receipts');
+    return p.join(docsDir.path, 'Eduvia', 'Receipts');
   }
 
   /// Update receipt export path to user-chosen custom folder or shared network drive

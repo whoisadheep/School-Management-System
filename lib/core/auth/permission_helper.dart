@@ -5,6 +5,7 @@ import '../../providers/auth_provider.dart';
 import '../../providers/services_provider.dart';
 
 enum RiskyAction {
+  updateRecord('Update Record'),
   deleteRecord('Delete Record'),
   editFeeStructure('Edit Fee Structure'),
   editSalaryComponent('Edit Salary Component'),
@@ -24,18 +25,18 @@ enum RiskyAction {
 
 class PermissionHelper {
   /// Checks if the current admin has permission to perform a risky action.
-  /// If the role is 'administration', it blocks the action, shows an error, and returns false.
+  /// If the role is 'user', it blocks the action, shows an error, and returns false.
   /// Returns true if permitted.
   static bool requireAdminRole(BuildContext context, WidgetRef ref, RiskyAction action) {
     final authState = ref.read(authProvider);
     final role = authState.currentAdmin?.role;
 
     // We allow if the role is specifically 'principal'
-    if (role == 'principal') {
+    if (role == 'admin') {
       return true;
     }
 
-    // Otherwise (e.g. 'administration'), we block and log
+    // Otherwise (e.g. 'user'), we block and log
     final dbService = ref.read(databaseServiceProvider);
     dbService.logAction(
       actionType: 'risky_action_blocked',

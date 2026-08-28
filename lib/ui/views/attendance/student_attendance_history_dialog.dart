@@ -81,7 +81,7 @@ class _StudentAttendanceHistoryDialogState extends ConsumerState<StudentAttendan
     if (user == null) return;
     
     // RBAC: Admins can always edit. Teachers can edit (assuming assigned class, but for now we just check if they are teacher or admin).
-    if (user.role != UserRole.principal && user.role != UserRole.teacher) {
+    if (user.role != UserRole.admin && user.role != UserRole.teacher) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('You do not have permission to edit attendance.')));
       return;
     }

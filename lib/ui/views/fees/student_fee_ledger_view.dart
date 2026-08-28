@@ -916,7 +916,7 @@ class _StudentFeeLedgerViewState extends ConsumerState<StudentFeeLedgerView> wit
       // Generate sequential RCT-{year}-{seq} PDF Receipt
       final receiptNumber = await dbService.getNextReceiptNumber();
       final settingsService = SettingsService();
-      final schoolName = await settingsService.getSetting('school_name') ?? 'Kishan Company';
+      final schoolName = await settingsService.getSetting('school_name') ?? 'Eduvia';
       final schoolAddress = await settingsService.getSetting('school_address') ?? '123 Education Boulevard, Academic District';
       final schoolContact = await settingsService.getSetting('school_contact') ?? 'Phone: +1 800 555-0199 | Email: finance@school.edu';
 

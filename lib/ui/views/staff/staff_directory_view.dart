@@ -335,6 +335,7 @@ class _StaffDirectoryViewState extends ConsumerState<StaffDirectoryView>
       if (_selectedStaff == null) {
         await dbService.insertStaff(staff);
       } else {
+        if (!PermissionHelper.requireAdminRole(context, ref, RiskyAction.updateRecord)) return;
         await dbService.updateStaff(staff);
       }
       ref.invalidate(staffListProvider);
@@ -606,7 +607,7 @@ class _StaffDirectoryViewState extends ConsumerState<StaffDirectoryView>
   }
 
   Widget _buildStaffForm() {
-    final roles = ['teacher', 'principal', 'support_staff', 'driver'];
+    final roles = ['teacher', 'admin', 'support_staff', 'driver'];
     final genders = ['Male', 'Female', 'Other'];
     final bloodGroups = ['A+', 'A-', 'B+', 'B-', 'O+', 'O-', 'AB+', 'AB-'];
 
@@ -1023,7 +1024,7 @@ class _StaffDirectoryViewState extends ConsumerState<StaffDirectoryView>
                   items: const [
                     DropdownMenuItem(value: null, child: Text('All Roles')),
                     DropdownMenuItem(value: 'teacher', child: Text('Teacher')),
-                    DropdownMenuItem(value: 'principal', child: Text('Principal')),
+                    DropdownMenuItem(value: 'admin', child: Text('Admin')),
                     DropdownMenuItem(
                         value: 'support_staff', child: Text('Support Staff')),
                     DropdownMenuItem(value: 'driver', child: Text('Driver')),

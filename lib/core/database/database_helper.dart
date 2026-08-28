@@ -60,7 +60,7 @@ class DatabaseHelper {
     databaseFactory = databaseFactoryFfi;
 
     final Directory appDocDir = await getApplicationDocumentsDirectory();
-    final String dbPath = p.join(appDocDir.path, 'SchoolManagementSystem', _databaseName);
+    final String dbPath = p.join(appDocDir.path, 'Eduvia', _databaseName);
 
     final dbDir = Directory(p.dirname(dbPath));
     if (!await dbDir.exists()) {
@@ -288,7 +288,7 @@ class DatabaseHelper {
         id            TEXT PRIMARY KEY,
         username      TEXT NOT NULL UNIQUE,
         full_name     TEXT NOT NULL,
-        role          TEXT NOT NULL CHECK (role IN ('principal', 'accountant', 'viewer')),
+        role          TEXT NOT NULL CHECK (role IN ('admin', 'accountant', 'viewer')),
         pin_hash      TEXT NOT NULL,
         is_active     INTEGER NOT NULL DEFAULT 1,
         created_at    TEXT NOT NULL DEFAULT (datetime('now')),
@@ -333,7 +333,7 @@ class DatabaseHelper {
         gender            TEXT,
         blood_group       TEXT,
         photograph_path   TEXT,
-        role              TEXT NOT NULL CHECK (role IN ('teacher', 'principal', 'support_staff', 'driver')),
+        role              TEXT NOT NULL CHECK (role IN ('teacher', 'admin', 'support_staff', 'driver')),
         department_id     TEXT,
         designation       TEXT,
         joining_date      TEXT,
@@ -424,7 +424,7 @@ class DatabaseHelper {
 
     batch.execute('''
       INSERT INTO users (id, username, full_name, role, pin_hash)
-      VALUES ('usr-admin-001', 'admin', 'System Administrator', 'principal', '$adminPinHash')
+      VALUES ('usr-admin-001', 'admin', 'System Administrator', 'admin', '$adminPinHash')
     ''');
 
     // 12. Feature Flags Table
@@ -576,7 +576,7 @@ class DatabaseHelper {
         username TEXT UNIQUE NOT NULL,
         password_hash TEXT NOT NULL,
         full_name TEXT NOT NULL,
-        role TEXT NOT NULL CHECK (role IN ('principal','administration')),
+        role TEXT NOT NULL CHECK (role IN ('admin','user')),
         is_active INTEGER NOT NULL DEFAULT 1,
         force_password_change INTEGER NOT NULL DEFAULT 1,
         created_at TEXT NOT NULL DEFAULT (datetime('now')),
@@ -662,7 +662,7 @@ class DatabaseHelper {
             gender            TEXT,
             blood_group       TEXT,
             photograph_path   TEXT,
-            role              TEXT NOT NULL CHECK (role IN ('teacher', 'principal', 'support_staff', 'driver')),
+            role              TEXT NOT NULL CHECK (role IN ('teacher', 'admin', 'support_staff', 'driver')),
             department        TEXT,
             designation       TEXT,
             joining_date      TEXT,
@@ -2025,7 +2025,7 @@ class DatabaseHelper {
             username TEXT UNIQUE NOT NULL,
             password_hash TEXT NOT NULL,
             full_name TEXT NOT NULL,
-            role TEXT NOT NULL CHECK (role IN ('principal','administration')),
+            role TEXT NOT NULL CHECK (role IN ('admin','user')),
             is_active INTEGER NOT NULL DEFAULT 1,
             force_password_change INTEGER NOT NULL DEFAULT 1,
             created_at TEXT NOT NULL DEFAULT (datetime('now')),
@@ -2044,7 +2044,7 @@ class DatabaseHelper {
               'username': 'admin',
               'password_hash': initialPassword,
               'full_name': 'System Administrator',
-              'role': 'principal',
+              'role': 'admin',
               'force_password_change': 1,
             });
           }
@@ -2090,7 +2090,7 @@ class DatabaseHelper {
             username TEXT UNIQUE NOT NULL,
             password_hash TEXT NOT NULL,
             full_name TEXT NOT NULL,
-            role TEXT NOT NULL CHECK (role IN ('principal','administration')),
+            role TEXT NOT NULL CHECK (role IN ('admin','user')),
             is_active INTEGER NOT NULL DEFAULT 1,
             force_password_change INTEGER NOT NULL DEFAULT 1,
             created_at TEXT NOT NULL DEFAULT (datetime('now')),
@@ -2101,7 +2101,7 @@ class DatabaseHelper {
         await db.execute('''
           INSERT INTO admin_users (id, username, password_hash, full_name, role, is_active, force_password_change, created_at, last_login)
           SELECT id, username, password_hash, full_name, 
-                 CASE WHEN role = 'admin' THEN 'principal' ELSE role END, 
+                 CASE WHEN role = 'principal' THEN 'admin' ELSE role END, 
                  is_active, 1, created_at, last_login 
           FROM admin_users_old
         ''');
@@ -2660,7 +2660,7 @@ class DatabaseHelper {
           username TEXT UNIQUE NOT NULL,
           password_hash TEXT NOT NULL,
           full_name TEXT NOT NULL,
-          role TEXT NOT NULL CHECK (role IN ('principal','administration')),
+          role TEXT NOT NULL CHECK (role IN ('admin','user')),
           is_active INTEGER NOT NULL DEFAULT 1,
           force_password_change INTEGER NOT NULL DEFAULT 1,
           created_at TEXT NOT NULL DEFAULT (datetime('now')),
@@ -2679,7 +2679,7 @@ class DatabaseHelper {
           'username': 'admin',
           'password_hash': initialPassword,
           'full_name': 'System Administrator',
-          'role': 'principal',
+          'role': 'admin',
           'force_password_change': 1,
         });
       } else {
@@ -2692,7 +2692,7 @@ class DatabaseHelper {
             'username': 'admin_legacy', // Avoid UNIQUE constraint on username 'admin' if it exists
             'password_hash': initialPassword,
             'full_name': 'Legacy System Administrator',
-            'role': 'principal',
+            'role': 'admin',
             'force_password_change': 1,
           });
         }
@@ -2709,7 +2709,7 @@ class DatabaseHelper {
       // 8. Default App Settings
       await db.execute('''
         INSERT OR REPLACE INTO app_settings (key, value)
-        VALUES ('school_name', 'Kishan Company')
+        VALUES ('school_name', 'Eduvia')
       ''');
       await db.execute('''
         INSERT OR REPLACE INTO app_settings (key, value)

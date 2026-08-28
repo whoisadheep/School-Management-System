@@ -33,7 +33,7 @@ class _AssistantViewState extends ConsumerState<AssistantView> with TickerProvid
   
   final List<AssistantMessage> _messages = [
     AssistantMessage(
-      text: '👋 Hello! I am your **Kishan Company AI Assistant**.\n\n'
+      text: '👋 Hello! I am your **Eduvia AI Assistant**.\n\n'
           'I am connected directly to your school database and Google Gemini AI. '
           'You can ask me about students, fees, pending balances, teachers, attendance, transport routes, and exams!',
       isUser: false,

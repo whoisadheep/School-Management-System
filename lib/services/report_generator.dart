@@ -20,7 +20,7 @@ class ReportGenerator {
     required Student student,
     String? receiptNumber,
     String? feeHeadName,
-    String schoolName = 'Kishan Company',
+    String schoolName = 'Eduvia',
     String schoolAddress = '123 Education Boulevard, Academic District',
     String schoolContact = 'Phone: +1 800 555-0199 | Email: finance@school.edu',
   }) async {
@@ -364,7 +364,7 @@ class ReportGenerator {
     String? receiptNumber,
     String? feeHeadName,
     String? customExportDirectory,
-    String schoolName = 'Kishan Company',
+    String schoolName = 'Eduvia',
     String schoolAddress = '123 Education Boulevard, Academic District',
     String schoolContact = 'Phone: +1 800 555-0199 | Email: finance@school.edu',
   }) async {
@@ -383,7 +383,7 @@ class ReportGenerator {
     String receiptsFolderPath = customExportDirectory ?? '';
     if (receiptsFolderPath.isEmpty) {
       final Directory documentsDir = await getApplicationDocumentsDirectory();
-      receiptsFolderPath = p.join(documentsDir.path, 'SchoolManagementSystem', 'Receipts');
+      receiptsFolderPath = p.join(documentsDir.path, 'Eduvia', 'Receipts');
     }
 
     final receiptsDir = Directory(receiptsFolderPath);
@@ -403,7 +403,7 @@ class ReportGenerator {
   /// Build raw PDF bytes for a Student ID Card (for preview).
   static Future<Uint8List> buildStudentIdCardPdfBytes({
     required Student student,
-    String schoolName = 'Kishan Company',
+    String schoolName = 'Eduvia',
     String schoolAddress = '123 Education Boulevard, Academic District',
     String schoolContact = 'Phone: +1 800 555-0199',
   }) async {
@@ -548,7 +548,7 @@ class ReportGenerator {
   /// Generate a printable PDF Student ID Card and save to Documents.
   static Future<File> generateStudentIdCard({
     required Student student,
-    String schoolName = 'Kishan Company',
+    String schoolName = 'Eduvia',
     String schoolAddress = '123 Education Boulevard, Academic District',
     String schoolContact = 'Phone: +1 800 555-0199',
   }) async {
@@ -560,7 +560,7 @@ class ReportGenerator {
     );
 
     final Directory documentsDir = await getApplicationDocumentsDirectory();
-    final String idCardsDirPath = p.join(documentsDir.path, 'SchoolManagementSystem', 'ID_Cards');
+    final String idCardsDirPath = p.join(documentsDir.path, 'Eduvia', 'ID_Cards');
     final idCardsDir = Directory(idCardsDirPath);
     if (!await idCardsDir.exists()) {
       await idCardsDir.create(recursive: true);
@@ -592,7 +592,7 @@ class ReportGenerator {
     required String tcNumber,
     required String tcDate,
     required String reasonForLeaving,
-    String schoolName = 'Kishan Company',
+    String schoolName = 'Eduvia',
     String schoolAddress = '123 Education Boulevard, Academic District',
     String affiliationNo = 'AFF-CBSE-2024-99881',
   }) async {
@@ -744,7 +744,7 @@ class ReportGenerator {
     required String tcNumber,
     required String tcDate,
     required String reasonForLeaving,
-    String schoolName = 'Kishan Company',
+    String schoolName = 'Eduvia',
     String schoolAddress = '123 Education Boulevard, Academic District',
     String affiliationNo = 'AFF-CBSE-2024-99881',
   }) async {
@@ -759,7 +759,7 @@ class ReportGenerator {
     );
 
     final Directory documentsDir = await getApplicationDocumentsDirectory();
-    final String certificatesDirPath = p.join(documentsDir.path, 'SchoolManagementSystem', 'Certificates');
+    final String certificatesDirPath = p.join(documentsDir.path, 'Eduvia', 'Certificates');
     final certsDir = Directory(certificatesDirPath);
     if (!await certsDir.exists()) {
       await certsDir.create(recursive: true);

@@ -941,6 +941,7 @@ class _TransportViewState extends ConsumerState<TransportView> with SingleTicker
                         insuranceExpiry: insuranceExp,
                         fitnessExpiry: fitnessExp,
                       );
+                      if (!PermissionHelper.requireAdminRole(context, ref, RiskyAction.updateRecord)) return;
                       await dbService.updateVehicle(updated);
                     } else {
                       final newV = Vehicle.create(
@@ -1114,6 +1115,7 @@ class _TransportViewState extends ConsumerState<TransportView> with SingleTicker
                         startPoint: startController.text.trim(),
                         endPoint: endController.text.trim(),
                       );
+                      if (!PermissionHelper.requireAdminRole(context, ref, RiskyAction.updateRecord)) return;
                       await dbService.updateRoute(updated);
                     } else {
                       final newRoute = Route.create(

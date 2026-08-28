@@ -59,7 +59,7 @@ class PdfPreviewDialog extends StatelessWidget {
 
   Future<File> _savePdf() async {
     final Directory documentsDir = await getApplicationDocumentsDirectory();
-    final String dirPath = p.join(documentsDir.path, 'SchoolManagementSystem', defaultSubDirectory);
+    final String dirPath = p.join(documentsDir.path, 'Eduvia', defaultSubDirectory);
     final dir = Directory(dirPath);
     if (!await dir.exists()) {
       await dir.create(recursive: true);

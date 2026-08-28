@@ -28,7 +28,7 @@ class AssistantService {
     ];
 
     if (greetings.any((g) => normalized == g || normalized.startsWith('$g '))) {
-      return '👋 **Hello! Welcome to Kishan Company AI Assistant**\n\n'
+      return '👋 **Hello! Welcome to Eduvia AI Assistant**\n\n'
           'I am your intelligent school assistant with direct access to your database. You can ask me:\n\n'
           '• 📊 **Students**: *"How many students are enrolled?"* or *"Show class breakdown"*\n'
           '• 💰 **Fees & Dues**: *"Show fee collection summary"* or *"What are overdue balances?"*\n'
@@ -134,7 +134,7 @@ class AssistantService {
 
   Future<String?> _queryGeminiDirect(String command, String apiKey) async {
     final schema = await _getSchema();
-    final systemInstruction = '''You are an advanced AI Assistant for Kishan Company School Management System.
+    final systemInstruction = '''You are an advanced AI Assistant for Eduvia.
 You have direct read-only access to the local SQLite database via function calls.
 When you need data to answer the user's question, output ONLY:
 CALL_FUNCTION:execute_sql_query|{"query": "SELECT ..."}
@@ -356,7 +356,7 @@ $schema''';
       }
 
       // Default smart assistance summary
-      return '🤖 **Kishan Company AI Assistant (Offline Mode)**\n\n'
+      return '🤖 **Eduvia AI Assistant (Offline Mode)**\n\n'
           'I am ready to help you manage your school. You can ask me about:\n'
           '• **Students & Admissions**: "How many students are enrolled?"\n'
           '• **Fees & Dues**: "Show fee dues summary"\n'

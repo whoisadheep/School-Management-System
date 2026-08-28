@@ -96,21 +96,12 @@ class _AdminLoginViewState extends ConsumerState<AdminLoginView> {
                         width: 72,
                         height: 72,
                         fit: BoxFit.cover,
-                        errorBuilder: (context, error, stackTrace) => SvgPicture.asset(
-                          'assets/icons/app_icon.svg',
-                          width: 72,
-                          height: 72,
-                          placeholderBuilder: (context) => const Icon(
-                            Icons.school_rounded,
-                            color: Colors.white,
-                            size: 36,
-                          ),
-                        ),
+                        errorBuilder: (context, error, stackTrace) => const Icon(Icons.school_rounded, color: Colors.white, size: 48),
                       ),
                     ),
                     const SizedBox(height: 18),
                     Text(
-                      'KISHAN COMPANY',
+                      'EDUVIA',
                       style: GoogleFonts.poppins(
                         color: AppTheme.textPrimary,
                         fontSize: 20,
@@ -120,7 +111,7 @@ class _AdminLoginViewState extends ConsumerState<AdminLoginView> {
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      'School Management System',
+                      'Eduvia',
                       style: GoogleFonts.poppins(
                         color: AppTheme.textSecondary,
                         fontSize: 13,

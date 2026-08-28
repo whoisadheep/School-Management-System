@@ -155,10 +155,10 @@ class LicenseService {
         status: LicenseStatus.active,
         details: LicenseDetails(
           type: LicenseType.standard,
-          clientName: 'Kishan Company',
+          clientName: 'Eduvia',
           issuedAt: DateTime(2026, 1, 1),
         ),
-        message: 'Kishan Company - Active Enterprise License',
+        message: 'Eduvia - Active Enterprise License',
       );
     }
 

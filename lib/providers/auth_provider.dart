@@ -59,7 +59,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
           id: adminUser.id,
           username: adminUser.username,
           fullName: adminUser.fullName,
-          role: adminUser.role == 'principal' ? UserRole.principal : UserRole.accountant,
+          role: adminUser.role == 'admin' ? UserRole.admin : UserRole.accountant,
           pinHash: '',
           createdAt: adminUser.createdAt,
           updatedAt: adminUser.createdAt,

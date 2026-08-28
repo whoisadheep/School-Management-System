@@ -1300,6 +1300,7 @@ class _ExamManagementViewState extends ConsumerState<ExamManagementView> with Si
                         startDate: startDate,
                         endDate: endDate,
                       );
+                      if (!PermissionHelper.requireAdminRole(context, ref, RiskyAction.updateRecord)) return;
                       await dbService.updateExam(updated);
                     } else {
                       final newExam = Exam.create(

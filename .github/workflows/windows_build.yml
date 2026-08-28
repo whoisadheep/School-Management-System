@@ -51,6 +51,6 @@ jobs:
           tag_name: v${{ env.VERSION }}
           name: Release v${{ env.VERSION }}
           body: ${{ env.CHANGELOG }}
-          files: build/windows/installer/SchoolManagementSystem-Installer.exe
+          files: build/windows/installer/Eduvia-Installer.exe
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

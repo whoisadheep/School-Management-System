@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
+import "../../../core/auth/permission_helper.dart";
 import 'package:uuid/uuid.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../models/inventory.dart';
@@ -329,6 +330,7 @@ class _CatalogTabState extends ConsumerState<_CatalogTab> {
                   );
 
                   if (isEdit) {
+                    if (!PermissionHelper.requireAdminRole(context, ref, RiskyAction.updateRecord)) return;
                     await ref.read(databaseServiceProvider).updateInventoryItem(newItem);
                   } else {
                     await ref.read(databaseServiceProvider).createInventoryItem(newItem);

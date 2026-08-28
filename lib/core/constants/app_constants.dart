@@ -3,7 +3,7 @@ class AppConstants {
   AppConstants._();
 
   // App Info
-  static const String appName = 'School Management System';
+  static const String appName = 'Eduvia';
   static const String appVersion = '1.0.0';
   static const String appDescription = 'Admin & Accounting Module';
 

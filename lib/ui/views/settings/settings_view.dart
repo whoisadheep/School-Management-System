@@ -69,7 +69,7 @@ class _SettingsViewState extends ConsumerState<SettingsView>
     final backupPath =
         await _settingsService.getSetting('backup_export_path') ?? '';
     final schoolName = await _settingsService.getSetting('school_name') ??
-        'Kishan Company';
+        'Eduvia';
     final schoolAddress =
         await _settingsService.getSetting('school_address') ??
             '123 Education Boulevard, Academic District';
@@ -559,7 +559,7 @@ class _SettingsViewState extends ConsumerState<SettingsView>
               _buildSettingsField(
                 controller: _schoolNameController,
                 label: 'Official School Name',
-                hint: 'e.g. Kishan Company',
+                hint: 'e.g. Eduvia',
                 icon: Icons.business_rounded,
                 helper:
                     'Printed at the top of all A4 fee receipts and ID cards.',
@@ -976,7 +976,7 @@ class _SettingsViewState extends ConsumerState<SettingsView>
               ),
               const SizedBox(height: 20),
               Text(
-                'School Management System',
+                'Eduvia',
                 style: GoogleFonts.poppins(
                   fontSize: 20,
                   fontWeight: FontWeight.bold,

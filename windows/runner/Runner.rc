@@ -89,13 +89,13 @@ BEGIN
     BEGIN
         BLOCK "040904e4"
         BEGIN
-            VALUE "CompanyName", "Kishan Company" "\0"
-            VALUE "FileDescription", "Kishan Company - School Management System" "\0"
+            VALUE "CompanyName", "Eduvia" "\0"
+            VALUE "FileDescription", "Eduvia - School Management System" "\0"
             VALUE "FileVersion", VERSION_AS_STRING "\0"
             VALUE "InternalName", "school_management_system" "\0"
-            VALUE "LegalCopyright", "Copyright (C) 2026 Kishan Company. All rights reserved." "\0"
+            VALUE "LegalCopyright", "Copyright (C) 2026 Eduvia. All rights reserved." "\0"
             VALUE "OriginalFilename", "school_management_system.exe" "\0"
-            VALUE "ProductName", "Kishan Company - School Management System" "\0"
+            VALUE "ProductName", "Eduvia - School Management System" "\0"
             VALUE "ProductVersion", VERSION_AS_STRING "\0"
         END
     END

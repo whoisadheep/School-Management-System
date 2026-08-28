@@ -27,7 +27,7 @@ class CsvExportService {
       return configuredPath;
     }
     final docsDir = await getApplicationDocumentsDirectory();
-    return p.join(docsDir.path, 'SchoolManagementSystem', 'Exports');
+    return p.join(docsDir.path, 'Eduvia', 'Exports');
   }
 
   /// Export Student Directory list to CSV file.

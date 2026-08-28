@@ -29,7 +29,7 @@ class BackupService {
   Future<File> get _dbFile async {
     final Directory appDocDir = await getApplicationDocumentsDirectory();
     final String dbPath = p.join(
-        appDocDir.path, 'SchoolManagementSystem', 'school_management.db');
+        appDocDir.path, 'Eduvia', 'school_management.db');
     return File(dbPath);
   }
 
@@ -43,7 +43,7 @@ class BackupService {
 
     final Directory appDocDir = await getApplicationDocumentsDirectory();
     final String backupDirPath =
-        p.join(appDocDir.path, 'SchoolManagementSystem', 'Backups');
+        p.join(appDocDir.path, 'Eduvia', 'Backups');
 
     final backupDir = Directory(backupDirPath);
     if (!await backupDir.exists()) {
@@ -117,7 +117,7 @@ class BackupService {
   Future<List<BackupFileInfo>> listAvailableBackups() async {
     final Directory appDocDir = await getApplicationDocumentsDirectory();
     final String backupDirPath =
-        p.join(appDocDir.path, 'SchoolManagementSystem', 'Backups');
+        p.join(appDocDir.path, 'Eduvia', 'Backups');
 
     final backupDir = Directory(backupDirPath);
     if (!await backupDir.exists()) {

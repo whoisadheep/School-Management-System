@@ -30,7 +30,7 @@ class _AdminUsersViewState extends ConsumerState<AdminUsersView> {
   @override
   Widget build(BuildContext context) {
     final authState = ref.watch(authProvider);
-    if (authState.currentAdmin?.role != 'principal') {
+    if (authState.currentAdmin?.role != 'admin') {
       return Center(
         child: Text(
           'Access Denied: Admin access required',
@@ -88,7 +88,7 @@ class _AdminUsersViewState extends ConsumerState<AdminUsersView> {
                             Container(
                               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                               decoration: BoxDecoration(
-                                color: u.role == 'principal' ? AppTheme.primarySoft : AppTheme.infoLight,
+                                color: u.role == 'admin' ? AppTheme.primarySoft : AppTheme.infoLight,
                                 borderRadius: BorderRadius.circular(20),
                               ),
                               child: Text(
@@ -96,7 +96,7 @@ class _AdminUsersViewState extends ConsumerState<AdminUsersView> {
                                 style: GoogleFonts.poppins(
                                   fontSize: 10,
                                   fontWeight: FontWeight.bold,
-                                  color: u.role == 'principal' ? AppTheme.primaryPurple : AppTheme.info,
+                                  color: u.role == 'admin' ? AppTheme.primaryPurple : AppTheme.info,
                                 ),
                               ),
                             ),
@@ -218,7 +218,7 @@ class _AdminUsersViewState extends ConsumerState<AdminUsersView> {
     final userCtrl = TextEditingController();
     final passCtrl = TextEditingController();
     final confirmPassCtrl = TextEditingController();
-    String role = 'administration';
+    String role = 'user';
     String? errorMsg;
 
     showDialog(
@@ -250,8 +250,8 @@ class _AdminUsersViewState extends ConsumerState<AdminUsersView> {
                       value: role,
                       decoration: const InputDecoration(labelText: 'Role *'),
                       items: const [
-                        DropdownMenuItem(value: 'principal', child: Text('Principal (Full Access)')),
-                        DropdownMenuItem(value: 'administration', child: Text('Administration (Limited)')),
+                        DropdownMenuItem(value: 'admin', child: Text('Admin (Full Access)')),
+                        DropdownMenuItem(value: 'user', child: Text('User (Limited Access)')),
                       ],
                       onChanged: (val) {
                         if (val != null) setState(() => role = val);
@@ -346,8 +346,8 @@ class _AdminUsersViewState extends ConsumerState<AdminUsersView> {
                     value: role,
                     decoration: const InputDecoration(labelText: 'Role *'),
                     items: const [
-                      DropdownMenuItem(value: 'principal', child: Text('Principal (Full Access)')),
-                      DropdownMenuItem(value: 'administration', child: Text('Administration (Limited)')),
+                      DropdownMenuItem(value: 'admin', child: Text('Admin (Full Access)')),
+                      DropdownMenuItem(value: 'user', child: Text('User (Limited Access)')),
                     ],
                     onChanged: (val) {
                       if (val != null) setState(() => role = val);

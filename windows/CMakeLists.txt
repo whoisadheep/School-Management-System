@@ -4,7 +4,7 @@ project(school_management_system LANGUAGES CXX)
 
 # The name of the executable created for the application. Change this to change
 # the on-disk name of your application.
-set(BINARY_NAME "school_management_system")
+set(BINARY_NAME "eduvia")
 
 # Explicitly opt in to modern CMake behaviors to avoid warnings with recent
 # versions of CMake.

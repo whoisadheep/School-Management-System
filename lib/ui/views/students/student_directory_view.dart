@@ -1749,6 +1749,7 @@ class _StudentDirectoryViewState extends ConsumerState<StudentDirectoryView>
 
                   try {
                     final dbService = ref.read(databaseServiceProvider);
+                    if (!PermissionHelper.requireAdminRole(context, ref, RiskyAction.updateRecord)) return;
                     await dbService.updateStudent(updatedStudent);
 
                     if (context.mounted) {
@@ -1756,6 +1757,7 @@ class _StudentDirectoryViewState extends ConsumerState<StudentDirectoryView>
                       ref.invalidate(studentDirectoryProvider);
                       ref.invalidate(studentsListProvider);
                       ref.invalidate(dashboardMetricsProvider);
+                          ref.invalidate(sectionStudentCountProvider);
                       ScaffoldMessenger.of(context).showSnackBar(
                         SnackBar(
                           content: Text('Student profile updated successfully!',
@@ -1993,6 +1995,7 @@ class _StudentDirectoryViewState extends ConsumerState<StudentDirectoryView>
       ref.invalidate(studentDirectoryProvider);
       ref.invalidate(studentsListProvider);
       ref.invalidate(dashboardMetricsProvider);
+                          ref.invalidate(sectionStudentCountProvider);
     } catch (e, stackTrace) {
       AppLogger.instance.error('Failed to delete student', e, stackTrace);
       if (mounted) {
@@ -2106,6 +2109,7 @@ class _StudentDirectoryViewState extends ConsumerState<StudentDirectoryView>
                 ref.invalidate(studentDirectoryProvider);
                 ref.invalidate(studentsListProvider);
                 ref.invalidate(dashboardMetricsProvider);
+                          ref.invalidate(sectionStudentCountProvider);
 
                 if (context.mounted) {
                   Navigator.of(context).pop(); // Close dialog
@@ -2586,6 +2590,7 @@ class _StudentDirectoryViewState extends ConsumerState<StudentDirectoryView>
                           ref.invalidate(studentDirectoryProvider);
                           ref.invalidate(studentsListProvider);
                           ref.invalidate(dashboardMetricsProvider);
+                          ref.invalidate(sectionStudentCountProvider);
 
                           if (context.mounted) {
                             Navigator.of(context).pop();
@@ -3059,6 +3064,7 @@ class _StudentDirectoryViewState extends ConsumerState<StudentDirectoryView>
                     ref.invalidate(studentFeeLedgerProvider(param));
                     ref.invalidate(studentNetFeeBreakdownProvider(studentClassYearParam));
                     ref.invalidate(dashboardMetricsProvider);
+                          ref.invalidate(sectionStudentCountProvider);
 
                     if (context.mounted) {
                       Navigator.pop(context);

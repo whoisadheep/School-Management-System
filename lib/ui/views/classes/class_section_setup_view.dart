@@ -15,7 +15,101 @@ class ClassSectionSetupView extends ConsumerStatefulWidget {
 }
 
 class _ClassSectionSetupViewState extends ConsumerState<ClassSectionSetupView> {
+  String _selectedAcademicYear = 'All';
+
   final Map<String, bool> _expandedClasses = {};
+
+  void _showRolloverDialog(BuildContext context) {
+    if (!PermissionHelper.requireAdminRole(context, ref, RiskyAction.updateRecord)) return;
+    
+    bool isLoading = true;
+    List<AcademicYear> years = [];
+    String? sourceYear;
+    String? targetYear;
+    
+    showDialog(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) {
+          if (isLoading) {
+            ref.read(databaseServiceProvider).getAllAcademicYears().then((list) {
+              setDialogState(() {
+                years = list;
+                if (list.isNotEmpty) {
+                  sourceYear = list.firstWhere((y) => y.isCurrent, orElse: () => list.first).name;
+                  targetYear = list.first.name;
+                }
+                isLoading = false;
+              });
+            });
+          }
+          
+          return AlertDialog(
+            backgroundColor: Colors.white,
+            title: Row(
+              children: [
+                const Icon(Icons.auto_awesome_motion_rounded, color: AppTheme.primaryPurple),
+                const SizedBox(width: 10),
+                Text('Clone Classes to New Session', style: GoogleFonts.poppins(fontWeight: FontWeight.bold, fontSize: 16)),
+              ],
+            ),
+            content: isLoading 
+              ? const SizedBox(width: 400, height: 100, child: Center(child: CircularProgressIndicator()))
+              : SizedBox(
+                  width: 400,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('This will duplicate all classes and sections from the Source year into the Target year. Students and Teachers are NOT copied over, giving you a fresh start for the new year!', style: GoogleFonts.poppins(fontSize: 12, color: AppTheme.textSecondary)),
+                      const SizedBox(height: 20),
+                      DropdownButtonFormField<String>(
+                        value: sourceYear,
+                        decoration: const InputDecoration(labelText: 'Source Academic Year'),
+                        items: years.map((y) => DropdownMenuItem(value: y.name, child: Text(y.name))).toList(),
+                        onChanged: (v) => setDialogState(() => sourceYear = v),
+                      ),
+                      const SizedBox(height: 16),
+                      DropdownButtonFormField<String>(
+                        value: targetYear,
+                        decoration: const InputDecoration(labelText: 'Target Academic Year'),
+                        items: years.map((y) => DropdownMenuItem(value: y.name, child: Text(y.name))).toList(),
+                        onChanged: (v) => setDialogState(() => targetYear = v),
+                      ),
+                    ],
+                  ),
+                ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('Cancel'),
+              ),
+              ElevatedButton(
+                onPressed: isLoading || sourceYear == null || targetYear == null || sourceYear == targetYear
+                  ? null
+                  : () async {
+                      try {
+                        await ref.read(databaseServiceProvider).cloneClassesToAcademicYear(sourceYear!, targetYear!);
+                        ref.invalidate(classListProvider);
+                        if (context.mounted) {
+                          Navigator.pop(context);
+                          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Successfully cloned classes!'), backgroundColor: AppTheme.primaryPurple));
+                        }
+                      } catch (e) {
+                        if (context.mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e'), backgroundColor: AppTheme.error));
+                        }
+                      }
+                    },
+                style: ElevatedButton.styleFrom(backgroundColor: AppTheme.primaryPurple, foregroundColor: Colors.white),
+                child: const Text('Clone Now'),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -50,20 +144,160 @@ class _ClassSectionSetupViewState extends ConsumerState<ClassSectionSetupView> {
                         style: GoogleFonts.poppins(fontSize: 12, color: AppTheme.textSecondary)),
                   ],
                 ),
-                ElevatedButton.icon(
-                  onPressed: () => _showAddEditClassDialog(context),
-                  icon: const Icon(Icons.add_rounded, size: 18),
-                  label: Text('Add New Class',
-                      style: GoogleFonts.poppins(fontWeight: FontWeight.bold, fontSize: 13)),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppTheme.primaryPurple,
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-                  ),
+                Row(
+                  children: [
+                    OutlinedButton.icon(
+                      onPressed: () => _showRolloverDialog(context),
+                      icon: const Icon(Icons.auto_awesome_motion_rounded, size: 18),
+                      label: Text('Clone to New Session', style: GoogleFonts.poppins(fontWeight: FontWeight.bold, fontSize: 13)),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: AppTheme.primaryPurple,
+                        side: const BorderSide(color: AppTheme.primaryPurple),
+                        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    ElevatedButton.icon(
+                      onPressed: () => _showAddEditClassDialog(context),
+                      icon: const Icon(Icons.add_rounded, size: 18),
+                      label: Text('Add New Class', style: GoogleFonts.poppins(fontWeight: FontWeight.bold, fontSize: 13)),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppTheme.primaryPurple,
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                      ),
+                    ),
+                  ],
                 ),
               ],
             ),
           ),
+
+          // Academic Year Filter
+
+
+          Padding(
+
+
+            padding: const EdgeInsets.fromLTRB(32, 24, 32, 0),
+
+
+            child: Row(
+
+
+              children: [
+
+
+                const Icon(Icons.filter_list_rounded, color: AppTheme.primaryPurple, size: 20),
+
+
+                const SizedBox(width: 8),
+
+
+                Text('Filter by Academic Year:', style: GoogleFonts.poppins(fontWeight: FontWeight.w600, color: AppTheme.textPrimary)),
+
+
+                const SizedBox(width: 16),
+
+
+                Container(
+
+
+                  width: 200,
+
+
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+
+
+                  decoration: BoxDecoration(
+
+
+                    color: Colors.white,
+
+
+                    borderRadius: BorderRadius.circular(8),
+
+
+                    border: Border.all(color: AppTheme.divider),
+
+
+                  ),
+
+
+                  child: DropdownButtonHideUnderline(
+
+
+                    child: classesAsync.when(
+
+
+                      data: (classes) {
+
+
+                        final years = classes.map((c) => c.academicYear).where((y) => y != null).map((y) => y!).toSet().toList()..sort();
+
+
+                        return DropdownButton<String>(
+
+
+                          value: _selectedAcademicYear,
+
+
+                          isExpanded: true,
+
+
+                          icon: const Icon(Icons.keyboard_arrow_down_rounded, color: AppTheme.textSecondary),
+
+
+                          items: [
+
+
+                            const DropdownMenuItem(value: 'All', child: Text('All Sessions')),
+
+
+                            ...years.map((y) => DropdownMenuItem(value: y, child: Text(y))),
+
+
+                          ],
+
+
+                          onChanged: (val) {
+
+
+                            if (val != null) setState(() => _selectedAcademicYear = val);
+
+
+                          },
+
+
+                        );
+
+
+                      },
+
+
+                      loading: () => const SizedBox(height: 48, child: Center(child: CircularProgressIndicator())),
+
+
+                      error: (_, __) => const Text('Error'),
+
+
+                    ),
+
+
+                  ),
+
+
+                ),
+
+
+              ],
+
+
+            ),
+
+
+          ),
+
 
           // Main Content List
           Expanded(
@@ -98,7 +332,7 @@ class _ClassSectionSetupViewState extends ConsumerState<ClassSectionSetupView> {
                   }
 
                   return Column(
-                    children: classes.map((classModel) {
+                    children: classes.where((c) => _selectedAcademicYear == 'All' || c.academicYear == _selectedAcademicYear).map((classModel) {
                       final isExpanded = _expandedClasses[classModel.id] ?? true;
                       final sectionsAsync = ref.watch(sectionsForClassProvider(classModel.id));
 
@@ -389,6 +623,7 @@ class _ClassSectionSetupViewState extends ConsumerState<ClassSectionSetupView> {
                   academicYear: yr,
                   capacity: cap,
                 );
+                if (!PermissionHelper.requireAdminRole(context, ref, RiskyAction.updateRecord)) return;
                 await dbService.updateClass(updatedClass);
               }
 
@@ -458,6 +693,7 @@ class _ClassSectionSetupViewState extends ConsumerState<ClassSectionSetupView> {
                 await dbService.createSection(newSec);
               } else {
                 final updatedSec = section.copyWith(name: nm, capacity: cap);
+                if (!PermissionHelper.requireAdminRole(context, ref, RiskyAction.updateRecord)) return;
                 await dbService.updateSection(updatedSec);
               }
 

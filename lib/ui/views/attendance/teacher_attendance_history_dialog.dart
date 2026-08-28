@@ -78,7 +78,7 @@ class _TeacherAttendanceHistoryDialogState extends ConsumerState<TeacherAttendan
 
   void _editRecord(TeacherAttendance record) {
     final user = ref.read(authProvider).currentUser;
-    if (user == null || user.role != UserRole.principal) return;
+    if (user == null || user.role != UserRole.admin) return;
 
     String _selectedStatus = record.status;
     showDialog(
@@ -314,7 +314,7 @@ class _TeacherAttendanceHistoryDialogState extends ConsumerState<TeacherAttendan
 
   Widget _buildDateRangeList() {
     final user = ref.watch(authProvider).currentUser;
-    final isAdmin = user?.role == UserRole.principal;
+    final isAdmin = user?.role == UserRole.admin;
 
     return Column(
       children: [

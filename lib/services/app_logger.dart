@@ -23,7 +23,7 @@ class AppLogger {
     if (kIsWeb) return;
     try {
       final docsDir = await getApplicationDocumentsDirectory();
-      final logDir = Directory(p.join(docsDir.path, 'SchoolManagementSystem', 'Logs'));
+      final logDir = Directory(p.join(docsDir.path, 'Eduvia', 'Logs'));
       
       if (!await logDir.exists()) {
         await logDir.create(recursive: true);

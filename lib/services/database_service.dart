@@ -157,7 +157,6 @@ class DatabaseService {
       'staff',
       {
         'is_active': isActive ? 1 : 0,
-        'updated_at': DateTime.now().toIso8601String(),
       },
       where: 'id = ?',
       whereArgs: [id],
@@ -351,7 +350,6 @@ class DatabaseService {
       'students',
       {
         'is_active': isActive ? 1 : 0,
-        'updated_at': DateTime.now().toIso8601String(),
       },
       where: 'id = ?',
       whereArgs: [id],
@@ -413,7 +411,6 @@ class DatabaseService {
         'is_alumni': 1,
         'tc_number': tcNumber,
         'tc_date': tcDate,
-        'updated_at': DateTime.now().toIso8601String(),
       },
       where: 'id = ?',
       whereArgs: [studentId],
@@ -438,7 +435,6 @@ class DatabaseService {
             {
               'is_active': 0,
               'is_alumni': 1,
-              'updated_at': DateTime.now().toIso8601String(),
             },
             where: 'id = ?',
             whereArgs: [id],
@@ -446,7 +442,6 @@ class DatabaseService {
         } else {
           final Map<String, Object?> updates = {
             'grade_level': targetGrade,
-            'updated_at': DateTime.now().toIso8601String(),
           };
           if (classId != null) updates['class_id'] = classId;
           if (sectionId != null) updates['section_id'] = sectionId;
@@ -667,7 +662,6 @@ class DatabaseService {
       'invoices',
       {
         'status': status.name,
-        'updated_at': DateTime.now().toIso8601String(),
       },
       where: 'id = ?',
       whereArgs: [id],
@@ -1405,6 +1399,42 @@ class DatabaseService {
     final results = await db.query('classes', orderBy: 'name ASC');
     return results.map((m) => ClassModel.fromMap(m)).toList();
   }
+
+  Future<void> cloneClassesToAcademicYear(String sourceYear, String targetYear) async {
+    final db = await _db;
+    await db.transaction((txn) async {
+      final srcClasses = await txn.query('classes', where: 'academic_year = ?', whereArgs: [sourceYear]);
+      
+      for (final srcClass in srcClasses) {
+        final String newClassId = 'cls-' + const Uuid().v4().substring(0, 8);
+        
+        final existing = await txn.query('classes', where: 'name = ? AND academic_year = ?', whereArgs: [srcClass['name'], targetYear]);
+        if (existing.isNotEmpty) continue;
+        
+        await _insertLogged(txn, 'classes', {
+          'id': newClassId,
+          'name': srcClass['name'],
+          'academic_year': targetYear,
+          'capacity': srcClass['capacity'],
+          'created_at': DateTime.now().toIso8601String(),
+        });
+        
+        final srcSections = await txn.query('sections', where: 'class_id = ?', whereArgs: [srcClass['id']]);
+        
+        for (final srcSec in srcSections) {
+          final String newSecId = 'sec-' + const Uuid().v4().substring(0, 8);
+          await _insertLogged(txn, 'sections', {
+            'id': newSecId,
+            'class_id': newClassId,
+            'name': srcSec['name'],
+            'capacity': srcSec['capacity'],
+            'class_teacher_id': null,
+          });
+        }
+      }
+    });
+  }
+
 
   /// Get class by ID
   Future<ClassModel?> getClassById(String id) async {
@@ -4448,5 +4478,11 @@ class DatabaseService {
       );
     }
     return count;
+  }
+
+  Future<List<AcademicYear>> getAllAcademicYears() async {
+    final db = await _db;
+    final results = await db.query('academic_years', orderBy: 'name DESC');
+    return results.map((m) => AcademicYear.fromMap(m)).toList();
   }
 }

@@ -16,7 +16,7 @@ class DesktopSidebar extends ConsumerWidget {
     final selectedTab = ref.watch(selectedTabProvider);
     final authState = ref.watch(authProvider);
     final user = authState.currentUser;
-    final canViewFinance = user?.role == UserRole.principal || (user?.canViewFinance ?? false);
+    final canViewFinance = user?.role == UserRole.admin || (user?.canViewFinance ?? false);
     final hostelFlagAsync = ref.watch(featureFlagProvider('hostel_management'));
     final isHostelEnabled = hostelFlagAsync.valueOrNull ?? false;
 
@@ -46,15 +46,11 @@ class DesktopSidebar extends ConsumerWidget {
                 borderRadius: BorderRadius.circular(12),
               ),
               child: Center(
-                child: SvgPicture.asset(
-                  'assets/icons/app_icon.svg',
+                child: Image.asset(
+                  'assets/icons/app_icon.png',
                   width: 28,
                   height: 28,
-                  placeholderBuilder: (context) => const Icon(
-                    Icons.school_rounded,
-                    color: Colors.white,
-                    size: 24,
-                  ),
+                  errorBuilder: (context, error, stackTrace) => const Icon(Icons.school_rounded, color: Colors.white, size: 24),
                 ),
               ),
             ),
@@ -66,7 +62,7 @@ class DesktopSidebar extends ConsumerWidget {
             child: ListView(
               padding: EdgeInsets.zero,
               children: [
-                _buildNavItem(ref, NavigationTab.dashboard, Icons.grid_view_rounded, selectedTab, isRestricted: !canViewFinance),
+                _buildNavItem(ref, NavigationTab.dashboard, Icons.grid_view_rounded, selectedTab),
                 const SizedBox(height: 8),
                 _buildNavItem(ref, NavigationTab.students, Icons.people_rounded, selectedTab),
                 const SizedBox(height: 8),
@@ -78,13 +74,13 @@ class DesktopSidebar extends ConsumerWidget {
                 const SizedBox(height: 8),
                 _buildNavItem(ref, NavigationTab.admission, Icons.person_add_alt_1_rounded, selectedTab),
                 const SizedBox(height: 8),
-                _buildNavItem(ref, NavigationTab.feeCollection, Icons.account_balance_wallet_rounded, selectedTab, isRestricted: !canViewFinance),
+                _buildNavItem(ref, NavigationTab.feeCollection, Icons.account_balance_wallet_rounded, selectedTab),
                 const SizedBox(height: 8),
-                _buildNavItem(ref, NavigationTab.feeStructure, Icons.payments_rounded, selectedTab, isRestricted: !canViewFinance),
+                _buildNavItem(ref, NavigationTab.feeStructure, Icons.payments_rounded, selectedTab),
                 const SizedBox(height: 8),
-                _buildNavItem(ref, NavigationTab.feeReports, Icons.analytics_rounded, selectedTab, isRestricted: !canViewFinance),
+                _buildNavItem(ref, NavigationTab.feeReports, Icons.analytics_rounded, selectedTab),
                 const SizedBox(height: 8),
-                _buildNavItem(ref, NavigationTab.expenses, Icons.receipt_long_rounded, selectedTab, isRestricted: !canViewFinance),
+                _buildNavItem(ref, NavigationTab.expenses, Icons.receipt_long_rounded, selectedTab),
                 const SizedBox(height: 8),
 
                 _buildNavItem(ref, NavigationTab.transport, Icons.directions_bus_rounded, selectedTab),
@@ -99,10 +95,10 @@ class DesktopSidebar extends ConsumerWidget {
                 const SizedBox(height: 8),
                 _buildNavItem(ref, NavigationTab.assistant, Icons.smart_toy_rounded, selectedTab),
                 const SizedBox(height: 8),
-                _buildNavItem(ref, NavigationTab.inventory, Icons.inventory_2_rounded, selectedTab, isRestricted: !canViewFinance),
+                _buildNavItem(ref, NavigationTab.inventory, Icons.inventory_2_rounded, selectedTab),
                 const SizedBox(height: 8),
                 _buildNavItem(ref, NavigationTab.settings, Icons.settings_rounded, selectedTab),
-                if (user?.role == UserRole.principal) ...[
+                if (user?.role == UserRole.admin) ...[
                   const SizedBox(height: 8),
                   _buildNavItem(ref, NavigationTab.manageUsers, Icons.manage_accounts_rounded, selectedTab),
                   const SizedBox(height: 8),
@@ -131,7 +127,7 @@ class DesktopSidebar extends ConsumerWidget {
                       mainAxisSize: MainAxisSize.min,
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text('School Management System (Antigravity SMS)', style: GoogleFonts.poppins(fontWeight: FontWeight.w600)),
+                        Text('Eduvia ', style: GoogleFonts.poppins(fontWeight: FontWeight.w600)),
                         const SizedBox(height: 12),
                         Text('Keyboard Shortcuts:', style: GoogleFonts.poppins(fontWeight: FontWeight.bold, fontSize: 13)),
                         const SizedBox(height: 4),

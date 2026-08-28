@@ -3,7 +3,7 @@ import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 
 class FileStorageService {
-  static const String _mediaFolder = 'SchoolManagementSystem/Media';
+  static const String _mediaFolder = 'Eduvia/Media';
 
   /// Copies a file to the application's dedicated media directory
   /// and returns the absolute path of the newly copied file.

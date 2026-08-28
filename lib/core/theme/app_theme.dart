@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-/// School Management System Purple Theme Design System
+/// Eduvia Purple Theme Design System
 class AppTheme {
   AppTheme._();
 

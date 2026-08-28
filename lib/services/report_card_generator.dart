@@ -12,7 +12,7 @@ class ReportCardGenerator {
   static Future<File> generateReportCard({
     required ExamResultData examResult,
     int? rankInClass,
-    String schoolName = 'Kishan Company',
+    String schoolName = 'Eduvia',
     String schoolAddress = '123 Education Boulevard, Academic District',
     String schoolContact = 'Phone: +1 800 555-0199 | Email: exams@school.edu',
   }) async {
@@ -233,7 +233,7 @@ class ReportCardGenerator {
 
     // Save to App Documents directory
     final Directory appDocDir = await getApplicationDocumentsDirectory();
-    final String exportDir = p.join(appDocDir.path, 'SchoolManagementSystem', 'ReportCards');
+    final String exportDir = p.join(appDocDir.path, 'Eduvia', 'ReportCards');
     final dir = Directory(exportDir);
     if (!await dir.exists()) {
       await dir.create(recursive: true);

@@ -9,7 +9,7 @@ class SchoolManagementApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'School Management System',
+      title: 'Eduvia',
       debugShowCheckedModeBanner: false,
       theme: _buildTheme(),
       home: const MainLayout(),

@@ -3,7 +3,7 @@ import 'package:crypto/crypto.dart';
 import 'package:uuid/uuid.dart';
 
 enum UserRole {
-  principal,
+  admin,
   accountant,
   teacher,
   viewer;
@@ -17,8 +17,8 @@ enum UserRole {
 
   String get displayName {
     switch (this) {
-      case UserRole.principal:
-        return 'Principal';
+      case UserRole.admin:
+        return 'Admin (Full Access)';
       case UserRole.accountant:
         return 'Accountant';
       case UserRole.teacher:
@@ -120,7 +120,7 @@ class User {
     bool canApproveLeave = false,
   }) {
     final now = DateTime.now();
-    final isAdmin = role == UserRole.principal;
+    final isAdmin = role == UserRole.admin;
     return User(
       id: const Uuid().v4(),
       username: username,
@@ -141,7 +141,7 @@ class User {
 
   factory User.fromMap(Map<String, dynamic> map) {
     final role = UserRole.fromString(map['role'] as String);
-    final isAdmin = role == UserRole.principal;
+    final isAdmin = role == UserRole.admin;
 
     return User(
       id: map['id'] as String,
