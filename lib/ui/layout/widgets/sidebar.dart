@@ -42,7 +42,7 @@ class DesktopSidebar extends ConsumerWidget {
               width: 44,
               height: 44,
               decoration: BoxDecoration(
-                color: Colors.white.withValues(alpha: 0.2),
+                color: Colors.transparent,
                 borderRadius: BorderRadius.circular(12),
               ),
               child: Center(

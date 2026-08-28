@@ -62,13 +62,6 @@ class _AdminLoginViewState extends ConsumerState<AdminLoginView> {
               decoration: BoxDecoration(
                 color: Colors.white,
                 borderRadius: BorderRadius.circular(20),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.15),
-                    blurRadius: 24,
-                    offset: const Offset(0, 8),
-                  ),
-                ],
               ),
               child: Form(
                 key: _formKey,
@@ -80,22 +73,15 @@ class _AdminLoginViewState extends ConsumerState<AdminLoginView> {
                       width: 72,
                       height: 72,
                       decoration: BoxDecoration(
-                        color: const Color(0xFF0F172A),
+                        color: Colors.transparent,
                         borderRadius: BorderRadius.circular(18),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withValues(alpha: 0.1),
-                            blurRadius: 10,
-                            offset: const Offset(0, 4),
-                          ),
-                        ],
                       ),
                       clipBehavior: Clip.antiAlias,
                       child: Image.asset(
                         'assets/icons/app_icon.png',
                         width: 72,
                         height: 72,
-                        fit: BoxFit.cover,
+                        fit: BoxFit.contain,
                         errorBuilder: (context, error, stackTrace) => const Icon(Icons.school_rounded, color: Colors.white, size: 48),
                       ),
                     ),
