@@ -343,7 +343,7 @@ class _FeeStructureSetupViewState extends ConsumerState<FeeStructureSetupView> {
               mainAxisSize: MainAxisSize.min,
               children: [
                 DropdownButtonFormField<String>(
-                  initialValue: selectedHeadId,
+                  value: selectedHeadId,
                   style: GoogleFonts.poppins(color: AppTheme.textPrimary),
                   decoration: const InputDecoration(labelText: 'Select Fee Head *'),
                   items: feeHeadsList.map((fh) => DropdownMenuItem(
@@ -421,37 +421,39 @@ class _FeeStructureSetupViewState extends ConsumerState<FeeStructureSetupView> {
       context: context,
       builder: (context) => StatefulBuilder(
         builder: (context, setDialogState) {
-          final feeHeadsList = ref.watch(feeHeadsProvider).value ?? [];
+          return Consumer(
+            builder: (context, ref, child) {
+              final feeHeadsList = ref.watch(feeHeadsProvider).value ?? [];
 
-          return AlertDialog(
-            backgroundColor: Colors.white,
-            title: Text('Manage Fee Heads Master Data', style: GoogleFonts.poppins(fontWeight: FontWeight.bold, fontSize: 16)),
-            content: SizedBox(
-              width: 550,
-              child: SingleChildScrollView(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text('Current Fee Heads:', style: GoogleFonts.poppins(fontWeight: FontWeight.bold, fontSize: 13, color: AppTheme.textPrimary)),
-                    const SizedBox(height: 8),
-                    ...feeHeadsList.map((fh) => ListTile(
-                      dense: true,
-                      contentPadding: EdgeInsets.zero,
-                      leading: const Icon(Icons.label_important_rounded, color: AppTheme.primaryPurple),
-                      title: Text(fh.name, style: GoogleFonts.poppins(fontWeight: FontWeight.bold, fontSize: 13)),
-                      subtitle: Text('${fh.frequency.toUpperCase()} • ${fh.description ?? "No description"}', style: GoogleFonts.poppins(fontSize: 11)),
-                      trailing: IconButton(
-                        icon: const Icon(Icons.delete_outline_rounded, color: AppTheme.error, size: 18),
-                        onPressed: () async {
-                          if (!PermissionHelper.requireAdminRole(context, ref, RiskyAction.deleteRecord)) return;
-                          final dbService = ref.read(databaseServiceProvider);
-                          await dbService.deleteFeeHead(fh.id);
-                          ref.invalidate(feeHeadsProvider);
-                        },
-                      ),
-                    )),
-                    const Divider(height: 24),
+              return AlertDialog(
+                backgroundColor: Colors.white,
+                title: Text('Manage Fee Heads Master Data', style: GoogleFonts.poppins(fontWeight: FontWeight.bold, fontSize: 16)),
+                content: SizedBox(
+                  width: 550,
+                  child: SingleChildScrollView(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('Current Fee Heads:', style: GoogleFonts.poppins(fontWeight: FontWeight.bold, fontSize: 13, color: AppTheme.textPrimary)),
+                        const SizedBox(height: 8),
+                        ...feeHeadsList.map((fh) => ListTile(
+                          dense: true,
+                          contentPadding: EdgeInsets.zero,
+                          leading: const Icon(Icons.label_important_rounded, color: AppTheme.primaryPurple),
+                          title: Text(fh.name, style: GoogleFonts.poppins(fontWeight: FontWeight.bold, fontSize: 13)),
+                          subtitle: Text('${fh.frequency.toUpperCase()} • ${fh.description ?? "No description"}', style: GoogleFonts.poppins(fontSize: 11)),
+                          trailing: IconButton(
+                            icon: const Icon(Icons.delete_outline_rounded, color: AppTheme.error, size: 18),
+                            onPressed: () async {
+                              if (!PermissionHelper.requireAdminRole(context, ref, RiskyAction.deleteRecord)) return;
+                              final dbService = ref.read(databaseServiceProvider);
+                              await dbService.deleteFeeHead(fh.id);
+                              ref.invalidate(feeHeadsProvider);
+                            },
+                          ),
+                        )),
+                        const Divider(height: 24),
                     Text('Add New Fee Head:', style: GoogleFonts.poppins(fontWeight: FontWeight.bold, fontSize: 13, color: AppTheme.textPrimary)),
                     const SizedBox(height: 10),
                     TextField(
@@ -467,7 +469,7 @@ class _FeeStructureSetupViewState extends ConsumerState<FeeStructureSetupView> {
                     ),
                     const SizedBox(height: 10),
                     DropdownButtonFormField<String>(
-                      initialValue: selectedFrequency,
+                      value: selectedFrequency,
                       style: GoogleFonts.poppins(color: AppTheme.textPrimary),
                       decoration: const InputDecoration(labelText: 'Frequency *'),
                       items: const [
@@ -517,6 +519,8 @@ class _FeeStructureSetupViewState extends ConsumerState<FeeStructureSetupView> {
               ),
             ],
           );
+        },
+      );
         },
       ),
     );

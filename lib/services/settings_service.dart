@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
@@ -12,30 +13,38 @@ class SettingsService {
 
   /// Retrieve a setting value by key
   Future<String?> getSetting(String key) async {
-    final db = await _dbService.rawDb;
-    final results = await db.query(
-      'app_settings',
-      where: 'key = ?',
-      whereArgs: [key],
-      limit: 1,
-    );
+    if (kIsWeb) return null;
+    try {
+      final db = await _dbService.rawDb;
+      final results = await db.query(
+        'app_settings',
+        where: 'key = ?',
+        whereArgs: [key],
+        limit: 1,
+      );
 
-    if (results.isEmpty) return null;
-    return results.first['value'] as String?;
+      if (results.isEmpty) return null;
+      return results.first['value'] as String?;
+    } catch (e) {
+      return null;
+    }
   }
 
   /// Save or update a setting value by key
   Future<void> setSetting(String key, String value) async {
-    final db = await _dbService.rawDb;
-    await db.insert(
-      'app_settings',
-      {
-        'key': key,
-        'value': value,
-        'updated_at': DateTime.now().toIso8601String(),
-      },
-      conflictAlgorithm: ConflictAlgorithm.replace,
-    );
+    if (kIsWeb) return;
+    try {
+      final db = await _dbService.rawDb;
+      await db.insert(
+        'app_settings',
+        {
+          'key': key,
+          'value': value,
+          'updated_at': DateTime.now().toIso8601String(),
+        },
+        conflictAlgorithm: ConflictAlgorithm.replace,
+      );
+    } catch (_) {}
   }
 
   /// Get configured receipt export path or default to Documents/SchoolManagementSystem/Receipts/

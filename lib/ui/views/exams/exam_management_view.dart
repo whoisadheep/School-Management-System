@@ -7,7 +7,6 @@ import '../../../core/theme/app_theme.dart';
 import '../../../models/models.dart';
 import '../../../providers/services_provider.dart';
 import '../../../providers/auth_provider.dart';
-import '../../../providers/dashboard_provider.dart';
 import '../../../core/auth/permission_helper.dart';
 import '../../../services/report_card_generator.dart';
 
@@ -396,7 +395,9 @@ class _ExamManagementViewState extends ConsumerState<ExamManagementView> with Si
                     const SizedBox(height: 4),
                     examsAsync.when(
                       data: (exams) {
-                        if (_selectedExamIdForMarks == null && exams.isNotEmpty) {
+                        if (exams.isEmpty) {
+                          _selectedExamIdForMarks = null;
+                        } else if (_selectedExamIdForMarks == null || !exams.any((e) => e.id == _selectedExamIdForMarks)) {
                           _selectedExamIdForMarks = exams.first.id;
                         }
 
@@ -749,7 +750,9 @@ class _ExamManagementViewState extends ConsumerState<ExamManagementView> with Si
                     const SizedBox(height: 4),
                     examsAsync.when(
                       data: (exams) {
-                        if (_selectedReportExamId == null && exams.isNotEmpty) {
+                        if (exams.isEmpty) {
+                          _selectedReportExamId = null;
+                        } else if (_selectedReportExamId == null || !exams.any((e) => e.id == _selectedReportExamId)) {
                           _selectedReportExamId = exams.first.id;
                         }
 
@@ -795,8 +798,18 @@ class _ExamManagementViewState extends ConsumerState<ExamManagementView> with Si
                       builder: (context, ref, _) {
                         final studentDirAsync = ref.watch(studentsListProvider);
                         return studentDirAsync.when(
-                          data: (students) {
-                            if (_selectedReportStudentId == null && students.isNotEmpty) {
+                          data: (allStudents) {
+                            final exams = examsAsync.value ?? [];
+                            final selectedExam = exams.where((e) => e.id == _selectedReportExamId).firstOrNull;
+                            
+                            List<Student> students = allStudents;
+                            if (selectedExam != null && selectedExam.className != 'All') {
+                               students = allStudents.where((s) => s.gradeLevel == selectedExam.className || s.classId == selectedExam.className).toList();
+                            }
+
+                            if (students.isEmpty) {
+                              _selectedReportStudentId = null;
+                            } else if (_selectedReportStudentId == null || !students.any((s) => s.id == _selectedReportStudentId)) {
                               _selectedReportStudentId = students.first.id;
                             }
 
@@ -1124,7 +1137,7 @@ class _ExamManagementViewState extends ConsumerState<ExamManagementView> with Si
     final isEdit = exam != null;
     final nameController = TextEditingController(text: exam?.name ?? '');
     String? selectedTypeId = exam?.examTypeId;
-    String selectedClass = exam?.className ?? 'Class 8';
+    String selectedClass = exam?.className ?? 'Grade 8';
     String? selectedSection = exam?.section;
     DateTime startDate = exam?.startDate ?? DateTime.now();
     DateTime endDate = exam?.endDate ?? DateTime.now().add(const Duration(days: 7));
@@ -1198,7 +1211,7 @@ class _ExamManagementViewState extends ConsumerState<ExamManagementView> with Si
                               classesAsync.when(
                                 data: (classes) {
                                   return DropdownButtonFormField<String>(
-                                    value: classes.any((c) => c.name == selectedClass) ? selectedClass : (classes.isNotEmpty ? classes.first.name : 'Class 8'),
+                                    value: classes.any((c) => c.name == selectedClass) ? selectedClass : (classes.isNotEmpty ? classes.first.name : 'Grade 8'),
                                     decoration: InputDecoration(
                                       border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
                                       contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
@@ -1301,8 +1314,7 @@ class _ExamManagementViewState extends ConsumerState<ExamManagementView> with Si
                       await dbService.insertExam(newExam);
                     }
 
-                    final param = ExamClassYearParam(className: _selectedClassFilter, academicYear: _selectedAcademicYear);
-                    ref.invalidate(examsProvider(param));
+                    ref.invalidate(examsProvider);
                     if (ctx.mounted) Navigator.of(ctx).pop();
                   },
                   style: ElevatedButton.styleFrom(backgroundColor: AppTheme.primaryPurple, foregroundColor: Colors.white),
@@ -1667,7 +1679,9 @@ class _ExamManagementViewState extends ConsumerState<ExamManagementView> with Si
                     const SizedBox(height: 4),
                     examsAsync.when(
                       data: (exams) {
-                        if (_selectedDashboardExamId == null && exams.isNotEmpty) {
+                        if (exams.isEmpty) {
+                          _selectedDashboardExamId = null;
+                        } else if (_selectedDashboardExamId == null || !exams.any((e) => e.id == _selectedDashboardExamId)) {
                           _selectedDashboardExamId = exams.first.id;
                         }
 

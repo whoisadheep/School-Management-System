@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:typed_data';
 import 'package:intl/intl.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
@@ -12,14 +13,14 @@ class ReportGenerator {
   /// Generate an A4-sized PDF receipt for a payment transaction and save to Documents directory.
   ///
   /// Returns the saved [File] object pointing to the generated PDF.
-  static Future<File> generatePaymentReceipt({
+  /// Build raw PDF bytes for a payment receipt (for preview).
+  static Future<Uint8List> buildPaymentReceiptPdfBytes({
     required Transaction transaction,
     required Invoice invoice,
     required Student student,
     String? receiptNumber,
     String? feeHeadName,
-    String? customExportDirectory,
-    String schoolName = 'EXCELLENCE ACADEMY SCHOOL',
+    String schoolName = 'Kishan Company',
     String schoolAddress = '123 Education Boulevard, Academic District',
     String schoolContact = 'Phone: +1 800 555-0199 | Email: finance@school.edu',
   }) async {
@@ -59,7 +60,7 @@ class ReportGenerator {
                       children: [
                         pw.Text(
                           schoolName,
-                          style: const pw.TextStyle(
+                          style: pw.TextStyle(
                             color: PdfColors.white,
                             fontSize: 18,
                             fontWeight: pw.FontWeight.bold,
@@ -68,14 +69,14 @@ class ReportGenerator {
                         pw.SizedBox(height: 4),
                         pw.Text(
                           schoolAddress,
-                          style: const pw.TextStyle(
+                          style: pw.TextStyle(
                             color: PdfColors.white,
                             fontSize: 9,
                           ),
                         ),
                         pw.Text(
                           schoolContact,
-                          style: const pw.TextStyle(
+                          style: pw.TextStyle(
                             color: PdfColors.white,
                             fontSize: 9,
                           ),
@@ -84,9 +85,9 @@ class ReportGenerator {
                     ),
                     pw.Container(
                       padding: const pw.EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                      decoration: const pw.BoxDecoration(
+                      decoration: pw.BoxDecoration(
                         color: PdfColors.white,
-                        borderRadius: pw.BorderRadius.all(pw.Radius.circular(4)),
+                        borderRadius: const pw.BorderRadius.all(pw.Radius.circular(4)),
                       ),
                       child: pw.Text(
                         'OFFICIAL RECEIPT',
@@ -211,19 +212,19 @@ class ReportGenerator {
                     children: [
                       pw.Padding(
                         padding: const pw.EdgeInsets.all(8),
-                        child: pw.Text('Invoice ID', style: const pw.TextStyle(color: PdfColors.white, fontWeight: pw.FontWeight.bold, fontSize: 10)),
+                        child: pw.Text('Invoice ID', style: pw.TextStyle(color: PdfColors.white, fontWeight: pw.FontWeight.bold, fontSize: 10)),
                       ),
                       pw.Padding(
                         padding: const pw.EdgeInsets.all(8),
-                        child: pw.Text('Description', style: const pw.TextStyle(color: PdfColors.white, fontWeight: pw.FontWeight.bold, fontSize: 10)),
+                        child: pw.Text('Description', style: pw.TextStyle(color: PdfColors.white, fontWeight: pw.FontWeight.bold, fontSize: 10)),
                       ),
                       pw.Padding(
                         padding: const pw.EdgeInsets.all(8),
-                        child: pw.Text('Due Date', style: const pw.TextStyle(color: PdfColors.white, fontWeight: pw.FontWeight.bold, fontSize: 10)),
+                        child: pw.Text('Due Date', style: pw.TextStyle(color: PdfColors.white, fontWeight: pw.FontWeight.bold, fontSize: 10)),
                       ),
                       pw.Padding(
                         padding: const pw.EdgeInsets.all(8),
-                        child: pw.Text('Amount Paid', style: const pw.TextStyle(color: PdfColors.white, fontWeight: pw.FontWeight.bold, fontSize: 10), textAlign: pw.TextAlign.right),
+                        child: pw.Text('Amount Paid', style: pw.TextStyle(color: PdfColors.white, fontWeight: pw.FontWeight.bold, fontSize: 10), textAlign: pw.TextAlign.right),
                       ),
                     ],
                   ),
@@ -244,7 +245,7 @@ class ReportGenerator {
                       ),
                       pw.Padding(
                         padding: const pw.EdgeInsets.all(8),
-                        child: pw.Text(currencyFormatter.format(transaction.amountPaid), style: const pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold), textAlign: pw.TextAlign.right),
+                        child: pw.Text(currencyFormatter.format(transaction.amountPaid), style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold), textAlign: pw.TextAlign.right),
                       ),
                     ],
                   ),
@@ -278,7 +279,7 @@ class ReportGenerator {
                         pw.Row(
                           mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
                           children: [
-                            pw.Text('Amount Paid Now:', style: const pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold)),
+                            pw.Text('Amount Paid Now:', style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold)),
                             pw.Text(currencyFormatter.format(transaction.amountPaid), style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold, color: primaryColor)),
                           ],
                         ),
@@ -286,7 +287,7 @@ class ReportGenerator {
                         pw.Row(
                           mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
                           children: [
-                            pw.Text('Student Remaining Balance:', style: const pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold)),
+                            pw.Text('Student Remaining Balance:', style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold)),
                             pw.Text(
                               currencyFormatter.format(student.currentBalance - transaction.amountPaid),
                               style: pw.TextStyle(
@@ -350,6 +351,34 @@ class ReportGenerator {
       ),
     );
 
+    return await pdf.save();
+  }
+
+  /// Generate an A4-sized PDF receipt and save to Documents directory.
+  ///
+  /// Returns the saved [File] object pointing to the generated PDF.
+  static Future<File> generatePaymentReceipt({
+    required Transaction transaction,
+    required Invoice invoice,
+    required Student student,
+    String? receiptNumber,
+    String? feeHeadName,
+    String? customExportDirectory,
+    String schoolName = 'Kishan Company',
+    String schoolAddress = '123 Education Boulevard, Academic District',
+    String schoolContact = 'Phone: +1 800 555-0199 | Email: finance@school.edu',
+  }) async {
+    final bytes = await buildPaymentReceiptPdfBytes(
+      transaction: transaction,
+      invoice: invoice,
+      student: student,
+      receiptNumber: receiptNumber,
+      feeHeadName: feeHeadName,
+      schoolName: schoolName,
+      schoolAddress: schoolAddress,
+      schoolContact: schoolContact,
+    );
+
     // Save PDF directly to configured receipt export path
     String receiptsFolderPath = customExportDirectory ?? '';
     if (receiptsFolderPath.isEmpty) {
@@ -366,15 +395,15 @@ class ReportGenerator {
     final String fullPath = p.join(receiptsFolderPath, receiptFileName);
 
     final File file = File(fullPath);
-    await file.writeAsBytes(await pdf.save());
+    await file.writeAsBytes(bytes);
 
     return file;
   }
 
-  /// Generate a printable PDF Student ID Card
-  static Future<File> generateStudentIdCard({
+  /// Build raw PDF bytes for a Student ID Card (for preview).
+  static Future<Uint8List> buildStudentIdCardPdfBytes({
     required Student student,
-    String schoolName = 'EXCELLENCE ACADEMY SCHOOL',
+    String schoolName = 'Kishan Company',
     String schoolAddress = '123 Education Boulevard, Academic District',
     String schoolContact = 'Phone: +1 800 555-0199',
   }) async {
@@ -513,6 +542,23 @@ class ReportGenerator {
       ),
     );
 
+    return await pdf.save();
+  }
+
+  /// Generate a printable PDF Student ID Card and save to Documents.
+  static Future<File> generateStudentIdCard({
+    required Student student,
+    String schoolName = 'Kishan Company',
+    String schoolAddress = '123 Education Boulevard, Academic District',
+    String schoolContact = 'Phone: +1 800 555-0199',
+  }) async {
+    final bytes = await buildStudentIdCardPdfBytes(
+      student: student,
+      schoolName: schoolName,
+      schoolAddress: schoolAddress,
+      schoolContact: schoolContact,
+    );
+
     final Directory documentsDir = await getApplicationDocumentsDirectory();
     final String idCardsDirPath = p.join(documentsDir.path, 'SchoolManagementSystem', 'ID_Cards');
     final idCardsDir = Directory(idCardsDirPath);
@@ -522,7 +568,7 @@ class ReportGenerator {
 
     final String fileName = 'ID_Card_${student.admissionNumber ?? student.id.substring(0, 6)}.pdf';
     final File file = File(p.join(idCardsDirPath, fileName));
-    await file.writeAsBytes(await pdf.save());
+    await file.writeAsBytes(bytes);
 
     return file;
   }
@@ -540,13 +586,13 @@ class ReportGenerator {
     );
   }
 
-  /// Generate a formal PDF Transfer Certificate (TC)
-  static Future<File> generateTransferCertificate({
+  /// Build raw PDF bytes for a Transfer Certificate (for preview).
+  static Future<Uint8List> buildTransferCertificatePdfBytes({
     required Student student,
     required String tcNumber,
     required String tcDate,
     required String reasonForLeaving,
-    String schoolName = 'EXCELLENCE ACADEMY SCHOOL',
+    String schoolName = 'Kishan Company',
     String schoolAddress = '123 Education Boulevard, Academic District',
     String affiliationNo = 'AFF-CBSE-2024-99881',
   }) async {
@@ -689,6 +735,29 @@ class ReportGenerator {
       ),
     );
 
+    return await pdf.save();
+  }
+
+  /// Generate a formal PDF Transfer Certificate and save to Documents.
+  static Future<File> generateTransferCertificate({
+    required Student student,
+    required String tcNumber,
+    required String tcDate,
+    required String reasonForLeaving,
+    String schoolName = 'Kishan Company',
+    String schoolAddress = '123 Education Boulevard, Academic District',
+    String affiliationNo = 'AFF-CBSE-2024-99881',
+  }) async {
+    final bytes = await buildTransferCertificatePdfBytes(
+      student: student,
+      tcNumber: tcNumber,
+      tcDate: tcDate,
+      reasonForLeaving: reasonForLeaving,
+      schoolName: schoolName,
+      schoolAddress: schoolAddress,
+      affiliationNo: affiliationNo,
+    );
+
     final Directory documentsDir = await getApplicationDocumentsDirectory();
     final String certificatesDirPath = p.join(documentsDir.path, 'SchoolManagementSystem', 'Certificates');
     final certsDir = Directory(certificatesDirPath);
@@ -698,7 +767,7 @@ class ReportGenerator {
 
     final String fileName = 'TC_${student.admissionNumber ?? student.id.substring(0, 6)}.pdf';
     final File file = File(p.join(certificatesDirPath, fileName));
-    await file.writeAsBytes(await pdf.save());
+    await file.writeAsBytes(bytes);
 
     return file;
   }

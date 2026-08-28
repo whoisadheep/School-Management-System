@@ -12,7 +12,6 @@ import '../../../providers/services_provider.dart';
 import '../../../providers/navigation_provider.dart';
 import '../../../providers/dashboard_provider.dart';
 import '../../../services/file_storage_service.dart';
-import '../../../services/report_generator.dart';
 import '../../../core/auth/permission_helper.dart';
 import '../../../services/app_logger.dart';
 import 'staff_detail_view.dart';
@@ -761,7 +760,7 @@ class _StaffDirectoryViewState extends ConsumerState<StaffDirectoryView>
               children: [
                 Expanded(
                   child: DropdownButtonFormField<String>(
-                    initialValue: roles.contains(_selectedRole)
+                    value: roles.contains(_selectedRole)
                         ? _selectedRole
                         : roles.first,
                     decoration: _buildInputDecoration('Role / Category *'),
@@ -811,7 +810,7 @@ class _StaffDirectoryViewState extends ConsumerState<StaffDirectoryView>
                 const SizedBox(width: 16),
                 Expanded(
                   child: DropdownButtonFormField<String>(
-                    initialValue: genders.contains(_selectedGender)
+                    value: genders.contains(_selectedGender)
                         ? _selectedGender
                         : genders.first,
                     decoration: _buildInputDecoration('Gender'),
@@ -826,7 +825,7 @@ class _StaffDirectoryViewState extends ConsumerState<StaffDirectoryView>
                 const SizedBox(width: 16),
                 Expanded(
                   child: DropdownButtonFormField<String>(
-                    initialValue: bloodGroups.contains(_selectedBloodGroup)
+                    value: bloodGroups.contains(_selectedBloodGroup)
                         ? _selectedBloodGroup
                         : bloodGroups.first,
                     decoration: _buildInputDecoration('Blood Group'),
@@ -1175,7 +1174,7 @@ class _StaffDirectoryViewState extends ConsumerState<StaffDirectoryView>
         borderRadius: BorderRadius.circular(12),
       ),
       child: DropdownButtonFormField<T>(
-        initialValue: value,
+        value: value,
         decoration: InputDecoration(
           contentPadding:
               const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
@@ -1398,7 +1397,7 @@ class _StaffDirectoryViewState extends ConsumerState<StaffDirectoryView>
                               children: [
                                 Expanded(
                                   child: DropdownButtonFormField<String>(
-                                    initialValue: selectedSubstituteId,
+                                    value: selectedSubstituteId,
                                     decoration: const InputDecoration(labelText: 'Suggested Free Teacher'),
                                     items: freeTeachers
                                         .map((t) => DropdownMenuItem(

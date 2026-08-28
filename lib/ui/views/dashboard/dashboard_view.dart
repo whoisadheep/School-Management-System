@@ -2,9 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:fl_chart/fl_chart.dart';
-
+import 'package:url_launcher/url_launcher.dart';
 import 'package:intl/intl.dart';
 
+import '../../../services/ai_message_service.dart';
 import '../../../providers/auth_provider.dart';
 import '../../../providers/dashboard_provider.dart';
 import '../../../providers/navigation_provider.dart';
@@ -19,12 +20,14 @@ class DashboardView extends ConsumerStatefulWidget {
 }
 
 class _DashboardViewState extends ConsumerState<DashboardView> {
+  final ScrollController _horizontalScrollController = ScrollController();
   final primaryPurple = const Color(0xFF4C3BCF);
   final bgPurple = const Color(0xFFF5F3FF);
   final _inviteEmailController = TextEditingController();
 
   @override
   void dispose() {
+    _horizontalScrollController.dispose();
     _inviteEmailController.dispose();
     super.dispose();
   }
@@ -37,52 +40,65 @@ class _DashboardViewState extends ConsumerState<DashboardView> {
       backgroundColor: bgPurple,
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(24),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            // Left column - 65%
-            Expanded(
-              flex: 65,
-              child: Column(
+            _buildWelcomeBanner(),
+            const SizedBox(height: 20),
+            _buildVehicleRenewalAlertBanner(),
+            metricsAsync.when(
+              data: (metrics) => Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  _buildWelcomeBanner(),
+                  _buildQuickStatsCards(metrics),
                   const SizedBox(height: 20),
-                  _buildVehicleRenewalAlertBanner(),
-                  metricsAsync.when(
-                    data: (metrics) => Column(
-                      children: [
-                        _buildStatsCardsRow(metrics),
-                        const SizedBox(height: 20),
-                        _buildStudentInfoTable(metrics.overdueInvoices),
-                      ],
-                    ),
-                    loading: () =>
-                        const Center(child: CircularProgressIndicator()),
-                    error: (e, s) => Center(child: Text('Error: $e')),
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Expanded(child: _buildMonthlyCollectionsLineChart(metrics)),
+                      const SizedBox(width: 20),
+                      Expanded(child: _buildClassWiseStudentPieChart(metrics)),
+                    ],
+                  ),
+                  const SizedBox(height: 20),
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Expanded(child: _buildFinancialOverviewChart(metrics)),
+                      const SizedBox(width: 20),
+                      Expanded(child: _buildFeeHeadCollectionBreakdown(metrics)),
+                    ],
+                  ),
+                  const SizedBox(height: 20),
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Expanded(
+                        flex: 60,
+                        child: _buildStudentInfoTable(metrics.overdueInvoices),
+                      ),
+                      const SizedBox(width: 20),
+                      Expanded(
+                        flex: 40,
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            _buildQuickActionsCard(),
+                            const SizedBox(height: 20),
+                            _buildAddTeachersSection(),
+                          ],
+                        ),
+                      ),
+                    ],
                   ),
                 ],
               ),
-            ),
-            const SizedBox(width: 20),
-            // Right column - 35%
-            Expanded(
-              flex: 35,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  metricsAsync.when(
-                    data: (metrics) => _buildFinancialOverviewChart(metrics),
-                    loading: () => const SizedBox(
-                        height: 250,
-                        child: Center(child: CircularProgressIndicator())),
-                    error: (e, s) =>
-                        Center(child: Text('Error loading chart: $e')),
-                  ),
-                  const SizedBox(height: 20),
-                  _buildAddTeachersSection(),
-                ],
-              ),
+              loading: () => const Center(
+                  child: Padding(
+                padding: EdgeInsets.all(48.0),
+                child: CircularProgressIndicator(),
+              )),
+              error: (e, s) => Center(child: Text('Error: $e')),
             ),
           ],
         ),
@@ -183,117 +199,195 @@ class _DashboardViewState extends ConsumerState<DashboardView> {
     );
   }
 
-  Widget _buildStatsCardsRow(DashboardMetrics metrics) {
+  Widget _buildVehicleRenewalAlertBanner() {
+    final vehiclesAsync = ref.watch(vehiclesNeedingRenewalProvider);
+    return vehiclesAsync.when(
+      data: (vehicles) {
+        if (vehicles.isEmpty) return const SizedBox.shrink();
+        return Padding(
+          padding: const EdgeInsets.only(bottom: 20),
+          child: Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: const Color(0xFFFEF2F2),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: const Color(0xFFFCA5A5)),
+            ),
+            child: Row(
+              children: [
+                const Icon(Icons.warning_amber_rounded, color: Color(0xFFDC2626), size: 24),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Fleet Compliance Alert: ${vehicles.length} Vehicle(s) Require Immediate Renewal',
+                        style: GoogleFonts.poppins(fontWeight: FontWeight.bold, fontSize: 13, color: const Color(0xFF991B1B)),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        'Insurance or Fitness certificates for (${vehicles.map((v) => v.vehicleNumber).join(', ')}) expire within 30 days.',
+                        style: GoogleFonts.poppins(fontSize: 11, color: const Color(0xFF7F1D1D)),
+                      ),
+                    ],
+                  ),
+                ),
+                TextButton(
+                  onPressed: () {
+                    ref.read(selectedTabProvider.notifier).state = NavigationTab.transport;
+                  },
+                  child: Text(
+                    'Manage Fleet →',
+                    style: GoogleFonts.poppins(color: const Color(0xFFDC2626), fontWeight: FontWeight.bold, fontSize: 12),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+      loading: () => const SizedBox.shrink(),
+      error: (_, __) => const SizedBox.shrink(),
+    );
+  }
+
+  Widget _buildQuickStatsCards(DashboardMetrics metrics) {
     final currencyFormatter =
         NumberFormat.currency(symbol: '₹', decimalDigits: 0);
+    
+    // Fallbacks for new fields
+    final staff = metrics.totalStaff;
+    final collRate = metrics.collectionRate;
 
     return Row(
       children: [
         Expanded(
-          child: _buildStatCard(
-            'Total Students',
-            metrics.totalStudents.toString(),
-            onTap: () {
-              ref.read(selectedTabProvider.notifier).state =
-                  NavigationTab.students;
-            },
+          child: _buildNewStatCard(
+            title: 'Total Students',
+            value: metrics.totalStudents.toString(),
+            icon: Icons.school,
+            iconColor: const Color(0xFF5B4BC4), // Purple
+            onTap: () => ref.read(selectedTabProvider.notifier).state = NavigationTab.students,
           ),
         ),
         const SizedBox(width: 16),
         Expanded(
-          child: _buildStatCard(
-            "Today's Collection",
-            currencyFormatter.format(metrics.todaysCollections),
-            onTap: () {
-              ref.read(selectedTabProvider.notifier).state =
-                  NavigationTab.feeCollection;
-            },
+          child: _buildNewStatCard(
+            title: 'Total Staff',
+            value: staff.toString(),
+            icon: Icons.people,
+            iconColor: const Color(0xFF3B82F6), // Blue
+            onTap: () => ref.read(selectedTabProvider.notifier).state = NavigationTab.staff,
           ),
         ),
         const SizedBox(width: 16),
         Expanded(
-          child: _buildStatCard(
-            'Pending Dues',
-            currencyFormatter.format(metrics.pendingDues),
-            onTap: () {
-              ref.read(selectedTabProvider.notifier).state =
-                  NavigationTab.feeCollection;
-            },
+          child: _buildNewStatCard(
+            title: "Today's Collection",
+            value: currencyFormatter.format(metrics.todaysCollections),
+            icon: Icons.account_balance_wallet,
+            iconColor: const Color(0xFF22C55E), // Green
+            onTap: () => ref.read(selectedTabProvider.notifier).state = NavigationTab.feeCollection,
           ),
         ),
         const SizedBox(width: 16),
         Expanded(
-          child: _buildStatCard(
-            'Total Revenue',
-            currencyFormatter.format(metrics.totalRevenueCurrentYear),
-            onTap: () {
-              ref.read(selectedTabProvider.notifier).state =
-                  NavigationTab.expenses;
-            },
+          child: _buildNewStatCard(
+            title: 'Pending Dues',
+            value: currencyFormatter.format(metrics.pendingDues),
+            icon: Icons.warning_amber,
+            iconColor: const Color(0xFFF59E0B), // Amber
+            onTap: () => ref.read(selectedTabProvider.notifier).state = NavigationTab.feeCollection,
+          ),
+        ),
+        const SizedBox(width: 16),
+        Expanded(
+          child: _buildNewStatCard(
+            title: 'Total Revenue',
+            value: currencyFormatter.format(metrics.totalRevenueCurrentYear),
+            icon: Icons.trending_up,
+            iconColor: const Color(0xFFFF6B6B), // Coral
+            onTap: () => ref.read(selectedTabProvider.notifier).state = NavigationTab.expenses,
+          ),
+        ),
+        const SizedBox(width: 16),
+        Expanded(
+          child: _buildNewStatCard(
+            title: 'Collection Rate',
+            value: '${collRate.toStringAsFixed(1)}%',
+            icon: Icons.speed,
+            iconColor: const Color(0xFF0D9488), // Teal
+            onTap: () => ref.read(selectedTabProvider.notifier).state = NavigationTab.feeReports,
           ),
         ),
       ],
     );
   }
 
-  Widget _buildStatCard(String label, String value, {VoidCallback? onTap}) {
+  Widget _buildNewStatCard({
+    required String title,
+    required String value,
+    required IconData icon,
+    required Color iconColor,
+    required VoidCallback onTap,
+  }) {
     return MouseRegion(
       cursor: SystemMouseCursors.click,
       child: GestureDetector(
         onTap: onTap,
         child: HoverScale(
           child: Container(
-            padding: const EdgeInsets.all(20),
+            padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 16),
             decoration: BoxDecoration(
-              gradient: const LinearGradient(
-                colors: [Color(0xFF5B4BC4), Color(0xFF7B68EE)],
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-              ),
+              color: Colors.white,
               borderRadius: BorderRadius.circular(16),
               boxShadow: [
                 BoxShadow(
-                  color: primaryPurple.withValues(alpha: 0.2),
+                  color: Colors.black.withValues(alpha: 0.05),
                   blurRadius: 10,
                   offset: const Offset(0, 4),
                 ),
               ],
             ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+            child: Row(
               children: [
-                Text(
-                  label,
-                  style: GoogleFonts.poppins(
-                    color: Colors.white.withValues(alpha: 0.9),
-                    fontSize: 14,
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: iconColor.withValues(alpha: 0.1),
+                    shape: BoxShape.circle,
                   ),
+                  child: Icon(icon, color: iconColor, size: 24),
                 ),
-                const SizedBox(height: 12),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text(
-                      value,
-                      style: GoogleFonts.poppins(
-                        color: Colors.white,
-                        fontSize: 24,
-                        fontWeight: FontWeight.bold,
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        title,
+                        style: GoogleFonts.poppins(
+                          color: const Color(0xFF6B7280),
+                          fontSize: 12,
+                          fontWeight: FontWeight.w500,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                       ),
-                    ),
-                    Container(
-                      padding: const EdgeInsets.all(8),
-                      decoration: BoxDecoration(
-                        color: Colors.white.withValues(alpha: 0.2),
-                        shape: BoxShape.circle,
+                      const SizedBox(height: 4),
+                      Text(
+                        value,
+                        style: GoogleFonts.poppins(
+                          color: const Color(0xFF1F2937),
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                       ),
-                      child: const Icon(
-                        Icons.arrow_forward_ios,
-                        color: Colors.white,
-                        size: 16,
-                      ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
               ],
             ),
@@ -303,12 +397,19 @@ class _DashboardViewState extends ConsumerState<DashboardView> {
     );
   }
 
-  Widget _buildStudentInfoTable(List<OverdueInvoiceInfo> invoices) {
-    final currencyFormatter =
-        NumberFormat.currency(symbol: '₹', decimalDigits: 2);
-    final dateFormatter = DateFormat('MM/dd/yyyy');
+  Widget _buildMonthlyCollectionsLineChart(DashboardMetrics metrics) {
+    final currencyFormatter = NumberFormat.compactCurrency(symbol: '₹', decimalDigits: 0);
+    final monthlyData = metrics.monthlyFinancials;
+
+    double maxY = 0;
+    for (var m in monthlyData) {
+      if (m.collections > maxY) maxY = m.collections;
+    }
+    maxY = maxY > 0 ? (maxY * 1.2) : 1000;
 
     return Container(
+      height: 300,
+      padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(16),
@@ -320,151 +421,183 @@ class _DashboardViewState extends ConsumerState<DashboardView> {
           ),
         ],
       ),
-      padding: const EdgeInsets.all(24),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(
-                'Overdue Invoices',
-                style: GoogleFonts.poppins(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                  color: const Color(0xFF1F2937),
+          Text(
+            'Monthly Fee Collection Trend',
+            style: GoogleFonts.poppins(
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+              color: const Color(0xFF1F2937),
+            ),
+          ),
+          const SizedBox(height: 24),
+          Expanded(
+            child: LineChart(
+              LineChartData(
+                gridData: FlGridData(
+                  show: true,
+                  drawVerticalLine: false,
+                  getDrawingHorizontalLine: (value) => FlLine(
+                    color: Colors.grey.withValues(alpha: 0.2),
+                    strokeWidth: 1,
+                  ),
                 ),
-              ),
-              TextButton(
-                onPressed: () {
-                  ref.read(selectedTabProvider.notifier).state =
-                      NavigationTab.feeCollection;
-                },
-                child: Text(
-                  'See All →',
-                  style: GoogleFonts.poppins(
+                titlesData: FlTitlesData(
+                  show: true,
+                  bottomTitles: AxisTitles(
+                    sideTitles: SideTitles(
+                      showTitles: true,
+                      reservedSize: 30,
+                      getTitlesWidget: (value, meta) {
+                        final idx = value.toInt();
+                        if (idx >= 0 && idx < monthlyData.length) {
+                          return SideTitleWidget(
+                            axisSide: meta.axisSide,
+                            child: Text(
+                              monthlyData[idx].month,
+                              style: GoogleFonts.poppins(color: const Color(0xFF6B7280), fontSize: 12),
+                            ),
+                          );
+                        }
+                        return const SizedBox.shrink();
+                      },
+                    ),
+                  ),
+                  leftTitles: AxisTitles(
+                    sideTitles: SideTitles(
+                      showTitles: true,
+                      reservedSize: 50,
+                      getTitlesWidget: (value, meta) {
+                        return Text(
+                          currencyFormatter.format(value),
+                          style: GoogleFonts.poppins(color: const Color(0xFF6B7280), fontSize: 11),
+                        );
+                      },
+                    ),
+                  ),
+                  topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                  rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                ),
+                borderData: FlBorderData(show: false),
+                minX: 0,
+                maxX: monthlyData.length.toDouble() - 1,
+                minY: 0,
+                maxY: maxY,
+                lineBarsData: [
+                  LineChartBarData(
+                    spots: monthlyData.asMap().entries.map((e) => FlSpot(e.key.toDouble(), e.value.collections)).toList(),
+                    isCurved: true,
                     color: primaryPurple,
-                    fontWeight: FontWeight.w600,
+                    barWidth: 3,
+                    isStrokeCapRound: true,
+                    dotData: const FlDotData(show: true),
+                    belowBarData: BarAreaData(
+                      show: true,
+                      gradient: LinearGradient(
+                        colors: [
+                          primaryPurple.withValues(alpha: 0.3),
+                          primaryPurple.withValues(alpha: 0.0),
+                        ],
+                        begin: Alignment.topCenter,
+                        end: Alignment.bottomCenter,
+                      ),
+                    ),
+                  ),
+                ],
+                lineTouchData: LineTouchData(
+                  touchTooltipData: LineTouchTooltipData(
+                    getTooltipItems: (touchedSpots) {
+                      return touchedSpots.map((spot) {
+                        return LineTooltipItem(
+                          '₹${spot.y.toInt()}',
+                          GoogleFonts.poppins(color: Colors.white, fontWeight: FontWeight.bold),
+                        );
+                      }).toList();
+                    },
                   ),
                 ),
               ),
-            ],
-          ),
-          const SizedBox(height: 16),
-          if (invoices.isEmpty)
-            Center(
-              child: Padding(
-                padding: const EdgeInsets.all(32.0),
-                child: Text(
-                  'No overdue invoices! 🎉',
-                  style: GoogleFonts.poppins(color: const Color(0xFF6B7280)),
-                ),
-              ),
-            )
-          else
-            SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              child: DataTable(
-                headingTextStyle: GoogleFonts.poppins(
-                  fontWeight: FontWeight.w600,
-                  color: const Color(0xFF6B7280),
-                ),
-                dataTextStyle: GoogleFonts.poppins(
-                  color: const Color(0xFF1F2937),
-                ),
-                columns: const [
-                  DataColumn(label: Text('Student Name')),
-                  DataColumn(label: Text('Class')),
-                  DataColumn(label: Text('Amount')),
-                  DataColumn(label: Text('Status')),
-                  DataColumn(label: Text('Due Date')),
-                  DataColumn(label: Text('Actions')),
-                ],
-                rows: invoices.map((info) {
-                  final inv = info.invoice;
-                  final stu = info.student;
-
-                  final studentName = stu?.name ?? 'Unknown Student';
-                  final studentClass = stu != null
-                      ? '${stu.gradeLevel} - ${stu.section}'
-                      : 'N/A';
-                  final amount = currencyFormatter.format(inv.netAmount);
-                  final dueDate = dateFormatter.format(inv.dueDate);
-
-                  Color statusColor = const Color(0xFFD97706);
-                  Color statusBg = const Color(0xFFFEF3C7);
-                  String statusText = 'Overdue';
-
-                  return DataRow(
-                    cells: [
-                      DataCell(Row(
-                        children: [
-                          CircleAvatar(
-                            backgroundColor:
-                                primaryPurple.withValues(alpha: 0.2),
-                            child: Text(
-                              studentName[0].toUpperCase(),
-                              style: GoogleFonts.poppins(color: primaryPurple),
-                            ),
-                          ),
-                          const SizedBox(width: 12),
-                          Text(
-                            studentName,
-                            style: GoogleFonts.poppins(
-                                fontWeight: FontWeight.w500),
-                          ),
-                        ],
-                      )),
-                      DataCell(Text(studentClass)),
-                      DataCell(Text(amount)),
-                      DataCell(
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 12, vertical: 6),
-                          decoration: BoxDecoration(
-                            color: statusBg,
-                            borderRadius: BorderRadius.circular(20),
-                          ),
-                          child: Text(
-                            statusText,
-                            style: GoogleFonts.poppins(
-                              color: statusColor,
-                              fontSize: 12,
-                              fontWeight: FontWeight.w500,
-                            ),
-                          ),
-                        ),
-                      ),
-                      DataCell(Text(dueDate)),
-                      DataCell(
-                        PopupMenuButton<String>(
-                          icon: const Icon(Icons.more_vert,
-                              color: Color(0xFF9CA3AF)),
-                          onSelected: (value) {
-                            if (value == 'remind') {
-                              ScaffoldMessenger.of(context)
-                                  .showSnackBar(SnackBar(
-                                content: Text('Reminder sent to $studentName'),
-                                backgroundColor: const Color(0xFF22C55E),
-                              ));
-                            } else if (value == 'view') {
-                              ref.read(selectedTabProvider.notifier).state =
-                                  NavigationTab.feeCollection;
-                            }
-                          },
-                          itemBuilder: (context) => [
-                            const PopupMenuItem(
-                                value: 'remind', child: Text('Send Reminder')),
-                            const PopupMenuItem(
-                                value: 'view', child: Text('View Invoice')),
-                          ],
-                        ),
-                      ),
-                    ],
-                  );
-                }).toList(),
-              ),
             ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildClassWiseStudentPieChart(DashboardMetrics metrics) {
+    final Map<String, int> classData = metrics.classWiseStudentCount;
+    final hasData = classData.isNotEmpty && classData.values.any((v) => v > 0);
+
+    final colors = [
+      const Color(0xFF5B4BC4),
+      const Color(0xFF3B82F6),
+      const Color(0xFF22C55E),
+      const Color(0xFFF59E0B),
+      const Color(0xFFFF6B6B),
+      const Color(0xFF8B5CF6),
+      const Color(0xFF06B6D4),
+      const Color(0xFFEC4899)
+    ];
+
+    return Container(
+      height: 300,
+      padding: const EdgeInsets.all(24),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.05),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Students by Class',
+            style: GoogleFonts.poppins(
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+              color: const Color(0xFF1F2937),
+            ),
+          ),
+          const SizedBox(height: 24),
+          Expanded(
+            child: hasData
+                ? PieChart(
+                    PieChartData(
+                      sectionsSpace: 2,
+                      centerSpaceRadius: 40,
+                      sections: classData.entries.toList().asMap().entries.map((entry) {
+                        final idx = entry.key;
+                        final label = entry.value.key;
+                        final count = entry.value.value;
+                        return PieChartSectionData(
+                          color: colors[idx % colors.length],
+                          value: count.toDouble(),
+                          title: '$label\n$count',
+                          radius: 50,
+                          titleStyle: GoogleFonts.poppins(
+                            fontSize: 10,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.white,
+                          ),
+                        );
+                      }).toList(),
+                    ),
+                  )
+                : Center(
+                    child: Text(
+                      'No student class data available.',
+                      style: GoogleFonts.poppins(color: const Color(0xFF6B7280)),
+                    ),
+                  ),
+          ),
         ],
       ),
     );
@@ -481,11 +614,12 @@ class _DashboardViewState extends ConsumerState<DashboardView> {
       ),
     );
     final hasFinancialData = largestValue > 0;
-    // Leave headroom above the highest bar and keep a practical scale for low values.
     final maxY = hasFinancialData ? (largestValue * 1.2).ceilToDouble() : 100.0;
     final gridInterval = maxY / 4;
 
     return Container(
+      height: 300,
+      padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(16),
@@ -497,24 +631,15 @@ class _DashboardViewState extends ConsumerState<DashboardView> {
           ),
         ],
       ),
-      padding: const EdgeInsets.all(24),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            'Financial Overview',
+            'Revenue vs Expenses',
             style: GoogleFonts.poppins(
               fontSize: 18,
               fontWeight: FontWeight.bold,
               color: const Color(0xFF1F2937),
-            ),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            'Fee Collections vs Operating Expenses',
-            style: GoogleFonts.poppins(
-              fontSize: 12,
-              color: const Color(0xFF6B7280),
             ),
           ),
           const SizedBox(height: 16),
@@ -526,8 +651,7 @@ class _DashboardViewState extends ConsumerState<DashboardView> {
             ],
           ),
           const SizedBox(height: 24),
-          SizedBox(
-            height: 250,
+          Expanded(
             child: hasFinancialData
                 ? BarChart(
                     BarChartData(
@@ -538,8 +662,7 @@ class _DashboardViewState extends ConsumerState<DashboardView> {
                         touchTooltipData: BarTouchTooltipData(
                           getTooltipItem: (group, groupIndex, rod, rodIndex) {
                             final isCollection = rodIndex == 0;
-                            final type =
-                                isCollection ? 'Collections' : 'Expenses';
+                            final type = isCollection ? 'Collections' : 'Expenses';
                             return BarTooltipItem(
                               '$type: ₹${rod.toY.toInt()}',
                               GoogleFonts.poppins(
@@ -618,7 +741,7 @@ class _DashboardViewState extends ConsumerState<DashboardView> {
                   )
                 : Center(
                     child: Text(
-                      'No collections or expenses recorded in the last 6 months.',
+                      'No collections or expenses recorded.',
                       textAlign: TextAlign.center,
                       style: GoogleFonts.poppins(
                         color: const Color(0xFF6B7280),
@@ -678,6 +801,382 @@ class _DashboardViewState extends ConsumerState<DashboardView> {
           ),
         ),
       ],
+    );
+  }
+
+  Widget _buildFeeHeadCollectionBreakdown(DashboardMetrics metrics) {
+    final feeHeadData = metrics.feeHeadWiseCollection;
+    final currencyFormatter = NumberFormat.compactCurrency(symbol: '₹', decimalDigits: 0);
+    final total = feeHeadData.values.fold<double>(0, (p, c) => p + c);
+
+    final colors = [
+      const Color(0xFF3B82F6),
+      const Color(0xFF10B981),
+      const Color(0xFFF59E0B),
+      const Color(0xFF8B5CF6),
+      const Color(0xFFEF4444)
+    ];
+
+    return Container(
+      height: 300,
+      padding: const EdgeInsets.all(24),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.05),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Collection by Fee Head',
+            style: GoogleFonts.poppins(
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+              color: const Color(0xFF1F2937),
+            ),
+          ),
+          const SizedBox(height: 24),
+          Expanded(
+            child: feeHeadData.isNotEmpty && total > 0
+                ? ListView.separated(
+                    itemCount: feeHeadData.length,
+                    separatorBuilder: (context, index) => const SizedBox(height: 16),
+                    itemBuilder: (context, index) {
+                      final head = feeHeadData.keys.elementAt(index);
+                      final val = feeHeadData[head]!;
+                      final proportion = val / total;
+                      final color = colors[index % colors.length];
+
+                      return Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Text(head, style: GoogleFonts.poppins(fontWeight: FontWeight.w500, fontSize: 13, color: const Color(0xFF4B5563))),
+                              Text(currencyFormatter.format(val), style: GoogleFonts.poppins(fontWeight: FontWeight.bold, fontSize: 13, color: const Color(0xFF1F2937))),
+                            ],
+                          ),
+                          const SizedBox(height: 8),
+                          LinearProgressIndicator(
+                            value: proportion,
+                            backgroundColor: color.withValues(alpha: 0.1),
+                            valueColor: AlwaysStoppedAnimation<Color>(color),
+                            borderRadius: BorderRadius.circular(4),
+                            minHeight: 8,
+                          ),
+                        ],
+                      );
+                    },
+                  )
+                : Center(
+                    child: Text(
+                      'No fee head collection data.',
+                      style: GoogleFonts.poppins(color: const Color(0xFF6B7280)),
+                    ),
+                  ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildStudentInfoTable(List<OverdueInvoiceInfo> invoices) {
+    final currencyFormatter =
+        NumberFormat.currency(symbol: '₹', decimalDigits: 2);
+    final dateFormatter = DateFormat('MM/dd/yyyy');
+
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.05),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      padding: const EdgeInsets.all(24),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                'Overdue Invoices',
+                style: GoogleFonts.poppins(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                  color: const Color(0xFF1F2937),
+                ),
+              ),
+              TextButton(
+                onPressed: () {
+                  ref.read(selectedTabProvider.notifier).state =
+                      NavigationTab.feeCollection;
+                },
+                child: Text(
+                  'See All →',
+                  style: GoogleFonts.poppins(
+                    color: primaryPurple,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          if (invoices.isEmpty)
+            Center(
+              child: Padding(
+                padding: const EdgeInsets.all(32.0),
+                child: Text(
+                  'No overdue invoices! 🎉',
+                  style: GoogleFonts.poppins(color: const Color(0xFF6B7280)),
+                ),
+              ),
+            )
+          else
+            Scrollbar(
+              controller: _horizontalScrollController,
+              thumbVisibility: true,
+              child: SingleChildScrollView(
+                controller: _horizontalScrollController,
+                scrollDirection: Axis.horizontal,
+                child: DataTable(
+                headingTextStyle: GoogleFonts.poppins(
+                  fontWeight: FontWeight.w600,
+                  color: const Color(0xFF6B7280),
+                ),
+                dataTextStyle: GoogleFonts.poppins(
+                  color: const Color(0xFF1F2937),
+                ),
+                columns: const [
+                  DataColumn(label: Text('Student Name')),
+                  DataColumn(label: Text('Class')),
+                  DataColumn(label: Text('Amount')),
+                  DataColumn(label: Text('Status')),
+                  DataColumn(label: Text('Due Date')),
+                  DataColumn(label: Text('Actions')),
+                ],
+                rows: invoices.map((info) {
+                  final inv = info.invoice;
+                  final stu = info.student;
+
+                  final studentName = stu?.name ?? 'Unknown Student';
+                  final studentClass = stu != null
+                      ? '${stu.gradeLevel} - ${stu.section}'
+                      : 'N/A';
+                  final amount = currencyFormatter.format(inv.netAmount);
+                  final dueDate = dateFormatter.format(inv.dueDate);
+
+                  Color statusColor = const Color(0xFFD97706);
+                  Color statusBg = const Color(0xFFFEF3C7);
+                  String statusText = 'Overdue';
+
+                  return DataRow(
+                    cells: [
+                      DataCell(Row(
+                        children: [
+                          CircleAvatar(
+                            backgroundColor:
+                                primaryPurple.withValues(alpha: 0.2),
+                            child: Text(
+                              studentName.isNotEmpty ? studentName[0].toUpperCase() : '?',
+                              style: GoogleFonts.poppins(color: primaryPurple),
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Text(
+                            studentName,
+                            style: GoogleFonts.poppins(
+                                fontWeight: FontWeight.w500),
+                          ),
+                        ],
+                      )),
+                      DataCell(Text(studentClass)),
+                      DataCell(Text(amount)),
+                      DataCell(
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 12, vertical: 6),
+                          decoration: BoxDecoration(
+                            color: statusBg,
+                            borderRadius: BorderRadius.circular(20),
+                          ),
+                          child: Text(
+                            statusText,
+                            style: GoogleFonts.poppins(
+                              color: statusColor,
+                              fontSize: 12,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ),
+                      ),
+                      DataCell(Text(dueDate)),
+                      DataCell(
+                        PopupMenuButton<String>(
+                          icon: const Icon(Icons.more_vert,
+                              color: Color(0xFF9CA3AF)),
+                          onSelected: (value) async {
+                            if (value == 'remind') {
+                              final phone = stu?.fatherPhone?.isNotEmpty == true 
+                                  ? stu!.fatherPhone! 
+                                  : (stu?.motherPhone ?? '');
+                              
+                              if (phone.isEmpty) {
+                                if (context.mounted) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(content: Text('No phone number found for $studentName', style: GoogleFonts.poppins()), backgroundColor: const Color(0xFFF59E0B)),
+                                  );
+                                }
+                                return;
+                              }
+
+                              final cleanPhone = phone.replaceAll(RegExp(r'[^\d+]'), '');
+                              final finalPhone = cleanPhone.startsWith('+') ? cleanPhone : '+91$cleanPhone';
+
+                              if (context.mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(content: Text('Generating smart message...', style: GoogleFonts.poppins()), duration: const Duration(milliseconds: 1500)),
+                                );
+                              }
+
+                              final aiService = ref.read(aiMessageServiceProvider);
+                              final text = await aiService.generateOverdueReminder(
+                                studentName: studentName,
+                                amountStr: amount,
+                                grade: studentClass,
+                              );
+
+                              final url = Uri.parse('https://wa.me/$finalPhone?text=${Uri.encodeComponent(text)}');
+                              if (await canLaunchUrl(url)) {
+                                await launchUrl(url);
+                              } else {
+                                if (context.mounted) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(content: Text('Could not launch WhatsApp.', style: GoogleFonts.poppins()), backgroundColor: const Color(0xFFEF4444)),
+                                  );
+                                }
+                              }
+                            } else if (value == 'view') {
+                              ref.read(selectedTabProvider.notifier).state =
+                                  NavigationTab.feeCollection;
+                            }
+                          },
+                          itemBuilder: (context) => [
+                            const PopupMenuItem(
+                                value: 'remind', child: Text('Send Reminder')),
+                            const PopupMenuItem(
+                                value: 'view', child: Text('View Invoice')),
+                          ],
+                        ),
+                      ),
+                    ],
+                  );
+                }).toList(),
+              ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildQuickActionsCard() {
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.05),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      padding: const EdgeInsets.all(24),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Quick Actions',
+            style: GoogleFonts.poppins(
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+              color: const Color(0xFF1F2937),
+            ),
+          ),
+          const SizedBox(height: 24),
+          GridView.count(
+            crossAxisCount: 2,
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            mainAxisSpacing: 16,
+            crossAxisSpacing: 16,
+            childAspectRatio: 2.5,
+            children: [
+              _buildQuickActionBtn('Add Student', Icons.person_add, const Color(0xFF3B82F6), () {
+                ref.read(selectedTabProvider.notifier).state = NavigationTab.students;
+              }),
+              _buildQuickActionBtn('Collect Fee', Icons.payment, const Color(0xFF10B981), () {
+                ref.read(selectedTabProvider.notifier).state = NavigationTab.feeCollection;
+              }),
+              _buildQuickActionBtn('View Reports', Icons.bar_chart, const Color(0xFFF59E0B), () {
+                ref.read(selectedTabProvider.notifier).state = NavigationTab.feeReports;
+              }),
+              _buildQuickActionBtn('AI Assistant', Icons.auto_awesome, const Color(0xFF8B5CF6), () {
+                ref.read(selectedTabProvider.notifier).state = NavigationTab.assistant;
+              }),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildQuickActionBtn(String title, IconData icon, Color color, VoidCallback onTap) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(12),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12),
+        decoration: BoxDecoration(
+          color: color.withValues(alpha: 0.1),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: color.withValues(alpha: 0.2)),
+        ),
+        child: Row(
+          children: [
+            Icon(icon, color: color, size: 20),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                title,
+                style: GoogleFonts.poppins(
+                  color: color,
+                  fontWeight: FontWeight.w600,
+                  fontSize: 12,
+                ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 
@@ -862,59 +1361,6 @@ class _DashboardViewState extends ConsumerState<DashboardView> {
           ),
         ],
       ),
-    );
-  }
-
-  Widget _buildVehicleRenewalAlertBanner() {
-    final vehiclesAsync = ref.watch(vehiclesNeedingRenewalProvider);
-    return vehiclesAsync.when(
-      data: (vehicles) {
-        if (vehicles.isEmpty) return const SizedBox.shrink();
-        return Padding(
-          padding: const EdgeInsets.only(bottom: 20),
-          child: Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: const Color(0xFFFEF2F2),
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: const Color(0xFFFCA5A5)),
-            ),
-            child: Row(
-              children: [
-                const Icon(Icons.warning_amber_rounded, color: Color(0xFFDC2626), size: 24),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Fleet Compliance Alert: ${vehicles.length} Vehicle(s) Require Immediate Renewal',
-                        style: GoogleFonts.poppins(fontWeight: FontWeight.bold, fontSize: 13, color: const Color(0xFF991B1B)),
-                      ),
-                      const SizedBox(height: 2),
-                      Text(
-                        'Insurance or Fitness certificates for (${vehicles.map((v) => v.vehicleNumber).join(', ')}) expire within 30 days.',
-                        style: GoogleFonts.poppins(fontSize: 11, color: const Color(0xFF7F1D1D)),
-                      ),
-                    ],
-                  ),
-                ),
-                TextButton(
-                  onPressed: () {
-                    ref.read(selectedTabProvider.notifier).state = NavigationTab.transport;
-                  },
-                  child: Text(
-                    'Manage Fleet →',
-                    style: GoogleFonts.poppins(color: const Color(0xFFDC2626), fontWeight: FontWeight.bold, fontSize: 12),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        );
-      },
-      loading: () => const SizedBox.shrink(),
-      error: (_, __) => const SizedBox.shrink(),
     );
   }
 

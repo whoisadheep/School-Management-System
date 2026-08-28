@@ -1,11 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:url_launcher/url_launcher.dart';
+import '../../../services/ai_message_service.dart';
 import 'package:intl/intl.dart';
 import '../../../core/theme/app_theme.dart';
-import '../../../models/models.dart';
 import '../../../providers/services_provider.dart';
 import 'student_fee_ledger_view.dart';
+import 'date_wise_report_tab.dart';
 
 /// Fee Reports & Analytics View — Class-wise Dues, Overdue Students List,
 /// and Collection Breakdown by Fee Head.
@@ -22,8 +24,10 @@ class _FeeReportsViewState extends ConsumerState<FeeReportsView> with SingleTick
   DateTime? _startDate;
   DateTime? _endDate;
 
-  String _selectedClass = '1';
+  String _selectedClass = 'Grade 1';
   String _selectedSection = 'A';
+  String? _selectedMatrixFeeHeadId;
+  String? _selectedClassWiseFeeHeadId;
 
   final _currencyFormat = NumberFormat.currency(locale: 'en_IN', symbol: '₹', decimalDigits: 2);
   final _dateFormat = DateFormat('dd MMM yyyy');
@@ -31,7 +35,7 @@ class _FeeReportsViewState extends ConsumerState<FeeReportsView> with SingleTick
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 4, vsync: this);
+    _tabController = TabController(length: 5, vsync: this);
   }
 
   @override
@@ -63,6 +67,7 @@ class _FeeReportsViewState extends ConsumerState<FeeReportsView> with SingleTick
               labelStyle: GoogleFonts.poppins(fontWeight: FontWeight.w600, fontSize: 13),
               unselectedLabelStyle: GoogleFonts.poppins(fontWeight: FontWeight.w500, fontSize: 13),
               tabs: const [
+                Tab(text: 'Date-Wise Report'),
                 Tab(text: 'Class-Wise Dues'),
                 Tab(text: 'Overdue Students'),
                 Tab(text: 'Collections by Fee Head'),
@@ -76,6 +81,7 @@ class _FeeReportsViewState extends ConsumerState<FeeReportsView> with SingleTick
             child: TabBarView(
               controller: _tabController,
               children: [
+                DateWiseReportTab(academicYear: _selectedAcademicYear),
                 _buildClassWiseDuesTab(),
                 _buildOverdueStudentsTab(),
                 _buildCollectionByFeeHeadTab(),
@@ -148,7 +154,8 @@ class _FeeReportsViewState extends ConsumerState<FeeReportsView> with SingleTick
   // ============================================================================
 
   Widget _buildClassWiseDuesTab() {
-    final duesAsync = ref.watch(classWiseDuesSummaryProvider(_selectedAcademicYear));
+    final duesAsync = ref.watch(classWiseDuesSummaryProvider(
+        ClassWiseDuesParam(academicYear: _selectedAcademicYear, feeHeadId: _selectedClassWiseFeeHeadId)));
 
     return duesAsync.when(
       data: (rows) {
@@ -174,6 +181,48 @@ class _FeeReportsViewState extends ConsumerState<FeeReportsView> with SingleTick
           padding: const EdgeInsets.all(24),
           child: Column(
             children: [
+              // Filters
+              Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  Text('Fee Head:', style: GoogleFonts.poppins(fontSize: 13, fontWeight: FontWeight.w600, color: AppTheme.textPrimary)),
+                  const SizedBox(width: 8),
+                  Consumer(
+                    builder: (context, ref, child) {
+                      final feeHeadsAsync = ref.watch(feeHeadsProvider);
+                      return feeHeadsAsync.when(
+                        data: (heads) {
+                          final items = <DropdownMenuItem<String?>>[
+                            const DropdownMenuItem(value: null, child: Text('All Together')),
+                            ...heads.map((h) => DropdownMenuItem(value: h.id, child: Text(h.name))),
+                          ];
+                          return Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 12),
+                            decoration: BoxDecoration(
+                              color: Colors.white,
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(color: AppTheme.divider),
+                            ),
+                            child: DropdownButton<String?>(
+                              value: _selectedClassWiseFeeHeadId,
+                              underline: const SizedBox(),
+                              style: GoogleFonts.poppins(fontSize: 13, color: AppTheme.textPrimary),
+                              items: items,
+                              onChanged: (val) {
+                                setState(() => _selectedClassWiseFeeHeadId = val);
+                              },
+                            ),
+                          );
+                        },
+                        loading: () => const SizedBox(width: 100, child: LinearProgressIndicator()),
+                        error: (_, __) => const Text('Error loading fee heads'),
+                      );
+                    },
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+
               // Metric cards
               Row(
                 children: [
@@ -411,13 +460,13 @@ class _FeeReportsViewState extends ConsumerState<FeeReportsView> with SingleTick
                         ),
                         child: Row(
                           children: [
-                            _thCell('Student Name', flex: 4),
+                            _thCell('Student Name', flex: 3),
                             _thCell('Class', flex: 2),
                             _thCell('Roll No', flex: 2),
                             _thCell('Overdue Items', flex: 2),
                             _thCell('Oldest Due Date', flex: 3),
                             _thCell('Overdue Amount', flex: 3),
-                            _thCell('Action', flex: 2),
+                            _thCell('Action', flex: 3),
                           ],
                         ),
                       ),
@@ -437,7 +486,7 @@ class _FeeReportsViewState extends ConsumerState<FeeReportsView> with SingleTick
                               child: Row(
                                 children: [
                                   Expanded(
-                                    flex: 4,
+                                    flex: 3,
                                     child: Text(
                                       row['student_name'] as String? ?? 'N/A',
                                       style: GoogleFonts.poppins(fontWeight: FontWeight.w600, fontSize: 13),
@@ -479,30 +528,107 @@ class _FeeReportsViewState extends ConsumerState<FeeReportsView> with SingleTick
                                     ),
                                   ),
                                   Expanded(
-                                    flex: 2,
-                                    child: SizedBox(
-                                      height: 28,
-                                      child: OutlinedButton(
-                                        onPressed: () async {
-                                          final dbService = ref.read(databaseServiceProvider);
-                                          final student = await dbService.getStudentById(row['student_id'] as String);
-                                          if (student != null && context.mounted) {
-                                            Navigator.of(context).push(
-                                              MaterialPageRoute(
-                                                builder: (_) => StudentFeeLedgerView(student: student, academicYear: _selectedAcademicYear),
+                                    flex: 3,
+                                    child: Row(
+                                      children: [
+                                        Tooltip(
+                                          message: 'Send WhatsApp Reminder',
+                                          child: InkWell(
+                                            onTap: () async {
+                                              final phone = (row['father_phone'] as String?)?.isNotEmpty == true 
+                                                  ? row['father_phone'] as String 
+                                                  : (row['mother_phone'] as String?) ?? '';
+                                                  
+                                              if (phone.isEmpty) {
+                                                if (context.mounted) {
+                                                  ScaffoldMessenger.of(context).showSnackBar(
+                                                    SnackBar(
+                                                      content: Text('No phone number found for ${row['student_name']}.', style: GoogleFonts.poppins()), 
+                                                      backgroundColor: AppTheme.warning
+                                                    )
+                                                  );
+                                                }
+                                                return;
+                                              }
+                                              
+                                              final cleanPhone = phone.replaceAll(RegExp(r'[^\d+]'), '');
+                                              final finalPhone = cleanPhone.startsWith('+') ? cleanPhone : '+91$cleanPhone';
+                                              
+                                              final studentName = row['student_name'] as String? ?? 'Student';
+                                              final amountStr = _currencyFormat.format(amount);
+                                              
+                                              if (context.mounted) {
+                                                ScaffoldMessenger.of(context).showSnackBar(
+                                                  SnackBar(
+                                                    content: Text('Generating smart message...', style: GoogleFonts.poppins()), 
+                                                    duration: const Duration(milliseconds: 1500)
+                                                  )
+                                                );
+                                              }
+                                              
+                                              final aiService = ref.read(aiMessageServiceProvider);
+                                              final text = await aiService.generateOverdueReminder(
+                                                studentName: studentName,
+                                                amountStr: amountStr,
+                                                grade: row['grade_level'] as String? ?? 'N/A',
+                                              );
+                                              
+                                              final url = Uri.parse('https://wa.me/$finalPhone?text=${Uri.encodeComponent(text)}');
+                                              
+                                              if (await canLaunchUrl(url)) {
+                                                await launchUrl(url);
+                                              } else {
+                                                if (context.mounted) {
+                                                  ScaffoldMessenger.of(context).showSnackBar(
+                                                    SnackBar(
+                                                      content: Text('Could not launch WhatsApp.', style: GoogleFonts.poppins()), 
+                                                      backgroundColor: AppTheme.error
+                                                    )
+                                                  );
+                                                }
+                                              }
+                                            },
+                                            borderRadius: BorderRadius.circular(6),
+                                            child: Container(
+                                              height: 28,
+                                              width: 28,
+                                              decoration: BoxDecoration(
+                                                color: const Color(0xFF25D366).withValues(alpha: 0.1),
+                                                borderRadius: BorderRadius.circular(6),
+                                                border: Border.all(color: const Color(0xFF25D366).withValues(alpha: 0.5)),
                                               ),
-                                            );
-                                          }
-                                        },
-                                        style: OutlinedButton.styleFrom(
-                                          foregroundColor: AppTheme.primaryPurple,
-                                          side: const BorderSide(color: AppTheme.primaryPurple),
-                                          padding: const EdgeInsets.symmetric(horizontal: 10),
-                                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
-                                          textStyle: GoogleFonts.poppins(fontSize: 10, fontWeight: FontWeight.w600),
+                                              child: const Icon(Icons.chat_bubble_outline_rounded, size: 14, color: Color(0xFF25D366)),
+                                            ),
+                                          ),
                                         ),
-                                        child: const Text('View Ledger'),
-                                      ),
+                                        const SizedBox(width: 8),
+                                        Expanded(
+                                          child: SizedBox(
+                                            height: 28,
+                                            child: OutlinedButton(
+                                              onPressed: () async {
+                                                final dbService = ref.read(databaseServiceProvider);
+                                                final student = await dbService.getStudentById(row['student_id'] as String);
+                                                if (student != null && context.mounted) {
+                                                  Navigator.of(context).push(
+                                                    MaterialPageRoute(
+                                                      builder: (_) => StudentFeeLedgerView(student: student, academicYear: _selectedAcademicYear),
+                                                    ),
+                                                  );
+                                                }
+                                              },
+                                              style: OutlinedButton.styleFrom(
+                                                foregroundColor: AppTheme.primaryPurple,
+                                                side: const BorderSide(color: AppTheme.primaryPurple),
+                                                padding: const EdgeInsets.symmetric(horizontal: 0),
+                                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+                                                textStyle: GoogleFonts.poppins(fontSize: 10, fontWeight: FontWeight.w600),
+                                              ),
+                                              child: const Text('View'),
+                                            ),
+                                          ),
+                                        ),
+                                      ],
                                     ),
                                   ),
                                 ],
@@ -791,24 +917,41 @@ class _FeeReportsViewState extends ConsumerState<FeeReportsView> with SingleTick
             children: [
               Text('Class:', style: GoogleFonts.poppins(fontSize: 13, fontWeight: FontWeight.w600, color: AppTheme.textPrimary)),
               const SizedBox(width: 8),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: AppTheme.divider),
-                ),
-                child: DropdownButton<String>(
-                  value: _selectedClass,
-                  underline: const SizedBox(),
-                  style: GoogleFonts.poppins(fontSize: 13, color: AppTheme.textPrimary),
-                  items: List.generate(10, (i) => (i + 1).toString())
-                      .map((c) => DropdownMenuItem(value: c, child: Text('Class $c')))
-                      .toList(),
-                  onChanged: (val) {
-                    if (val != null) setState(() => _selectedClass = val);
-                  },
-                ),
+              Consumer(
+                builder: (context, ref, child) {
+                  final classesAsync = ref.watch(classesProvider);
+                  return classesAsync.when(
+                    data: (classes) {
+                      if (classes.isEmpty) return const Text('No classes');
+                      // Ensure selected class is valid
+                      if (!classes.any((c) => c.name == _selectedClass)) {
+                        WidgetsBinding.instance.addPostFrameCallback((_) {
+                          if (mounted) setState(() => _selectedClass = classes.first.name);
+                        });
+                      }
+                      
+                      return Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 12),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: AppTheme.divider),
+                        ),
+                        child: DropdownButton<String>(
+                          value: _selectedClass,
+                          underline: const SizedBox(),
+                          style: GoogleFonts.poppins(fontSize: 13, color: AppTheme.textPrimary),
+                          items: classes.map((c) => DropdownMenuItem(value: c.name, child: Text(c.name))).toList(),
+                          onChanged: (val) {
+                            if (val != null) setState(() => _selectedClass = val);
+                          },
+                        ),
+                      );
+                    },
+                    loading: () => const SizedBox(width: 80, child: LinearProgressIndicator()),
+                    error: (_, __) => const Text('Error'),
+                  );
+                },
               ),
               const SizedBox(width: 24),
               Text('Section:', style: GoogleFonts.poppins(fontSize: 13, fontWeight: FontWeight.w600, color: AppTheme.textPrimary)),
@@ -832,6 +975,41 @@ class _FeeReportsViewState extends ConsumerState<FeeReportsView> with SingleTick
                   },
                 ),
               ),
+              const SizedBox(width: 24),
+              Text('Fee Head:', style: GoogleFonts.poppins(fontSize: 13, fontWeight: FontWeight.w600, color: AppTheme.textPrimary)),
+              const SizedBox(width: 8),
+              Consumer(
+                builder: (context, ref, child) {
+                  final feeHeadsAsync = ref.watch(feeHeadsProvider);
+                  return feeHeadsAsync.when(
+                    data: (heads) {
+                      final items = <DropdownMenuItem<String?>>[
+                        const DropdownMenuItem(value: null, child: Text('All Together')),
+                        ...heads.map((h) => DropdownMenuItem(value: h.id, child: Text(h.name))),
+                      ];
+                      return Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 12),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: AppTheme.divider),
+                        ),
+                        child: DropdownButton<String?>(
+                          value: _selectedMatrixFeeHeadId,
+                          underline: const SizedBox(),
+                          style: GoogleFonts.poppins(fontSize: 13, color: AppTheme.textPrimary),
+                          items: items,
+                          onChanged: (val) {
+                            setState(() => _selectedMatrixFeeHeadId = val);
+                          },
+                        ),
+                      );
+                    },
+                    loading: () => const SizedBox(width: 100, child: LinearProgressIndicator()),
+                    error: (_, __) => const Text('Error loading fee heads'),
+                  );
+                },
+              ),
             ],
           ),
         ),
@@ -839,7 +1017,7 @@ class _FeeReportsViewState extends ConsumerState<FeeReportsView> with SingleTick
         // Matrix Grid
         Expanded(
           child: FutureBuilder<List<Map<String, dynamic>>>(
-            future: ref.read(databaseServiceProvider).getClassMonthlyCollectionMatrix(_selectedClass, _selectedSection, _selectedAcademicYear),
+            future: ref.read(databaseServiceProvider).getClassMonthlyCollectionMatrix(_selectedClass, _selectedSection, _selectedAcademicYear, feeHeadId: _selectedMatrixFeeHeadId),
             builder: (context, snapshot) {
               if (snapshot.connectionState == ConnectionState.waiting) {
                 return const Center(child: CircularProgressIndicator(strokeWidth: 2));
@@ -920,7 +1098,7 @@ class _FeeReportsViewState extends ConsumerState<FeeReportsView> with SingleTick
                                     Expanded(
                                       flex: 1,
                                       child: Center(
-                                        child: _buildMatrixCell(matrix[m] as String?),
+                                        child: _buildMatrixCell(matrix[m] as Map<String, dynamic>?),
                                       ),
                                     ),
                                 ],
@@ -940,7 +1118,11 @@ class _FeeReportsViewState extends ConsumerState<FeeReportsView> with SingleTick
     );
   }
 
-  Widget _buildMatrixCell(String? status) {
+  Widget _buildMatrixCell(Map<String, dynamic>? data) {
+    final status = data?['status'] as String? ?? 'none';
+    final amountDue = data?['amount_due'] as double? ?? 0.0;
+    final amountPaid = data?['amount_paid'] as double? ?? 0.0;
+
     Color color;
     switch (status) {
       case 'paid':
@@ -958,8 +1140,15 @@ class _FeeReportsViewState extends ConsumerState<FeeReportsView> with SingleTick
         break;
     }
 
+    String tooltipMsg = status.toUpperCase();
+    if (status != 'none') {
+      tooltipMsg += '\nDue: ${_currencyFormat.format(amountDue)}\nPaid: ${_currencyFormat.format(amountPaid)}';
+    } else {
+      tooltipMsg = 'NONE';
+    }
+
     return Tooltip(
-      message: status != null ? status.toUpperCase() : 'NONE',
+      message: tooltipMsg,
       child: Container(
         width: 16,
         height: 16,

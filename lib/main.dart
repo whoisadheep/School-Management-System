@@ -4,23 +4,28 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:school_management_system/app.dart';
 import 'package:school_management_system/core/database/database_helper.dart';
 import 'package:school_management_system/services/app_logger.dart';
-import 'package:firebase_core/firebase_core.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
+import 'dart:io' show Platform;
 
 void main() {
   runZonedGuarded(
     () async {
       WidgetsFlutterBinding.ensureInitialized();
-      
+
+      // 1. Load environment variables safely
       try {
-        await Firebase.initializeApp();
-        AppLogger.instance.info('Firebase initialized successfully.');
+        await dotenv.load(fileName: '.env');
       } catch (e) {
-        AppLogger.instance.error('Failed to initialize Firebase: $e');
+        debugPrint('Notice: .env load fallback: $e');
       }
 
-      // Initialize the centralized logging system
-      await AppLogger.instance.initialize();
-      AppLogger.instance.info('Application starting...');
+      // 2. Initialize logging system
+      try {
+        await AppLogger.instance.initialize();
+        AppLogger.instance.info('Application starting...');
+      } catch (e) {
+        debugPrint('Logger initialization error: $e');
+      }
 
       // Catch uncaught Flutter framework errors
       FlutterError.onError = (FlutterErrorDetails details) {
@@ -32,11 +37,18 @@ void main() {
         );
       };
 
-      // Initialize the SQLite database (FFI for desktop)
-      final dbHelper = DatabaseHelper();
-      await dbHelper.database;
-      AppLogger.instance.info('Database initialized successfully.');
+      // 4. Initialize SQLite database
+      try {
+        final dbHelper = DatabaseHelper();
+        await dbHelper.database;
+        AppLogger.instance.info('Database initialized successfully.');
+      } catch (e) {
+        debugPrint('Database initialization notice: $e');
+      }
 
+      // 5. Initialize Auto Updater (Desktop Only) - Removed as we use custom UpdateService
+
+      // 5. Mount application UI
       runApp(
         const ProviderScope(
           child: SchoolManagementApp(),
@@ -44,6 +56,7 @@ void main() {
       );
     },
     (error, stackTrace) {
+      debugPrint('Uncaught async error: $error\n$stackTrace');
       AppLogger.instance.error(
         'Uncaught async error',
         error,

@@ -10,7 +10,6 @@ import 'package:printing/printing.dart';
 import 'package:uuid/uuid.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../models/models.dart';
-import '../../../services/report_generator.dart';
 import '../../../core/auth/permission_helper.dart';
 import '../../../providers/services_provider.dart';
 import '../attendance/teacher_attendance_history_dialog.dart';
@@ -37,10 +36,14 @@ class _StaffDetailViewState extends ConsumerState<StaffDetailView> with SingleTi
   int _selectedAttendanceMonth = DateTime.now().month;
   int _selectedAttendanceYear = DateTime.now().year;
 
+  bool get isTeacher => widget.staff.role.toLowerCase() == 'teacher';
+  late int tabCount;
+
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 7, vsync: this);
+    tabCount = isTeacher ? 7 : 5;
+    _tabController = TabController(length: tabCount, vsync: this);
   }
 
   @override
@@ -68,7 +71,7 @@ class _StaffDetailViewState extends ConsumerState<StaffDetailView> with SingleTi
                 mainAxisSize: pw.MainAxisSize.min,
                 children: [
                   pw.Text('SCHOOL MANAGEMENT SYSTEM',
-                      style: const pw.TextStyle(
+                      style: pw.TextStyle(
                           fontSize: 14,
                           fontWeight: pw.FontWeight.bold,
                           color: PdfColors.blue900)),
@@ -88,7 +91,7 @@ class _StaffDetailViewState extends ConsumerState<StaffDetailView> with SingleTi
                   ),
                   pw.SizedBox(height: 10),
                   pw.Text(widget.staff.fullName.toUpperCase(),
-                      style: const pw.TextStyle(
+                      style: pw.TextStyle(
                           fontSize: 16, fontWeight: pw.FontWeight.bold)),
                   pw.Text(
                       widget.staff.designation ??
@@ -102,7 +105,7 @@ class _StaffDetailViewState extends ConsumerState<StaffDetailView> with SingleTi
                     mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
                     children: [
                       pw.Text('EMP CODE:',
-                          style: const pw.TextStyle(
+                          style: pw.TextStyle(
                               fontSize: 10, fontWeight: pw.FontWeight.bold)),
                       pw.Text(widget.staff.staffCode ?? 'N/A',
                           style: const pw.TextStyle(fontSize: 10)),
@@ -113,7 +116,7 @@ class _StaffDetailViewState extends ConsumerState<StaffDetailView> with SingleTi
                     mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
                     children: [
                       pw.Text('BLOOD GRP:',
-                          style: const pw.TextStyle(
+                          style: pw.TextStyle(
                               fontSize: 10, fontWeight: pw.FontWeight.bold)),
                       pw.Text(widget.staff.bloodGroup ?? 'N/A',
                           style: const pw.TextStyle(fontSize: 10)),
@@ -296,14 +299,14 @@ class _StaffDetailViewState extends ConsumerState<StaffDetailView> with SingleTi
                           unselectedLabelColor: AppTheme.textSecondary,
                           indicatorColor: AppTheme.primaryPurple,
                           labelStyle: GoogleFonts.poppins(fontWeight: FontWeight.bold, fontSize: 10.5),
-                          tabs: const [
-                            Tab(text: 'Overview'),
-                            Tab(text: 'My Timetable'),
-                            Tab(text: 'Attendance'),
-                            Tab(text: 'Leaves'),
-                            Tab(text: 'Exam Duties'),
-                            Tab(text: 'Portal & Circulars'),
-                            Tab(text: 'Appraisal & Training'),
+                          tabs: [
+                            const Tab(text: 'Overview'),
+                            if (isTeacher) const Tab(text: 'My Timetable'),
+                            const Tab(text: 'Attendance'),
+                            const Tab(text: 'Leaves'),
+                            if (isTeacher) const Tab(text: 'Exam Duties'),
+                            const Tab(text: 'Portal & Circulars'),
+                            const Tab(text: 'Appraisal & Training'),
                           ],
                         ),
                       ),
@@ -320,7 +323,7 @@ class _StaffDetailViewState extends ConsumerState<StaffDetailView> with SingleTi
                                 children: [
                                   _buildClassInChargeCard(classInChargeAsync),
                                   const SizedBox(height: 24),
-                                  if (widget.staff.role == 'teacher') ...[
+                                  if (isTeacher) ...[
                                     _buildSubjectsCard(subjectsAsync),
                                     const SizedBox(height: 24),
                                   ],
@@ -330,9 +333,10 @@ class _StaffDetailViewState extends ConsumerState<StaffDetailView> with SingleTi
                             ),
 
                             // Tab 2: Phase 2 - My Timetable
-                            SingleChildScrollView(
-                              child: _buildTimetableSection(timetableAsync),
-                            ),
+                            if (isTeacher)
+                              SingleChildScrollView(
+                                child: _buildTimetableSection(timetableAsync),
+                              ),
 
                             // Tab 3: Phase 3 - Teacher Attendance
                             SingleChildScrollView(
@@ -345,9 +349,10 @@ class _StaffDetailViewState extends ConsumerState<StaffDetailView> with SingleTi
                             ),
 
                             // Tab 5: Phase 6 - Exam Duties
-                            SingleChildScrollView(
-                              child: _buildExamDutiesSection(examDutiesAsync),
-                            ),
+                            if (isTeacher)
+                              SingleChildScrollView(
+                                child: _buildExamDutiesSection(examDutiesAsync),
+                              ),
 
                             // Tab 6: Phase 7 (RBAC) & Phase 8 (Circulars)
                             SingleChildScrollView(
@@ -1046,7 +1051,7 @@ class _StaffDetailViewState extends ConsumerState<StaffDetailView> with SingleTi
                 ),
                 const SizedBox(height: 12),
                 DropdownButtonFormField<String>(
-                  initialValue: targetType,
+                  value: targetType,
                   style: GoogleFonts.poppins(color: AppTheme.textPrimary),
                   decoration: const InputDecoration(labelText: 'Target Audience *'),
                   items: const [
@@ -1256,7 +1261,7 @@ class _StaffDetailViewState extends ConsumerState<StaffDetailView> with SingleTi
               mainAxisSize: MainAxisSize.min,
               children: [
                 DropdownButtonFormField<String>(
-                  initialValue: selectedLeaveTypeId,
+                  value: selectedLeaveTypeId,
                   style: GoogleFonts.poppins(color: AppTheme.textPrimary),
                   decoration: const InputDecoration(labelText: 'Leave Type *'),
                   items: const [
@@ -1492,7 +1497,7 @@ class _StaffDetailViewState extends ConsumerState<StaffDetailView> with SingleTi
                     const SizedBox(width: 12),
                     Expanded(
                       child: DropdownButtonFormField<String>(
-                        initialValue: dutyType,
+                        value: dutyType,
                         style: GoogleFonts.poppins(color: AppTheme.textPrimary),
                         decoration: const InputDecoration(labelText: 'Duty Type *'),
                         items: const [
@@ -1899,22 +1904,35 @@ class _StaffDetailViewState extends ConsumerState<StaffDetailView> with SingleTi
                             }
                             final item = match.first;
                             return Container(
-                              padding: const EdgeInsets.all(6),
                               color: AppTheme.primaryPurple.withValues(alpha: 0.08),
-                              child: Column(
-                                mainAxisAlignment: MainAxisAlignment.center,
+                              child: Stack(
                                 children: [
-                                  Text(item.subject, style: GoogleFonts.poppins(fontWeight: FontWeight.bold, fontSize: 10, color: AppTheme.primaryPurple), textAlign: TextAlign.center),
-                                  Text('${item.classAssigned}-${item.section}', style: GoogleFonts.poppins(fontSize: 9, color: AppTheme.textSecondary), textAlign: TextAlign.center),
-                                  IconButton(
-                                    icon: const Icon(Icons.delete_outline_rounded, size: 14, color: AppTheme.error),
-                                    onPressed: () async {
-                                      if (!PermissionHelper.requireAdminRole(context, ref, RiskyAction.deleteRecord)) return;
-                                      final dbService = ref.read(databaseServiceProvider);
-                                      await dbService.deleteTimetableEntry(item.id);
-                                      ref.invalidate(staffTimetableProvider(widget.staff.id));
-                                      ref.invalidate(teacherWorkloadProvider(widget.staff.id));
-                                    },
+                                  Padding(
+                                    padding: const EdgeInsets.all(8.0),
+                                    child: Center(
+                                      child: Column(
+                                        mainAxisAlignment: MainAxisAlignment.center,
+                                        children: [
+                                          Text(item.subject, style: GoogleFonts.poppins(fontWeight: FontWeight.bold, fontSize: 10, color: AppTheme.primaryPurple), textAlign: TextAlign.center),
+                                          const SizedBox(height: 2),
+                                          Text('${item.classAssigned}-${item.section}', style: GoogleFonts.poppins(fontSize: 9, color: AppTheme.textSecondary), textAlign: TextAlign.center),
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+                                  Positioned(
+                                    top: 4,
+                                    right: 4,
+                                    child: InkWell(
+                                      onTap: () async {
+                                        if (!PermissionHelper.requireAdminRole(context, ref, RiskyAction.deleteRecord)) return;
+                                        final dbService = ref.read(databaseServiceProvider);
+                                        await dbService.deleteTimetableEntry(item.id);
+                                        ref.invalidate(staffTimetableProvider(widget.staff.id));
+                                        ref.invalidate(teacherWorkloadProvider(widget.staff.id));
+                                      },
+                                      child: Icon(Icons.cancel, size: 14, color: AppTheme.error.withValues(alpha: 0.7)),
+                                    ),
                                   ),
                                 ],
                               ),
@@ -1962,7 +1980,7 @@ class _StaffDetailViewState extends ConsumerState<StaffDetailView> with SingleTi
                   children: [
                     Expanded(
                       child: DropdownButtonFormField<int>(
-                        initialValue: selectedDay,
+                        value: selectedDay,
                         style: GoogleFonts.poppins(color: AppTheme.textPrimary),
                         decoration: const InputDecoration(labelText: 'Day of Week'),
                         items: const [
@@ -1981,7 +1999,7 @@ class _StaffDetailViewState extends ConsumerState<StaffDetailView> with SingleTi
                     const SizedBox(width: 12),
                     Expanded(
                       child: DropdownButtonFormField<int>(
-                        initialValue: selectedPeriod,
+                        value: selectedPeriod,
                         style: GoogleFonts.poppins(color: AppTheme.textPrimary),
                         decoration: const InputDecoration(labelText: 'Period'),
                         items: List.generate(8, (i) => DropdownMenuItem(value: i + 1, child: Text('Period ${i + 1}'))),
@@ -2262,7 +2280,7 @@ class _StaffDetailViewState extends ConsumerState<StaffDetailView> with SingleTi
                 ),
                 const SizedBox(height: 12),
                 DropdownButtonFormField<String>(
-                  initialValue: status,
+                  value: status,
                   style: GoogleFonts.poppins(color: AppTheme.textPrimary),
                   decoration: const InputDecoration(labelText: 'Attendance Status *'),
                   items: const [
@@ -2443,7 +2461,7 @@ class _StaffDetailViewState extends ConsumerState<StaffDetailView> with SingleTi
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   DropdownButtonFormField<String>(
-                    initialValue: selectedType,
+                    value: selectedType,
                     style: GoogleFonts.poppins(color: AppTheme.textPrimary),
                     decoration: InputDecoration(
                       labelText: 'Component Type',

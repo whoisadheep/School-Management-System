@@ -1,8 +1,16 @@
-import '../models/models.dart';
+import 'dart:convert';
+import 'package:dio/dio.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'database_service.dart';
 
 class AssistantService {
   final DatabaseService _dbService;
+  final Dio _http = Dio(BaseOptions(
+    connectTimeout: const Duration(seconds: 12),
+    receiveTimeout: const Duration(seconds: 25),
+  ));
+
+  static const String defaultGeminiKey = 'YOUR_API_KEY';
 
   AssistantService(this._dbService);
 
@@ -10,676 +18,372 @@ class AssistantService {
     final normalized = command.trim().toLowerCase();
 
     if (normalized.isEmpty) {
-      return 'Please type a command or type "help" for examples.';
+      return 'Please type a question or type "help" for examples.';
     }
 
-    if (normalized == 'help' || normalized == 'commands' || normalized == 'hi' || normalized == 'hello') {
-      return _helpText();
+    final greetings = [
+      'hi', 'hy', 'hyy', 'hey', 'heyy', 'hii', 'hiii', 'hello', 'helloo',
+      'good morning', 'good afternoon', 'good evening', 'namaste', 'sup',
+      "what's up", 'how are you', 'who are you', 'help', 'commands'
+    ];
+
+    if (greetings.any((g) => normalized == g || normalized.startsWith('$g '))) {
+      return '👋 **Hello! Welcome to Kishan Company AI Assistant**\n\n'
+          'I am your intelligent school assistant with direct access to your database. You can ask me:\n\n'
+          '• 📊 **Students**: *"How many students are enrolled?"* or *"Show class breakdown"*\n'
+          '• 💰 **Fees & Dues**: *"Show fee collection summary"* or *"What are overdue balances?"*\n'
+          '• 👥 **Staff & Teachers**: *"Show faculty details"* or *"How many staff members?"*\n'
+          '• 🚌 **Transport**: *"Show bus fleet and routes"*\n'
+          '• 📚 **Library**: *"Show available books"*\n'
+          '• 📝 **Exams**: *"Show scheduled exams"*\n\n'
+          'How can I help you today?';
     }
 
-    if (normalized.contains('initialize attendance sheet')) {
-      return await _initializeAttendanceSheet(command);
-    }
-
-    if (normalized.contains('attendance') && normalized.contains('student')) {
-      return await _handleStudentAttendance(command);
-    }
-
-    if (normalized.contains('search student') || normalized.startsWith('find student')) {
-      return await _handleSearchStudent(command);
-    }
-
-    if (normalized.contains('student details') || normalized.contains('get student')) {
-      return await _handleStudentDetails(command);
-    }
-
-    if (normalized.contains('search staff') || normalized.startsWith('find staff')) {
-      return await _handleSearchStaff(command);
-    }
-
-    if (normalized.contains('staff details') || normalized.contains('get staff')) {
-      return await _handleStaffDetails(command);
-    }
-
-    if (normalized.contains('invoice') || normalized.contains('invoices')) {
-      return await _handleStudentInvoices(command);
-    }
-
-    if (normalized.contains('low attendance')) {
-      return await _handleLowAttendance(command);
-    }
-
-    if (normalized.contains('fleet overview') || (normalized.contains('vehicle') && normalized.contains('overview')) || normalized.contains('vehicle status')) {
-      return await _handleFleetOverview();
-    }
-
-    if (normalized.contains('vehicle') && (normalized.contains('details') || normalized.contains('driver'))) {
-      return await _handleVehicleDetails(command);
-    }
-
-    if (normalized.contains('route') && normalized.contains('students')) {
-      return await _handleRouteWithStudents(command);
-    }
-
-    if (normalized.contains('route') && normalized.contains('details')) {
-      return await _handleRouteDetails(command);
-    }
-
-    if (normalized.contains('library') || normalized.contains('book') || normalized.contains('borrower')) {
-      return await _handleLibraryCommand(command);
-    }
-
-    if (normalized.contains('hostel')) {
-      return await _handleHostelInfo(command);
-    }
-
-    if (normalized.contains('transport') || normalized.contains('bus') || normalized.contains('van')) {
-      return await _handleStudentTransport(command);
-    }
-
-    if (normalized.contains('fee ledger') || normalized.contains('net payable') || normalized.contains('payable fees') || normalized.contains('fee summary') || normalized.contains('fees for student')) {
-      return await _handleStudentFeeSummary(command);
-    }
-
-    if (normalized.contains('exam result') || normalized.contains('class ranking') || normalized.contains('rankings') || normalized.contains('grade for student')) {
-      return await _handleExamCommand(command);
-    }
-
-    if ((normalized.contains('students in') || normalized.contains('students from') || normalized.contains('student list')) && (normalized.contains('grade') || normalized.contains('class'))) {
-      return await _handleClassStudents(command);
-    }
-
-    return 'I did not understand that command. Type "help" for examples.';
-  }
-
-  String _helpText() {
-    return '''I can help you retrieve information and perform attendance tasks across students, staff, transport, library, hostel, fees, and exams.
-
-Examples:
-• search student John Doe
-• show student details 12345
-• show student invoices 12345
-• attendance for student John Doe in September 2026
-• low attendance for Grade 2 section B in 2026-2027
-• initialize attendance sheet for class Grade 1 section A on 2026-09-01
-• search staff Alice
-• staff details S-123
-• fleet overview
-• vehicle details BUS-01
-• route students for Route A
-• search book algebra
-• hostel info for student 12345
-• transport info for student 12345 in 2026-2027
-• fee summary for student 12345 in 2026-2027
-• exam result for student John Doe in Midterm
-''';
-  }
-
-  Future<String> _handleSearchStudent(String command) async {
-    final matcher = RegExp(r'(?:search|find) student(?: for)? (.+)', caseSensitive: false);
-    final match = matcher.firstMatch(command);
-    if (match == null) {
-      return 'Please specify the student name or query. Example: search student John Doe';
-    }
-
-    final query = match.group(1)!.trim();
-    final students = await _dbService.searchStudents(query);
-
-    if (students.isEmpty) {
-      return 'No students matched "$query".';
-    }
-
-    final lines = students.map((student) {
-      return '${student.id} • ${student.name} • ${student.gradeLevel} ${student.section ?? ''}'.trim();
-    }).join('\n');
-
-    return 'Found ${students.length} student(s):\n$lines';
-  }
-
-  Future<String> _handleStudentDetails(String command) async {
-    final matcher = RegExp(r'(?:student details|show student details|get student)(?: for)? (.+)', caseSensitive: false);
-    final match = matcher.firstMatch(command);
-    if (match == null) {
-      return 'Please specify a student ID or name. Example: student details 12345';
-    }
-
-    final identifier = match.group(1)!.trim();
-    final student = await _findStudentByIdentifier(identifier);
-
-    if (student == null) {
-      return 'Could not find a student for "$identifier".';
-    }
-
-    return 'Student details:\n'
-        'ID: ${student.id}\n'
-        'Name: ${student.name}\n'
-        'Class: ${student.gradeLevel} ${student.section ?? ''}\n'
-        'Phone: ${student.guardianPhone ?? 'N/A'}\n'
-        'Status: ${student.isActive ? 'Active' : 'Inactive'}';
-  }
-
-  Future<String> _handleStudentInvoices(String command) async {
-    final matcher = RegExp(r'(?:student invoices|invoices for student|invoice for student|student invoice)(?: )?(.*)', caseSensitive: false);
-    final match = matcher.firstMatch(command);
-    if (match == null || match.group(1)?.trim().isEmpty == true) {
-      return 'Please specify a student ID or name. Example: show student invoices 12345';
-    }
-
-    final identifier = match.group(1)!.trim();
-    final student = await _findStudentByIdentifier(identifier);
-    if (student == null) {
-      return 'Could not find a student for "$identifier".';
-    }
-
-    final invoices = await _dbService.getInvoicesByStudentId(student.id);
-    if (invoices.isEmpty) {
-      return 'No invoices found for ${student.name} (${student.id}).';
-    }
-
-    final lines = invoices.map((invoice) {
-      return '${invoice.id}: ${invoice.status.name.toUpperCase()} • ${invoice.totalAmount.toStringAsFixed(2)}';
-    }).join('\n');
-
-    return 'Invoices for ${student.name}:\n$lines';
-  }
-
-  Future<String> _handleStudentAttendance(String command) async {
-    final monthYearMatcher = RegExp(r'([A-Za-z]+)\s+(\d{4})');
-    final match = monthYearMatcher.firstMatch(command);
-
-    if (match == null) {
-      return 'Please specify a month and year. Example: attendance for student John Doe in September 2026';
-    }
-
-    final monthName = match.group(1)!;
-    final year = int.tryParse(match.group(2)!);
-    if (year == null) {
-      return 'I could not parse the year. Use a four-digit year like 2026.';
-    }
-
-    final month = _monthNameToNumber(monthName);
-    if (month == null) {
-      return 'I could not parse the month "$monthName". Please use a month name like September.';
-    }
-
-    final studentQuery = _extractStudentIdentifier(command);
-    if (studentQuery == null) {
-      return 'Please specify a student name or ID. Example: attendance for student John Doe in September 2026';
-    }
-
-    final student = await _findStudentByIdentifier(studentQuery);
-    if (student == null) {
-      return 'Could not find a student for "$studentQuery".';
-    }
-
-    final startDate = DateTime(year, month, 1);
-    final endDate = DateTime(year, month + 1, 0);
-    final attendance = await _dbService.getAttendanceForStudent(
-      student.id,
-      startDate: _dateString(startDate),
-      endDate: _dateString(endDate),
-    );
-
-    if (attendance.isEmpty) {
-      return 'No attendance records found for ${student.name} in ${monthName.capitalize()} $year.';
-    }
-
-    final presentCount = attendance.where((att) => att.status == 'present').length;
-    final absentCount = attendance.where((att) => att.status == 'absent').length;
-    final lateCount = attendance.where((att) => att.status == 'late').length;
-    final halfDayCount = attendance.where((att) => att.status == 'half_day').length;
-    final excusedCount = attendance.where((att) => att.status == 'excused').length;
-    final total = attendance.length;
-    final percent = total == 0 ? 0.0 : (presentCount + halfDayCount * 0.5 + lateCount) / total * 100;
-
-    return 'Attendance for ${student.name} in ${monthName.capitalize()} $year:\n'
-        'Present: $presentCount\n'
-        'Absent: $absentCount\n'
-        'Late: $lateCount\n'
-        'Half Day: $halfDayCount\n'
-        'Excused: $excusedCount\n'
-        'Total Records: $total\n'
-        'Attendance Rate: ${percent.toStringAsFixed(1)}%';
-  }
-
-  Future<String> _handleLowAttendance(String command) async {
-    final matcher = RegExp(r'low attendance for ([A-Za-z0-9 ]+) section ([A-Za-z0-9]+) in (\d{4}-\d{4})', caseSensitive: false);
-    final match = matcher.firstMatch(command);
-    if (match == null) {
-      return 'Please specify class, section, and academic year. Example: low attendance for Grade 2 section B in 2026-2027';
-    }
-
-    final grade = match.group(1)!.trim();
-    final section = match.group(2)!.trim();
-    final academicYear = match.group(3)!.trim();
-
-    final lowAttendance = await _dbService.getLowAttendanceStudents(grade, section, academicYear);
-    if (lowAttendance.isEmpty) {
-      return 'No students with low attendance found for $grade section $section in $academicYear.';
-    }
-
-    final lines = lowAttendance.map((item) {
-      final student = item['student'] as Student;
-      final percent = item['attendancePercent'] as double;
-      return '${student.id} • ${student.name} • ${percent.toStringAsFixed(1)}%';
-    }).join('\n');
-
-    return 'Low attendance students for $grade section $section ($academicYear):\n$lines';
-  }
-
-  Future<String> _initializeAttendanceSheet(String command) async {
-    final matcher = RegExp(r'initialize attendance sheet for class ([A-Za-z0-9 ]+) section ([A-Za-z0-9]+) on (\d{4}-\d{2}-\d{2})', caseSensitive: false);
-    final match = matcher.firstMatch(command);
-    if (match == null) {
-      return 'Please use the format: initialize attendance sheet for class Grade 1 section A on 2026-09-01';
-    }
-
-    final grade = match.group(1)!.trim();
-    final section = match.group(2)!.trim();
-    final date = match.group(3)!.trim();
-
+    // 1. Try Direct Google Gemini API first
     try {
-      await _dbService.initializeAttendanceSheet(grade, section, date, 'admin');
-      return 'Attendance sheet initialized for $grade section $section on $date.';
+      final geminiKey = await getActiveApiKey();
+      if (geminiKey.isNotEmpty) {
+        final geminiResponse = await _queryGeminiDirect(command, geminiKey);
+        if (geminiResponse != null && geminiResponse.trim().isNotEmpty) {
+          return geminiResponse.trim();
+        }
+      }
+    } catch (_) {
+      // If Gemini is unreachable or hits quota, seamlessly fallback to offline engine
+    }
+
+    // 2. Fallback to built-in offline smart query engine
+    return await _handleOfflineQuery(command);
+  }
+
+  Future<String> getActiveApiKey() async {
+    try {
+      final db = await _dbService.rawDb;
+      final settingRows = await db.rawQuery(
+        'SELECT setting_value FROM app_settings WHERE setting_key = ? LIMIT 1',
+        ['gemini_api_key'],
+      );
+      if (settingRows.isNotEmpty && settingRows.first['setting_value'] != null) {
+        final val = settingRows.first['setting_value'].toString().trim();
+        if (val.isNotEmpty) return val;
+      }
+    } catch (_) {}
+
+    final envKey = dotenv.env['GEMINI_API_KEY']?.trim() ??
+        dotenv.env['ASSISTANT_INSTALLATION_KEY']?.trim() ??
+        '';
+    if (envKey.isNotEmpty) return envKey;
+
+    return defaultGeminiKey;
+  }
+
+  Future<bool> setApiKey(String key) async {
+    try {
+      final db = await _dbService.rawDb;
+      await db.rawInsert(
+        'INSERT OR REPLACE INTO app_settings (setting_key, setting_value, updated_at) VALUES (?, ?, ?)',
+        ['gemini_api_key', key.trim(), DateTime.now().toIso8601String()],
+      );
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  Future<Map<String, dynamic>> testConnection([String? testKey]) async {
+    final key = (testKey != null && testKey.trim().isNotEmpty) ? testKey.trim() : await getActiveApiKey();
+    if (key.isEmpty) {
+      return {'success': false, 'error': 'API key is empty.'};
+    }
+
+    final models = ['gemini-flash-latest', 'gemini-flash-lite-latest'];
+    for (final model in models) {
+      try {
+        final stopwatch = Stopwatch()..start();
+        final url = 'https://generativelanguage.googleapis.com/v1beta/models/$model:generateContent?key=$key';
+        final body = {
+          'contents': [
+            {
+              'role': 'user',
+              'parts': [{'text': 'Hello! Respond with: Connected to Kishan AI.'}],
+            }
+          ],
+        };
+
+        final response = await _http.post(
+          url,
+          data: body,
+          options: Options(headers: {'Content-Type': 'application/json'}),
+        );
+        stopwatch.stop();
+
+        if (response.statusCode == 200) {
+          return {
+            'success': true,
+            'model': model,
+            'latencyMs': stopwatch.elapsedMilliseconds,
+          };
+        }
+      } catch (_) {
+        continue;
+      }
+    }
+
+    return {'success': false, 'error': 'Unable to reach Gemini API with this key.'};
+  }
+
+  Future<String?> _queryGeminiDirect(String command, String apiKey) async {
+    final schema = await _getSchema();
+    final systemInstruction = '''You are an advanced AI Assistant for Kishan Company School Management System.
+You have direct read-only access to the local SQLite database via function calls.
+When you need data to answer the user's question, output ONLY:
+CALL_FUNCTION:execute_sql_query|{"query": "SELECT ..."}
+Only SELECT queries are permitted for data safety.
+When you have the data (or if no SQL query is needed), answer the question directly, accurately, and politely in formatted Markdown with bullet points or tables.
+
+Database Schema:
+$schema''';
+
+    final contents = <Map<String, dynamic>>[
+      {
+        'role': 'user',
+        'parts': [{'text': command}],
+      }
+    ];
+
+    final models = ['gemini-flash-latest', 'gemini-flash-lite-latest'];
+
+    String? lastError;
+    for (final model in models) {
+      try {
+        for (int turn = 0; turn < 4; turn++) {
+          final url = 'https://generativelanguage.googleapis.com/v1beta/models/$model:generateContent?key=$apiKey';
+          final body = {
+            'systemInstruction': {
+              'parts': [{'text': systemInstruction}],
+            },
+            'contents': contents,
+            'generationConfig': {
+              'maxOutputTokens': 2048,
+              'temperature': 0.2,
+            },
+          };
+
+          final response = await _http.post(
+            url,
+            data: body,
+            options: Options(headers: {'Content-Type': 'application/json'}),
+          );
+
+          if (response.statusCode != 200) {
+            lastError = 'Status ${response.statusCode}: ${response.data}';
+            break;
+          }
+
+          final data = response.data is String ? jsonDecode(response.data) : response.data;
+          final candidates = data['candidates'] as List?;
+          if (candidates == null || candidates.isEmpty) {
+            lastError = 'No candidates returned.';
+            break;
+          }
+
+          final parts = candidates[0]['content']?['parts'] as List?;
+          if (parts == null || parts.isEmpty) {
+            lastError = 'No parts returned.';
+            break;
+          }
+
+          final text = parts.map((p) => p['text'] ?? '').join('\n').trim();
+
+          // Check for function call
+          if (text.contains('CALL_FUNCTION:')) {
+            contents.add({
+              'role': 'model',
+              'parts': [{'text': text}],
+            });
+
+            final lines = text.split('\n');
+            String? sqlQuery;
+            for (final line in lines) {
+              if (line.contains('CALL_FUNCTION:')) {
+                final rest = line.substring(line.indexOf('CALL_FUNCTION:') + 14).trim();
+                final idx = rest.indexOf('|');
+                if (idx > 0) {
+                  final fnName = rest.substring(0, idx).trim();
+                  final jsonArgs = rest.substring(idx + 1).trim();
+                  if (fnName == 'execute_sql_query') {
+                    try {
+                      // Attempt strict parse first
+                      final parsedArgs = jsonDecode(jsonArgs);
+                      sqlQuery = parsedArgs['query'];
+                    } catch (_) {
+                      // Fallback: extract everything between "query": " and the last "
+                      final startIdx = jsonArgs.indexOf('"query":');
+                      if (startIdx != -1) {
+                        final queryStart = jsonArgs.indexOf('"', startIdx + 8) + 1;
+                        final queryEnd = jsonArgs.lastIndexOf('"');
+                        if (queryStart > 0 && queryEnd > queryStart) {
+                          sqlQuery = jsonArgs.substring(queryStart, queryEnd).replaceAll('\\"', '"');
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+
+            if (sqlQuery != null && sqlQuery.trim().toUpperCase().startsWith('SELECT')) {
+              try {
+                final rows = await _executeSql(sqlQuery);
+                contents.add({
+                  'role': 'user',
+                  'parts': [{'text': '[Function Result for execute_sql_query]: ${jsonEncode(rows)}'}],
+                });
+                continue; // Loop back for Gemini to process SQL result
+              } catch (e) {
+                contents.add({
+                  'role': 'user',
+                  'parts': [{'text': '[Function Result for execute_sql_query]: Error executing query: $e'}],
+                });
+                continue;
+              }
+            } else if (text.contains('CALL_FUNCTION:')) {
+              contents.add({
+                'role': 'user',
+                'parts': [{'text': '[Function Error]: Invalid JSON or missing SELECT query. Please use exact format: CALL_FUNCTION:execute_sql_query|{"query": "SELECT ..."}'}],
+              });
+              continue; // Loop back for Gemini to fix its mistake
+            }
+          }
+
+          // Return final processed text
+          return text;
+        }
+      } on DioException catch (e) {
+        lastError = 'DioException: ${e.response?.data ?? e.message}';
+        continue;
+      } catch (e) {
+        lastError = e.toString();
+        // If current model fails, try next model in fallback list
+        continue;
+      }
+    }
+
+    return null;
+  }
+
+  Future<String> _handleOfflineQuery(String command) async {
+    final lower = command.toLowerCase();
+    try {
+      final db = await _dbService.rawDb;
+
+      // 1. Students Query
+      if (lower.contains('student') || lower.contains('enrol') || lower.contains('admission')) {
+        final countRes = await db.rawQuery('SELECT COUNT(*) as total FROM students WHERE is_active = 1');
+        final total = countRes.first['total'] as int? ?? 0;
+        final classBreakdown = await db.rawQuery(
+          'SELECT grade_level, COUNT(*) as count FROM students WHERE is_active = 1 GROUP BY grade_level ORDER BY grade_level'
+        );
+        final breakdownStr = classBreakdown.map((r) => '• ${r['grade_level'] ?? "Unassigned"}: ${r['count']} students').join('\n');
+        return '📊 **Student Overview (Offline Mode)**\n\nTotal Active Students: **$total**\n\n**Class-wise Distribution:**\n$breakdownStr';
+      }
+
+      // 2. Fee / Dues Query
+      if (lower.contains('fee') || lower.contains('due') || lower.contains('collect') || lower.contains('payment')) {
+        final ledgerRes = await db.rawQuery('''
+          SELECT 
+            COALESCE(SUM(amount_due), 0) as total_due,
+            COALESCE(SUM(amount_paid), 0) as total_paid,
+            COALESCE(SUM(CASE WHEN status = 'overdue' THEN amount_due - amount_paid ELSE 0 END), 0) as overdue
+          FROM student_fee_ledger
+        ''');
+        final due = ledgerRes.first['total_due'] as num? ?? 0;
+        final paid = ledgerRes.first['total_paid'] as num? ?? 0;
+        final overdue = ledgerRes.first['overdue'] as num? ?? 0;
+        final pending = due - paid;
+        return '💰 **Fee Analytics Summary (Offline Mode)**\n\n'
+            '• Total Fees Generated: **₹${due.toStringAsFixed(2)}**\n'
+            '• Total Fees Collected: **₹${paid.toStringAsFixed(2)}**\n'
+            '• Total Outstanding Dues: **₹${pending.toStringAsFixed(2)}**\n'
+            '• Overdue Balance: **₹${overdue.toStringAsFixed(2)}**';
+      }
+
+      // 3. Staff / Teacher Query
+      if (lower.contains('staff') || lower.contains('teacher') || lower.contains('faculty') || lower.contains('employee')) {
+        final staffCount = await db.rawQuery('SELECT COUNT(*) as total FROM staff WHERE is_active = 1');
+        final total = staffCount.first['total'] as int? ?? 0;
+        final roleBreakdown = await db.rawQuery(
+          'SELECT role, COUNT(*) as count FROM staff WHERE is_active = 1 GROUP BY role'
+        );
+        final breakdownStr = roleBreakdown.map((r) => '• ${r['role']}: ${r['count']}').join('\n');
+        return '👥 **Staff & Faculty Overview (Offline Mode)**\n\nTotal Active Staff: **$total**\n\n$breakdownStr';
+      }
+
+      // 4. Transport Query
+      if (lower.contains('transport') || lower.contains('bus') || lower.contains('vehicle') || lower.contains('route')) {
+        final vehCount = await db.rawQuery('SELECT COUNT(*) as total FROM vehicles WHERE is_active = 1');
+        final routesCount = await db.rawQuery('SELECT COUNT(*) as total FROM routes');
+        final totalV = vehCount.first['total'] as int? ?? 0;
+        final totalR = routesCount.first['total'] as int? ?? 0;
+        final vehList = await db.rawQuery('SELECT vehicle_number, vehicle_type, capacity FROM vehicles WHERE is_active = 1 LIMIT 5');
+        final listStr = vehList.map((r) => '• ${r['vehicle_number']} (${r['vehicle_type']}, ${r['capacity']} seats)').join('\n');
+        return '🚌 **Transport Fleet Overview (Offline Mode)**\n\n'
+            '• Active Vehicles: **$totalV**\n'
+            '• Configured Routes: **$totalR**\n\n'
+            '${listStr.isNotEmpty ? "**Vehicles:**\n$listStr" : ""}';
+      }
+
+      // 5. Library Query
+      if (lower.contains('book') || lower.contains('library') || lower.contains('issue')) {
+        final bookCount = await db.rawQuery('SELECT COUNT(*) as total, COALESCE(SUM(total_copies), 0) as copies, COALESCE(SUM(available_copies), 0) as avail FROM books');
+        final titles = bookCount.first['total'] as int? ?? 0;
+        final copies = bookCount.first['copies'] as int? ?? 0;
+        final avail = bookCount.first['avail'] as int? ?? 0;
+        return '📚 **Library Catalog Summary (Offline Mode)**\n\n'
+            '• Total Book Titles: **$titles**\n'
+            '• Total Physical Copies: **$copies**\n'
+            '• Available for Issue: **$avail**';
+      }
+
+      // 6. Exams Query
+      if (lower.contains('exam') || lower.contains('test') || lower.contains('mark') || lower.contains('grade')) {
+        final exams = await db.rawQuery('SELECT name, class, start_date, end_date FROM exams ORDER BY start_date DESC LIMIT 5');
+        if (exams.isEmpty) {
+          return '📝 **Examination Module (Offline Mode)**\n\nNo scheduled examinations found yet. You can create exams in the **Exams & Performance** tab.';
+        }
+        final listStr = exams.map((r) => '• **${r['name']}** (${r['class']}) - ${r['start_date']} to ${r['end_date']}').join('\n');
+        return '📝 **Recent & Scheduled Exams (Offline Mode)**\n\n$listStr';
+      }
+
+      // Default smart assistance summary
+      return '🤖 **Kishan Company AI Assistant (Offline Mode)**\n\n'
+          'I am ready to help you manage your school. You can ask me about:\n'
+          '• **Students & Admissions**: "How many students are enrolled?"\n'
+          '• **Fees & Dues**: "Show fee dues summary"\n'
+          '• **Staff & Teachers**: "How many teachers do we have?"\n'
+          '• **Transport & Fleet**: "Show bus and route status"\n'
+          '• **Library Books**: "Show library catalog summary"\n'
+          '• **Exams & Tests**: "Show upcoming exams"';
     } catch (e) {
-      return 'Failed to initialize attendance sheet: ${e.toString()}';
+      return 'AI Assistant is running in offline mode. Type "help" or ask about students, fees, staff, transport, or library.';
     }
   }
 
-  Future<Student?> _findStudentByIdentifier(String identifier) async {
-    final byId = await _dbService.getStudentById(identifier);
-    if (byId != null) {
-      return byId;
+  Future<String> _getSchema() async {
+    try {
+      final db = await _dbService.rawDb;
+      final res = await db.rawQuery("SELECT sql FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'");
+      return res
+          .map((row) => (row['sql'] as String?) ?? '')
+          .where((sql) => sql.isNotEmpty)
+          .join('\n\n');
+    } catch (e) {
+      return 'Error retrieving schema: $e';
     }
-
-    final results = await _dbService.searchStudents(identifier);
-    if (results.length == 1) {
-      return results.first;
-    }
-
-    if (results.length > 1) {
-      return results.first;
-    }
-
-    return null;
   }
-
-  Future<Staff?> _findStaffByIdentifier(String identifier) async {
-    final byId = await _dbService.getStaffById(identifier);
-    if (byId != null) {
-      return byId;
-    }
-
-    final allStaff = await _dbService.getAllStaff(page: 0, pageSize: 10000, activeOnly: false);
-    final normalized = identifier.trim().toLowerCase();
-    final matches = allStaff.where((staff) {
-      final fullName = '${staff.firstName} ${staff.lastName}'.toLowerCase();
-      return fullName.contains(normalized) || (staff.staffCode?.toLowerCase() ?? '').contains(normalized) || (staff.email?.toLowerCase() ?? '').contains(normalized) || (staff.phone?.toLowerCase() ?? '').contains(normalized);
-    }).toList();
-
-    if (matches.length == 1) return matches.first;
-    if (matches.isNotEmpty) return matches.first;
-    return null;
-  }
-
-  String? _extractStudentIdentifier(String command) {
-    final matcher = RegExp(r'student(?: (?:named|called))? (.+?) (?:in|for|on|with|during|with|in|during|for)', caseSensitive: false);
-    final match = matcher.firstMatch(command);
-    if (match != null) {
-      return match.group(1)!.trim();
-    }
-
-    final genericMatcher = RegExp(r'student(?: )?(.*)', caseSensitive: false);
-    final genericMatch = genericMatcher.firstMatch(command);
-    if (genericMatch != null) {
-      return genericMatch.group(1)!.trim();
-    }
-
-    return null;
-  }
-
-  int? _monthNameToNumber(String name) {
-    final cleaned = name.trim().toLowerCase();
-    final months = {
-      'january': 1,
-      'february': 2,
-      'march': 3,
-      'april': 4,
-      'may': 5,
-      'june': 6,
-      'july': 7,
-      'august': 8,
-      'september': 9,
-      'october': 10,
-      'november': 11,
-      'december': 12,
-    };
-    return months[cleaned];
-  }
-
-  Future<String> _handleSearchStaff(String command) async {
-    final matcher = RegExp(r'(?:search|find) staff(?: for)? (.+)', caseSensitive: false);
-    final match = matcher.firstMatch(command);
-    if (match == null) {
-      return 'Please specify the staff name or query. Example: search staff Alice';
-    }
-
-    final query = match.group(1)!.trim();
-    final allStaff = await _dbService.getAllStaff(page: 0, pageSize: 10000, activeOnly: false);
-    final matches = allStaff.where((staff) {
-      final fullName = '${staff.firstName} ${staff.lastName}'.toLowerCase();
-      return fullName.contains(query.toLowerCase()) || (staff.staffCode?.toLowerCase() ?? '').contains(query.toLowerCase());
-    }).toList();
-
-    if (matches.isEmpty) {
-      return 'No staff members matched "$query".';
-    }
-
-    final lines = matches.map((staff) {
-      return '${staff.id} • ${staff.fullName} • ${staff.role}';
-    }).join('\n');
-
-    return 'Found ${matches.length} staff member(s):\n$lines';
-  }
-
-  Future<String> _handleStaffDetails(String command) async {
-    final matcher = RegExp(r'(?:staff details|show staff details|get staff)(?: for)? (.+)', caseSensitive: false);
-    final match = matcher.firstMatch(command);
-    if (match == null) {
-      return 'Please specify a staff ID or name. Example: staff details S-123';
-    }
-
-    final identifier = match.group(1)!.trim();
-    final staff = await _findStaffByIdentifier(identifier);
-    if (staff == null) {
-      return 'Could not find a staff member for "$identifier".';
-    }
-
-    return 'Staff details:\n'
-        'ID: ${staff.id}\n'
-        'Name: ${staff.fullName}\n'
-        'Role: ${staff.role}\n'
-        'Department: ${staff.departmentId ?? 'N/A'}\n'
-        'Phone: ${staff.phone ?? 'N/A'}\n'
-        'Email: ${staff.email ?? 'N/A'}\n'
-        'Status: ${staff.isActive ? 'Active' : 'Inactive'}';
-  }
-
-  Future<String> _handleFleetOverview() async {
-    final fleet = await _dbService.getFleetOverview();
-    if (fleet.isEmpty) {
-      return 'No fleet data available.';
-    }
-
-    final lines = fleet.map((item) {
-      final vehicle = item['vehicle'] as Map<String, dynamic>?;
-      final route = item['route'] as Map<String, dynamic>?;
-      final vehicleNumber = vehicle?['vehicle_number'] ?? 'Unknown';
-      final routeName = route?['route_name'] ?? 'Unassigned';
-      final driverName = item['driver_name'] ?? 'Unknown';
-      final capacity = item['capacity'] ?? 'N/A';
-      return '$vehicleNumber • $routeName • Driver: $driverName • Capacity: $capacity';
-    }).join('\n');
-
-    return 'Fleet overview:\n$lines';
-  }
-
-  Future<String> _handleVehicleDetails(String command) async {
-    final matcher = RegExp(r'vehicle(?: details)?(?: for)? (.+)', caseSensitive: false);
-    final match = matcher.firstMatch(command);
-    if (match == null || match.group(1)?.trim().isEmpty == true) {
-      return 'Please specify a vehicle number or ID. Example: vehicle details BUS-01';
-    }
-
-    final identifier = match.group(1)!.trim().toLowerCase();
-    final vehicles = await _dbService.getAllVehicles(activeOnly: false);
-    final found = vehicles.where((vehicle) {
-      return vehicle.vehicleNumber.toLowerCase() == identifier || vehicle.id.toLowerCase() == identifier;
-    }).toList();
-
-    if (found.isEmpty) {
-      return 'Could not find a vehicle for "$identifier".';
-    }
-
-    final vehicle = found.first;
-    return 'Vehicle details:\n'
-        'ID: ${vehicle.id}\n'
-        'Number: ${vehicle.vehicleNumber}\n'
-        'Type: ${vehicle.vehicleType}\n'
-        'Capacity: ${vehicle.capacity}\n'
-        'Driver: ${vehicle.driverName ?? 'N/A'}\n'
-        'Conductor: ${vehicle.conductorName ?? 'N/A'}\n'
-        'Insurance Expires: ${vehicle.insuranceExpiry?.toIso8601String() ?? 'N/A'}\n'
-        'Fitness Expires: ${vehicle.fitnessExpiry?.toIso8601String() ?? 'N/A'}';
-  }
-
-  Future<String> _handleRouteWithStudents(String command) async {
-    final matcher = RegExp(r'route(?: students)?(?: for)? (.+)', caseSensitive: false);
-    final match = matcher.firstMatch(command);
-    if (match == null || match.group(1)?.trim().isEmpty == true) {
-      return 'Please specify a route name or ID. Example: route students for Route A';
-    }
-
-    final identifier = match.group(1)!.trim().toLowerCase();
-    final routes = await _dbService.getAllRoutes();
-    final matched = routes.where((route) {
-      return route.routeName.toLowerCase() == identifier || route.id.toLowerCase() == identifier;
-    }).toList();
-
-    if (matched.isEmpty) {
-      return 'Could not find a route for "$identifier".';
-    }
-
-    final route = matched.first;
-    final routeData = await _dbService.getRouteWithStudents(route.id);
-    final students = routeData['students'] as List<dynamic>? ?? [];
-    final routeName = route.routeName;
-    final stops = routeData['stops'] as List<dynamic>? ?? [];
-
-    final studentLines = students.map((student) => '${student['student_id']} • ${student['student_name']}').join('\n');
-    final stopLines = stops.map((stop) => '${stop['stop_name']}').join(', ');
-
-    return 'Route $routeName students:\nStops: $stopLines\nStudents:\n${studentLines.isEmpty ? 'None' : studentLines}';
-  }
-
-  Future<String> _handleRouteDetails(String command) async {
-    final matcher = RegExp(r'route(?: details)?(?: for)? (.+)', caseSensitive: false);
-    final match = matcher.firstMatch(command);
-    if (match == null || match.group(1)?.trim().isEmpty == true) {
-      return 'Please specify a route name or ID. Example: route details for Route A';
-    }
-
-    final identifier = match.group(1)!.trim().toLowerCase();
-    final routes = await _dbService.getAllRoutes();
-    final matched = routes.where((route) {
-      return route.routeName.toLowerCase() == identifier || route.id.toLowerCase() == identifier;
-    }).toList();
-
-    if (matched.isEmpty) {
-      return 'Could not find a route for "$identifier".';
-    }
-
-    final route = matched.first;
-    final details = 'Route details:\nName: ${route.routeName}\nFrom: ${route.startPoint}\nTo: ${route.endPoint}\nVehicle: ${route.vehicleNumber ?? 'Unassigned'}\nStops: ${route.stops.map((stop) => stop.stopName).join(', ')}';
-    return details;
-  }
-
-  Future<String> _handleLibraryCommand(String command) async {
-    if (command.toLowerCase().contains('search book') || command.toLowerCase().contains('find book')) {
-      return await _handleBookSearch(command);
-    }
-
-    if (command.toLowerCase().contains('overdue')) {
-      final issues = await _dbService.getOverdueIssues();
-      if (issues.isEmpty) {
-        return 'No overdue library issues found.';
-      }
-      final lines = issues.take(10).map((issue) => '${issue['borrower_id']} • ${issue['book_title']} • Due ${issue['due_date']}').join('\n');
-      return 'Overdue library issues:\n$lines';
-    }
-
-    if (command.toLowerCase().contains('active issues') || command.toLowerCase().contains('issued books')) {
-      final issues = await _dbService.getActiveIssues();
-      if (issues.isEmpty) {
-        return 'No active library issues found.';
-      }
-      final lines = issues.take(10).map((issue) => '${issue['borrower_id']} • ${issue['book_title']} • Due ${issue['due_date']}').join('\n');
-      return 'Active library issues:\n$lines';
-    }
-
-    return 'Library commands supported: search book <query>, overdue books, active issues.';
-  }
-
-  Future<String> _handleBookSearch(String command) async {
-    final matcher = RegExp(r'(?:search|find) book(?: for)? (.+)', caseSensitive: false);
-    final match = matcher.firstMatch(command);
-    if (match == null) {
-      return 'Please specify a book name, author, ISBN, or category. Example: search book algebra';
-    }
-
-    final query = match.group(1)!.trim();
-    final books = await _dbService.searchBooks(query);
-    if (books.isEmpty) {
-      return 'No books matched "$query".';
-    }
-
-    final lines = books.take(10).map((book) => '${book.title} by ${book.author} • ${book.category ?? 'N/A'}').join('\n');
-    return 'Found ${books.length} book(s):\n$lines';
-  }
-
-  Future<String> _handleHostelInfo(String command) async {
-    final studentQuery = _extractStudentIdentifier(command);
-    if (studentQuery == null) {
-      return 'Please specify a student name or ID. Example: hostel info for student 12345';
-    }
-
-    final student = await _findStudentByIdentifier(studentQuery);
-    if (student == null) {
-      return 'Could not find a student for "$studentQuery".';
-    }
-
-    final hostelInfo = await _dbService.getStudentHostelInfo(student.id);
-    if (hostelInfo == null) {
-      return 'No hostel allocation found for ${student.name}.';
-    }
-
-    return 'Hostel info for ${student.name}:\n'
-        'Block: ${hostelInfo['block_name'] ?? 'N/A'}\n'
-        'Room: ${hostelInfo['room_number'] ?? 'N/A'}\n'
-        'Bed: ${hostelInfo['bed_number'] ?? 'N/A'}\n'
-        'Allocated: ${hostelInfo['allocated_date'] ?? 'N/A'}';
-  }
-
-  Future<String> _handleStudentTransport(String command) async {
-    final studentQuery = _extractStudentIdentifier(command);
-    if (studentQuery == null) {
-      return 'Please specify a student name or ID. Example: transport info for student 12345';
-    }
-
-    final student = await _findStudentByIdentifier(studentQuery);
-    if (student == null) {
-      return 'Could not find a student for "$studentQuery".';
-    }
-
-    final academicYearMatcher = RegExp(r'(\d{4}-\d{4})');
-    final yearMatch = academicYearMatcher.firstMatch(command);
-    final academicYear = yearMatch?.group(1) ?? '2026-2027';
-    final transport = await _dbService.getStudentTransport(student.id, academicYear);
-    if (transport == null) {
-      return 'No transport assignment found for ${student.name} in $academicYear.';
-    }
-
-    return 'Transport info for ${student.name}:\n'
-        'Route: ${transport.routeName ?? 'N/A'}\n'
-        'Stop: ${transport.stopName ?? 'N/A'}\n'
-        'Pickup: ${transport.pickupTime ?? 'N/A'}\n'
-        'Drop: ${transport.dropTime ?? 'N/A'}\n'
-        'Fee: ${transport.monthlyFee.toStringAsFixed(2)}\n'
-        'Academic Year: ${transport.academicYear}';
-  }
-
-  Future<String> _handleStudentFeeSummary(String command) async {
-    final identifierMatcher = RegExp(r'(?:for student|student)(?: )?(.+?)(?: in (\d{4}-\d{4}))?$', caseSensitive: false);
-    final match = identifierMatcher.firstMatch(command);
-    if (match == null) {
-      return 'Please specify a student and academic year. Example: fee summary for student 12345 in 2026-2027';
-    }
-
-    final identifier = match.group(1)!.trim();
-    final academicYear = match.group(2) ?? '2026-2027';
-    final student = await _findStudentByIdentifier(identifier);
-    if (student == null) {
-      return 'Could not find a student for "$identifier".';
-    }
-
-    final feeLedger = await _dbService.getStudentFeeLedger(student.id, academicYear);
-    if (feeLedger.isEmpty) {
-      return 'No fee ledger entries found for ${student.name} in $academicYear.';
-    }
-
-    final totalDue = feeLedger.fold<double>(0, (acc, entry) => acc + entry.amountDue);
-    final lines = feeLedger.take(10).map((entry) => '${entry.feeHeadName ?? 'N/A'} • Due: ${entry.amountDue.toStringAsFixed(2)} • Status: ${entry.status}').join('\n');
-
-    return 'Fee ledger summary for ${student.name} ($academicYear):\nTotal due: ${totalDue.toStringAsFixed(2)}\n$lines';
-  }
-
-  Future<String> _handleExamCommand(String command) async {
-    final studentQuery = _extractStudentIdentifier(command);
-    final examQuery = RegExp(r'exam (?:result|for|named|called)? (.+)', caseSensitive: false).firstMatch(command)?.group(1)?.trim();
-    if (studentQuery == null || examQuery == null || studentQuery.isEmpty || examQuery.isEmpty) {
-      return 'Please specify a student and an exam. Example: exam result for student John Doe in Midterm';
-    }
-
-    final student = await _findStudentByIdentifier(studentQuery);
-    if (student == null) {
-      return 'Could not find a student for "$studentQuery".';
-    }
-
-    final exams = await _dbService.getAllExams();
-    final matched = exams.where((exam) {
-      return exam.name.toLowerCase().contains(examQuery.toLowerCase()) || exam.id.toLowerCase() == examQuery.toLowerCase();
-    }).toList();
-    if (matched.isEmpty) {
-      return 'Could not find an exam matching "$examQuery".';
-    }
-
-    final exam = matched.first;
-    final result = await _dbService.computeExamResult(exam.id, student.id);
-    if (result == null) {
-      return 'No exam result found for ${student.name} in ${exam.name}.';
-    }
-
-    return 'Exam result for ${student.name} in ${exam.name}:\n'
-        'Percentage: ${result.percentage.toStringAsFixed(1)}%\n'
-        'Grade: ${result.grade}\n'
-        'Status: ${result.isPassed ? 'Passed' : 'Failed'}';
-  }
-
-  Future<String> _handleClassStudents(String command) async {
-    final matcher = RegExp(r'(?:students in|student list for|students from) (.+?)(?: section| grade| in|$)', caseSensitive: false);
-    final match = matcher.firstMatch(command);
-    if (match == null) {
-      return 'Please specify a class or grade name. Example: students in Grade 10';
-    }
-
-    final className = match.group(1)!.trim();
-    final students = await _dbService.getStudentsByGrade(className);
-    if (students.isEmpty) {
-      return 'No active students found for $className.';
-    }
-
-    final lines = students.take(10).map((student) => '${student.id} • ${student.name} • Section ${student.section ?? 'N/A'}').join('\n');
-    return 'Students in $className:\n$lines';
-  }
-
-  String _dateString(DateTime date) {
-    return '${date.year.toString().padLeft(4, '0')}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
-  }
-}
-
-extension StringCapitalization on String {
-  String capitalize() {
-    if (isEmpty) return this;
-    return substring(0, 1).toUpperCase() + substring(1);
+  
+  Future<List<Map<String, dynamic>>> _executeSql(String query) async {
+    final db = await _dbService.rawDb;
+    return await db.rawQuery(query);
   }
 }

@@ -104,7 +104,7 @@ class FeeStructure {
       'grade_level': className,
       'section': sectionName,
       'academic_year': academicYear,
-      'academic_year_id': academicYear,
+      'academic_year_id': academicYear.startsWith('ay-') ? academicYear : 'ay-$academicYear',
       'amount': amount,
       'due_day_of_month': dueDayOfMonth,
       'created_at': createdAt.toIso8601String(),

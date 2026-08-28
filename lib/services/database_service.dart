@@ -43,98 +43,7 @@ class DatabaseService {
       if (sequence != null && sequence > highestSequence) {
         highestSequence = sequence;
       }
-      /// Get Dashboard metrics for a specific exam
-  Future<Map<String, dynamic>> getExamResultsDashboardData(String examId) async {
-    final exam = await getExamById(examId);
-    if (exam == null) {
-      return {
-        'overallAverage': 0.0,
-        'overallPassPercentage': 0.0,
-        'topPerformers': [],
-        'subjectPerformance': [],
-      };
     }
-
-    final db = await _db;
-    final examSubjects = await getExamSubjects(examId);
-    List<Map<String, dynamic>> subjectPerformance = [];
-
-    for (var es in examSubjects) {
-      final marksRows = await db.query('marks', where: 'exam_subject_id = ?', whereArgs: [es.id]);
-      
-      double totalMarks = 0;
-      int passCount = 0;
-      int studentsCount = marksRows.length;
-      
-      for (var m in marksRows) {
-        final obtained = (m['marks_obtained'] as num?)?.toDouble();
-        final isAbsent = m['is_absent'] == 1;
-        final val = (obtained != null && !isAbsent) ? obtained : 0.0;
-        totalMarks += val;
-        
-        if (!isAbsent && val >= es.passingMarks) {
-          passCount++;
-        }
-      }
-      
-      double avg = studentsCount > 0 ? totalMarks / studentsCount : 0.0;
-      double passPct = studentsCount > 0 ? (passCount / studentsCount) * 100 : 0.0;
-      
-      subjectPerformance.add({
-        'subject': es.subject,
-        'averageMarks': avg,
-        'passPercentage': passPct,
-        'maxMarks': es.maxMarks,
-      });
-    }
-
-    final whereClauses = <String>['(grade_level = ? OR grade_level = ?)'];
-    final whereArgs = <dynamic>[exam.className, exam.className];
-
-    if (exam.section != null && exam.section!.isNotEmpty && exam.section != 'All') {
-      whereClauses.add('(section = ? OR section IS NULL)');
-      whereArgs.add(exam.section);
-    }
-
-    final studentRows = await db.query('students', where: whereClauses.join(' AND '), whereArgs: whereArgs);
-    
-    List<ExamResultData> allResults = [];
-    for (var s in studentRows) {
-      final sId = s['id'] as String;
-      final res = await computeExamResult(examId, sId);
-      if (res != null) {
-        allResults.add(res);
-      }
-    }
-
-    double totalPercentageSum = 0;
-    int overallPassCount = 0;
-    
-    for (var res in allResults) {
-      totalPercentageSum += res.percentage;
-      if (res.isPassed) overallPassCount++;
-    }
-    
-    double overallAvg = allResults.isNotEmpty ? totalPercentageSum / allResults.length : 0.0;
-    double overallPassPercentage = allResults.isNotEmpty ? (overallPassCount / allResults.length) * 100 : 0.0;
-    
-    allResults.sort((a, b) => b.totalMarksObtained.compareTo(a.totalMarksObtained));
-    final top5 = allResults.take(5).map((r) => {
-      'studentName': r.studentName,
-      'totalMarks': r.totalMarksObtained,
-      'totalMaxMarks': r.totalMaxMarks,
-      'percentage': r.percentage,
-    }).toList();
-
-    return {
-      'overallAverage': overallAvg,
-      'overallPassPercentage': overallPassPercentage,
-      'topPerformers': top5,
-      'subjectPerformance': subjectPerformance,
-    };
-  }
-
-}
 
     final displayedSequence = afterCode != null && afterCode.startsWith(prefix)
         ? int.tryParse(afterCode.substring(prefix.length))
@@ -146,6 +55,8 @@ class DatabaseService {
     final seq = nextSequence.toString().padLeft(3, '0');
     return 'EMP-$year-$seq';
   }
+
+
 
   /// Insert a new staff record into SQLite
   Future<int> insertStaff(Staff staff) async {
@@ -362,40 +273,61 @@ class DatabaseService {
   /// Retrieve a student by unique ID
   Future<Student?> getStudentById(String id) async {
     final db = await _db;
-    final results = await db.query(
-      'students',
-      where: 'id = ?',
-      whereArgs: [id],
-      limit: 1,
-    );
+    final results = await db.rawQuery('''
+      SELECT s.*, 
+             COALESCE(SUM(l.amount_due - l.amount_paid), 0.0) as calculated_balance
+      FROM students s
+      LEFT JOIN student_fee_ledger l ON s.id = l.student_id
+      WHERE s.id = ?
+      GROUP BY s.id
+    ''', [id]);
 
     if (results.isEmpty) return null;
-    return Student.fromMap(results.first);
+    final mutableMap = Map<String, dynamic>.from(results.first);
+    mutableMap['current_balance'] = mutableMap['calculated_balance'];
+    return Student.fromMap(mutableMap);
   }
 
   /// Retrieve all students (optionally filtering active-only)
   Future<List<Student>> getAllStudents({bool activeOnly = true}) async {
     final db = await _db;
-    final results = await db.query(
-      'students',
-      where: activeOnly ? 'is_active = 1' : null,
-      orderBy: 'name ASC',
-    );
+    final String whereClause = activeOnly ? 'WHERE s.is_active = 1' : '';
+    
+    final results = await db.rawQuery('''
+      SELECT s.*, 
+             COALESCE(SUM(l.amount_due - l.amount_paid), 0.0) as calculated_balance
+      FROM students s
+      LEFT JOIN student_fee_ledger l ON s.id = l.student_id
+      $whereClause
+      GROUP BY s.id
+      ORDER BY s.name ASC
+    ''');
 
-    return results.map((map) => Student.fromMap(map)).toList();
+    return results.map((map) {
+      final mutableMap = Map<String, dynamic>.from(map);
+      mutableMap['current_balance'] = mutableMap['calculated_balance'];
+      return Student.fromMap(mutableMap);
+    }).toList();
   }
 
   /// Retrieve active students for a specific grade level
   Future<List<Student>> getStudentsByGrade(String gradeLevel) async {
     final db = await _db;
-    final results = await db.query(
-      'students',
-      where: 'grade_level = ? AND is_active = 1',
-      whereArgs: [gradeLevel],
-      orderBy: 'name ASC',
-    );
+    final results = await db.rawQuery('''
+      SELECT s.*, 
+             COALESCE(SUM(l.amount_due - l.amount_paid), 0.0) as calculated_balance
+      FROM students s
+      LEFT JOIN student_fee_ledger l ON s.id = l.student_id
+      WHERE s.grade_level = ? AND s.is_active = 1
+      GROUP BY s.id
+      ORDER BY s.name ASC
+    ''', [gradeLevel]);
 
-    return results.map((map) => Student.fromMap(map)).toList();
+    return results.map((map) {
+      final mutableMap = Map<String, dynamic>.from(map);
+      mutableMap['current_balance'] = mutableMap['calculated_balance'];
+      return Student.fromMap(mutableMap);
+    }).toList();
   }
 
   /// Update an existing student record
@@ -430,26 +362,41 @@ class DatabaseService {
   Future<List<Student>> searchStudents(String query) async {
     final db = await _db;
     final searchPattern = '%$query%';
-    final results = await db.query(
-      'students',
-      where: '(name LIKE ? OR guardian_phone LIKE ? OR admission_number LIKE ?) AND is_active = 1',
-      whereArgs: [searchPattern, searchPattern, searchPattern],
-      orderBy: 'name ASC',
-    );
+    final results = await db.rawQuery('''
+      SELECT s.*, 
+             COALESCE(SUM(l.amount_due - l.amount_paid), 0.0) as calculated_balance
+      FROM students s
+      LEFT JOIN student_fee_ledger l ON s.id = l.student_id
+      WHERE (s.name LIKE ? OR s.guardian_phone LIKE ? OR s.admission_number LIKE ?) AND s.is_active = 1
+      GROUP BY s.id
+      ORDER BY s.name ASC
+    ''', [searchPattern, searchPattern, searchPattern]);
 
-    return results.map((map) => Student.fromMap(map)).toList();
+    return results.map((map) {
+      final mutableMap = Map<String, dynamic>.from(map);
+      mutableMap['current_balance'] = mutableMap['calculated_balance'];
+      return Student.fromMap(mutableMap);
+    }).toList();
   }
 
   /// Retrieve Alumni / Inactive students
   Future<List<Student>> getAlumniStudents() async {
     final db = await _db;
-    final results = await db.query(
-      'students',
-      where: 'is_alumni = 1 OR is_active = 0',
-      orderBy: 'name ASC',
-    );
+    final results = await db.rawQuery('''
+      SELECT s.*, 
+             COALESCE(SUM(l.amount_due - l.amount_paid), 0.0) as calculated_balance
+      FROM students s
+      LEFT JOIN student_fee_ledger l ON s.id = l.student_id
+      WHERE s.is_alumni = 1 OR s.is_active = 0
+      GROUP BY s.id
+      ORDER BY s.name ASC
+    ''');
 
-    return results.map((map) => Student.fromMap(map)).toList();
+    return results.map((map) {
+      final mutableMap = Map<String, dynamic>.from(map);
+      mutableMap['current_balance'] = mutableMap['calculated_balance'];
+      return Student.fromMap(mutableMap);
+    }).toList();
   }
 
   /// Issue Transfer Certificate (TC) to a student and mark as Alumni
@@ -1567,12 +1514,84 @@ class DatabaseService {
   /// Save / Insert or Update fee structure row
   Future<int> saveFeeStructureRow(FeeStructure fs) async {
     final db = await _db;
-    return await _insertLogged(db, 'fee_structures', fs.toMap(), conflictAlgorithm: ConflictAlgorithm.replace);
+    
+    final ayId = fs.academicYear.startsWith('ay-') ? fs.academicYear : 'ay-${fs.academicYear}';
+    final parts = fs.academicYear.split('-');
+    final startYear = parts.isNotEmpty ? parts[0] : '2024';
+    final endYear = parts.length > 1 ? parts[1] : '2025';
+    
+    await db.execute(
+      'INSERT OR IGNORE INTO academic_years (id, name, start_date, end_date) VALUES (?, ?, ?, ?)',
+      [ayId, fs.academicYear, '$startYear-06-01', '$endYear-04-30']
+    );
+
+    await db.execute(
+      'INSERT OR IGNORE INTO fee_categories (id, name, default_amount, cycle) VALUES (?, ?, ?, ?)',
+      [fs.feeCategoryId, fs.feeCategoryId, 0.0, 'monthly']
+    );
+
+    final inserted = await _insertLogged(db, 'fee_structures', fs.toMap(), conflictAlgorithm: ConflictAlgorithm.replace);
+    
+    // Sync unpaid ledger amounts for all students in this class
+    await syncLedgerAmountsForFeeStructure(fs);
+    
+    return inserted;
+  }
+
+  /// Sync unpaid ledger rows when a fee structure is changed
+  Future<void> syncLedgerAmountsForFeeStructure(FeeStructure fs) async {
+    final db = await _db;
+    
+    // Get all students in this class
+    final students = await db.query(
+      'students',
+      where: 'grade_level = ? AND is_active = 1 AND is_alumni = 0',
+      whereArgs: [fs.className],
+    );
+
+    for (final s in students) {
+      final studentId = s['id'] as String;
+      // Re-calculate net fee for this specific fee head (including discounts)
+      final netFees = await getStudentNetPayableFees(studentId, fs.className, fs.academicYear);
+      final item = netFees.where((n) => n.feeHeadId == (fs.feeHeadId ?? fs.feeCategoryId)).firstOrNull;
+      if (item == null) continue;
+
+      // Update unpaid ledger rows for this student, fee head, and academic year
+      await db.update(
+        'student_fee_ledger',
+        {'amount_due': item.netPayable},
+        where: 'student_id = ? AND fee_head_id = ? AND academic_year = ? AND status = ?',
+        whereArgs: [studentId, item.feeHeadId, fs.academicYear, 'pending'],
+      );
+    }
   }
 
   /// Delete fee structure row
   Future<int> deleteFeeStructureRow(String id) async {
     final db = await _db;
+    
+    // Get details before deleting
+    final existing = await db.query('fee_structures', where: 'id = ?', whereArgs: [id]);
+    if (existing.isNotEmpty) {
+      final fs = FeeStructure.fromMap(existing.first);
+      
+      // Delete unpaid ledger rows for this fee head in this academic year for all students in this class
+      final students = await db.query(
+        'students',
+        where: 'grade_level = ?',
+        whereArgs: [fs.className],
+      );
+      
+      for (final s in students) {
+        final studentId = s['id'] as String;
+        await db.delete(
+          'student_fee_ledger',
+          where: 'student_id = ? AND fee_head_id = ? AND academic_year = ? AND status = ?',
+          whereArgs: [studentId, fs.feeHeadId ?? fs.feeCategoryId, fs.academicYear, 'pending'],
+        );
+      }
+    }
+
     return await _deleteLogged(db, 'fee_structures', where: 'id = ?', whereArgs: [id]);
   }
 
@@ -1619,13 +1638,49 @@ class DatabaseService {
   /// Apply a discount to a student
   Future<int> applyStudentDiscount(StudentDiscount sd) async {
     final db = await _db;
-    return await _insertLogged(db, 'student_discounts', sd.toMap());
+    final id = await _insertLogged(db, 'student_discounts', sd.toMap());
+    
+    // Sync unpaid ledger amounts for this student to reflect new discount
+    await syncLedgerAmountsForStudent(sd.studentId, sd.academicYear);
+    
+    return id;
   }
 
   /// Remove discount from a student
   Future<int> removeStudentDiscount(String id) async {
     final db = await _db;
-    return await _deleteLogged(db, 'student_discounts', where: 'id = ?', whereArgs: [id]);
+    
+    // Get details before deleting
+    final existing = await db.query('student_discounts', where: 'id = ?', whereArgs: [id]);
+    if (existing.isEmpty) return 0;
+    
+    final studentId = existing.first['student_id'] as String;
+    final academicYear = existing.first['academic_year'] as String;
+    
+    final deleted = await _deleteLogged(db, 'student_discounts', where: 'id = ?', whereArgs: [id]);
+    
+    // Sync unpaid ledger amounts to reflect removed discount
+    await syncLedgerAmountsForStudent(studentId, academicYear);
+    
+    return deleted;
+  }
+
+  /// Sync unpaid ledger rows when a discount is added or removed for a specific student
+  Future<void> syncLedgerAmountsForStudent(String studentId, String academicYear) async {
+    final db = await _db;
+    final student = await getStudentById(studentId);
+    if (student == null) return;
+    
+    final netFees = await getStudentNetPayableFees(studentId, student.gradeLevel, academicYear);
+    
+    for (final item in netFees) {
+      await db.update(
+        'student_fee_ledger',
+        {'amount_due': item.netPayable},
+        where: 'student_id = ? AND fee_head_id = ? AND academic_year = ? AND status = ?',
+        whereArgs: [studentId, item.feeHeadId, academicYear, 'pending'],
+      );
+    }
   }
 
   /// Compute student net payable fees per fee head for an academic year
@@ -1767,7 +1822,7 @@ class DatabaseService {
               studentId: studentId,
               feeHeadId: item.feeHeadId,
               academicYear: academicYear,
-              amountDue: item.netPayable / 12.0,
+              amountDue: item.netPayable,
               dueDate: dueDate,
               feeHeadName: item.feeHeadName,
               frequency: item.frequency,
@@ -1777,19 +1832,53 @@ class DatabaseService {
             await _insertLogged(txn, 'student_fee_ledger', ledger.toMap());
             created++;
           }
-        } else {
-          // Determine due date based on frequency
-          DateTime dueDate;
-          if (fh != null && fh.frequency == 'quarterly') {
-            // Next quarter end
-            final quarterEnd = ((now.month - 1) ~/ 3 + 1) * 3;
-            dueDate = DateTime(now.year, quarterEnd + 1, 0);
-          } else {
-            // Annual/one-time: end of academic year (March 31 of next year)
-            final yearParts = academicYear.split('-');
-            final endYear = yearParts.length > 1 ? int.tryParse(yearParts[1]) ?? (now.year + 1) : now.year + 1;
-            dueDate = DateTime(endYear, 3, 31);
+        } else if (fh != null && fh.frequency == 'quarterly') {
+          final yearParts = academicYear.split('-');
+          final startYear = int.tryParse(yearParts[0]) ?? now.year;
+          
+          final quarters = [
+            {'label': 'Q1 (Apr-Jun)', 'month': 4, 'nextYear': false},
+            {'label': 'Q2 (Jul-Sep)', 'month': 7, 'nextYear': false},
+            {'label': 'Q3 (Oct-Dec)', 'month': 10, 'nextYear': false},
+            {'label': 'Q4 (Jan-Mar)', 'month': 1, 'nextYear': true},
+          ];
+
+          for (final q in quarters) {
+            final qYear = (q['nextYear'] == true) ? startYear + 1 : startYear;
+            final dueDate = DateTime(qYear, q['month'] as int, 10); // 10th of the first month of quarter
+            final qLabel = '${q['label']} $startYear-${startYear + 1}';
+            
+            final existingQ = await txn.rawQuery(
+              'SELECT COUNT(*) AS cnt FROM student_fee_ledger WHERE student_id = ? AND fee_head_id = ? AND academic_year = ? AND month_label = ?',
+              [studentId, item.feeHeadId, academicYear, qLabel],
+            );
+            if ((existingQ.first['cnt'] as int) > 0) continue;
+
+            final ledger = StudentFeeLedger.create(
+              studentId: studentId,
+              feeHeadId: item.feeHeadId,
+              academicYear: academicYear,
+              amountDue: item.netPayable,
+              dueDate: dueDate,
+              feeHeadName: item.feeHeadName,
+              frequency: item.frequency,
+              monthLabel: qLabel,
+            );
+
+            await _insertLogged(txn, 'student_fee_ledger', ledger.toMap());
+            created++;
           }
+        } else {
+          // Annual/one-time: end of academic year (March 31 of next year)
+          final yearParts = academicYear.split('-');
+          final endYear = yearParts.length > 1 ? int.tryParse(yearParts[1]) ?? (now.year + 1) : now.year + 1;
+          final dueDate = DateTime(endYear, 3, 31);
+
+          final existingAnn = await txn.rawQuery(
+            'SELECT COUNT(*) AS cnt FROM student_fee_ledger WHERE student_id = ? AND fee_head_id = ? AND academic_year = ?',
+            [studentId, item.feeHeadId, academicYear],
+          );
+          if ((existingAnn.first['cnt'] as int) > 0) continue;
 
           final ledger = StudentFeeLedger.create(
             studentId: studentId,
@@ -1877,6 +1966,119 @@ class DatabaseService {
   /// Auto-allocate a lump sum payment across ledger entries (oldest-due-first).
   /// Creates invoice + transaction records for each allocated portion.
   /// Returns list of updated ledger entries.
+  Future<List<StudentFeeLedger>> recordMultiMonthPayment({
+    required String studentId,
+    required String academicYear,
+    required List<String> ledgerIds,
+    required PaymentMethod paymentMethod,
+    String? referenceNumber,
+  }) async {
+    final db = await _db;
+    final updatedEntries = <StudentFeeLedger>[];
+    final ayId = academicYear.startsWith('ay-') ? academicYear : 'ay-$academicYear';
+
+    await db.transaction((txn) async {
+      // Get the specific open ledger entries
+      final placeholders = List.filled(ledgerIds.length, '?').join(',');
+      final openRows = await txn.rawQuery('''
+        SELECT sfl.*, fh.name as fee_head_name, fh.frequency as frequency
+        FROM student_fee_ledger sfl
+        LEFT JOIN fee_heads fh ON sfl.fee_head_id = fh.id
+        WHERE sfl.id IN ($placeholders)
+          AND sfl.status IN ('pending', 'partial', 'overdue')
+      ''', ledgerIds);
+
+      final nowIso = DateTime.now().toIso8601String();
+
+      for (final row in openRows) {
+        final entry = StudentFeeLedger.fromMap(row);
+        final allocate = entry.amountDue - entry.amountPaid;
+        
+        if (allocate <= 0.01) continue;
+
+        final newPaid = entry.amountDue;
+        final newStatus = LedgerStatus.paid;
+
+        await txn.rawUpdate('''
+          UPDATE student_fee_ledger
+          SET amount_paid = ?, status = ?, updated_at = ?
+          WHERE id = ?
+        ''', [newPaid, newStatus.name, nowIso, entry.id]);
+
+        final ayId = academicYear.startsWith('ay-') ? academicYear : 'ay-$academicYear';
+        
+        // Create a matching invoice linked to this ledger entry
+        final invoiceId = const Uuid().v4();
+        await _insertLogged(txn, 'invoices', {
+          'id': invoiceId,
+          'student_id': studentId,
+          'academic_year_id': ayId,
+          'total_amount': allocate,
+          'discount_amount': 0.0,
+          'penalty_amount': 0.0,
+          'due_date': entry.dueDate.toIso8601String(),
+          'status': 'paid',
+          'notes': 'Multi-month payment: ${entry.feeHeadName ?? entry.feeHeadId}',
+          'fee_head_id': entry.feeHeadId,
+          'ledger_id': entry.id,
+          'created_at': nowIso,
+          'updated_at': nowIso,
+        });
+
+        // Create transaction record
+        final transactionId = const Uuid().v4();
+        await _insertLogged(txn, 'transactions', {
+          'id': transactionId,
+          'invoice_id': invoiceId,
+          'amount_paid': allocate,
+          'payment_method': paymentMethod.dbValue,
+          'reference_number': referenceNumber,
+          'timestamp': nowIso,
+          'created_at': nowIso,
+          'updated_at': nowIso,
+        });
+
+        // Create ledger entry (financial ledger) for income
+        final ledgerEntryId = const Uuid().v4();
+        await _insertLogged(txn, 'ledger_entries', {
+          'id': ledgerEntryId,
+          'date': nowIso,
+          'type': 'income',
+          'category': 'Fee Collection',
+          'amount': allocate,
+          'description': 'Multi-month payment: ${entry.feeHeadName ?? entry.feeHeadId} (Student: $studentId)',
+          'reference_id': transactionId,
+          'created_at': nowIso,
+        });
+
+        // Update student balance
+        await txn.rawUpdate('''
+          UPDATE students SET current_balance = current_balance - ?, updated_at = ?
+          WHERE id = ?
+        ''', [allocate, nowIso, studentId]);
+
+        final updatedEntry = StudentFeeLedger(
+          id: entry.id,
+          studentId: entry.studentId,
+          feeHeadId: entry.feeHeadId,
+          academicYear: entry.academicYear,
+          amountDue: entry.amountDue,
+          amountPaid: newPaid,
+          dueDate: entry.dueDate,
+          status: newStatus,
+          feeHeadName: entry.feeHeadName,
+          frequency: entry.frequency,
+          monthLabel: entry.monthLabel,
+          createdAt: entry.createdAt,
+          updatedAt: DateTime.now(),
+        );
+        updatedEntries.add(updatedEntry);
+      }
+    });
+
+    return updatedEntries;
+  }
+
   Future<List<StudentFeeLedger>> recordLumpSumPayment({
     required String studentId,
     required String academicYear,
@@ -1922,12 +2124,14 @@ class DatabaseService {
           WHERE id = ?
         ''', [newPaid, newStatus.name, nowIso, entry.id]);
 
+        final ayId = academicYear.startsWith('ay-') ? academicYear : 'ay-$academicYear';
+        
         // Create a matching invoice linked to this ledger entry
         final invoiceId = const Uuid().v4();
         await _insertLogged(txn, 'invoices', {
           'id': invoiceId,
           'student_id': studentId,
-          'academic_year_id': academicYear,
+          'academic_year_id': ayId,
           'total_amount': allocate,
           'discount_amount': 0.0,
           'penalty_amount': 0.0,
@@ -1964,7 +2168,6 @@ class DatabaseService {
           'description': 'Ledger payment: ${entry.feeHeadName ?? entry.feeHeadId} (Student: $studentId)',
           'reference_id': transactionId,
           'created_at': nowIso,
-          'updated_at': nowIso,
         });
 
         // Update student balance
@@ -2045,12 +2248,12 @@ class DatabaseService {
   // ============================================================================
 
   /// Class-wise dues summary: returns list of {class_name, total_students, total_due, total_paid, outstanding_balance}
-  Future<List<Map<String, dynamic>>> getClassWiseDuesSummary(String academicYear) async {
+  Future<List<Map<String, dynamic>>> getClassWiseDuesSummary(String academicYear, {String? feeHeadId}) async {
     final db = await _db;
     final classes = await getAllClasses();
     if (classes.isEmpty) {
       // Fallback: group by students.grade_level if classes master is empty
-      return await db.rawQuery('''
+      String query = '''
         SELECT
           s.grade_level as class_name,
           COUNT(DISTINCT s.id) as total_students,
@@ -2059,15 +2262,23 @@ class DatabaseService {
           COALESCE(SUM(sfl.amount_due) - SUM(sfl.amount_paid), 0.0) as outstanding_balance
         FROM students s
         LEFT JOIN student_fee_ledger sfl ON sfl.student_id = s.id AND sfl.academic_year = ?
+      ''';
+      final args = <Object?>[academicYear];
+      if (feeHeadId != null) {
+        query += ' AND sfl.fee_head_id = ?';
+        args.add(feeHeadId);
+      }
+      query += '''
         WHERE s.grade_level IS NOT NULL AND s.grade_level != ''
         GROUP BY s.grade_level
         ORDER BY s.grade_level ASC
-      ''', [academicYear]);
+      ''';
+      return await db.rawQuery(query, args);
     }
 
     final results = <Map<String, dynamic>>[];
     for (final cls in classes) {
-      final rows = await db.rawQuery('''
+      String query = '''
         SELECT
           COUNT(DISTINCT s.id) as total_students,
           COALESCE(SUM(sfl.amount_due), 0.0) as total_due,
@@ -2075,8 +2286,18 @@ class DatabaseService {
           COALESCE(SUM(sfl.amount_due) - SUM(sfl.amount_paid), 0.0) as outstanding_balance
         FROM students s
         LEFT JOIN student_fee_ledger sfl ON sfl.student_id = s.id AND sfl.academic_year = ?
+      ''';
+      final args = <Object?>[academicYear];
+      if (feeHeadId != null) {
+        query += ' AND sfl.fee_head_id = ?';
+        args.add(feeHeadId);
+      }
+      query += '''
         WHERE s.class_id = ? OR s.grade_level = ?
-      ''', [academicYear, cls.id, cls.name]);
+      ''';
+      args.addAll([cls.id, cls.name]);
+
+      final rows = await db.rawQuery(query, args);
 
       final row = rows.first;
       results.add({
@@ -2100,6 +2321,8 @@ class DatabaseService {
         s.first_name || ' ' || s.last_name as student_name,
         s.grade_level,
         s.roll_number,
+        s.father_phone,
+        s.mother_phone,
         COUNT(sfl.id) as overdue_count,
         SUM(sfl.amount_due - sfl.amount_paid) as total_overdue_amount,
         MIN(sfl.due_date) as oldest_due_date
@@ -2149,6 +2372,87 @@ class DatabaseService {
     ''';
 
     return await db.rawQuery(query, args);
+  }
+
+  /// Get detailed date-wise fee collection report with filters
+  Future<Map<String, dynamic>> getDateWiseFeeReport(
+    String academicYear,
+    DateTime startDate,
+    DateTime endDate, {
+    String? classId,
+    String? sectionId,
+    String? feeHeadId,
+  }) async {
+    final db = await _db;
+    final args = <dynamic>[
+      startDate.toIso8601String(),
+      endDate.toIso8601String(),
+    ];
+
+    String query = '''
+      SELECT 
+        t.id as transaction_id,
+        t.timestamp as date,
+        s.first_name || ' ' || s.last_name as student_name,
+        COALESCE(c.name, s.grade_level) as class_name,
+        COALESCE(sec.name, s.section) as section_name,
+        fh.id as fee_head_id, 
+        fh.name as fee_head_name,
+        t.amount_paid,
+        t.payment_method,
+        t.reference_number
+      FROM transactions t
+      JOIN invoices i ON t.invoice_id = i.id
+      JOIN students s ON i.student_id = s.id
+      LEFT JOIN classes c ON s.class_id = c.id
+      LEFT JOIN sections sec ON s.section_id = sec.id
+      LEFT JOIN student_fee_ledger sfl ON i.ledger_id = sfl.id
+      LEFT JOIN fee_heads fh ON (sfl.fee_head_id = fh.id OR i.fee_head_id = fh.id)
+      WHERE t.timestamp >= ? AND t.timestamp <= ?
+    ''';
+
+    // Invoices might use 'ay-2024-2025' or '2024-2025'
+    final ayStr = academicYear.startsWith('ay-') ? academicYear : 'ay-$academicYear';
+    query += ' AND (i.academic_year_id = ? OR i.academic_year_id = ?)';
+    args.addAll([academicYear, ayStr]);
+
+    if (classId != null && classId.isNotEmpty) {
+      query += ' AND (s.class_id = ? OR s.grade_level = (SELECT name FROM classes WHERE id = ?))';
+      args.addAll([classId, classId]);
+    }
+    if (sectionId != null && sectionId.isNotEmpty) {
+      query += ' AND s.section_id = ?';
+      args.add(sectionId);
+    }
+    if (feeHeadId != null && feeHeadId.isNotEmpty) {
+      query += ' AND fh.id = ?';
+      args.add(feeHeadId);
+    }
+
+    query += ' ORDER BY t.timestamp DESC';
+
+    final rows = await db.rawQuery(query, args);
+
+    double totalRevenue = 0.0;
+    final Map<String, double> headBreakdown = {};
+    final Map<String, double> methodBreakdown = {};
+
+    for (final row in rows) {
+      final amt = (row['amount_paid'] as num?)?.toDouble() ?? 0.0;
+      final head = (row['fee_head_name'] as String?) ?? 'Other / Uncategorized';
+      final method = (row['payment_method'] as String?)?.toUpperCase() ?? 'UNKNOWN';
+
+      totalRevenue += amt;
+      headBreakdown[head] = (headBreakdown[head] ?? 0.0) + amt;
+      methodBreakdown[method] = (methodBreakdown[method] ?? 0.0) + amt;
+    }
+
+    return {
+      'totalRevenue': totalRevenue,
+      'headBreakdown': headBreakdown,
+      'methodBreakdown': methodBreakdown,
+      'transactions': rows,
+    };
   }
 
   /// Generate next sequential receipt number in format RCT-{year}-{sequential}
@@ -2695,8 +2999,8 @@ class DatabaseService {
     if (exam == null) return [];
 
     // 2. Fetch enrolled students matching class and optional section
-    final whereClauses = <String>['(grade_level = ? OR grade_level = ?)'];
-    final whereArgs = <dynamic>[exam.className, exam.className];
+    final whereClauses = <String>['(grade_level = ? OR class_id = ? OR class_id = (SELECT id FROM classes WHERE name = ?))'];
+    final whereArgs = <dynamic>[exam.className, exam.className, exam.className];
 
     if (exam.section != null && exam.section!.isNotEmpty && exam.section != 'All') {
       whereClauses.add('(section = ? OR section IS NULL)');
@@ -2861,7 +3165,6 @@ class DatabaseService {
   /// Phase 3: computeExamResult(examId, studentId) — sums marks_obtained across exam_subjects,
   /// computes percent, applies computeGrade, flags pass/fail per subject and overall.
   Future<ExamResultData?> computeExamResult(String examId, String studentId) async {
-    final db = await _db;
     final exam = await getExamById(examId);
     if (exam == null) return null;
 
@@ -3383,7 +3686,7 @@ class DatabaseService {
       final now = DateTime.now().toIso8601String();
       for (var studentRow in studentsResult) {
         final studentId = studentRow['id'] as String;
-        final attendanceId = 'att-${DateTime.now().microsecondsSinceEpoch}'; // Using micro to avoid collisions in loop
+        final attendanceId = 'att-${const Uuid().v4()}';
         
         await _insertLogged(txn, 
           'student_attendance',
@@ -3795,49 +4098,68 @@ class DatabaseService {
     
     return {
       'monthly_status': monthStatus,
-      'monthly_ledgers': monthlyLedgers,
+      'monthly_ledgers': monthGroups,
       'non_monthly': nonMonthlyLedgers,
     };
   }
 
   /// Returns a students x months grid with status per cell for an entire class.
   /// List of Map with 'student_id', 'student_name', and 'monthly_matrix'
-  Future<List<Map<String, dynamic>>> getClassMonthlyCollectionMatrix(String className, String section, String academicYear) async {
+  Future<List<Map<String, dynamic>>> getClassMonthlyCollectionMatrix(String className, String section, String academicYear, {String? feeHeadId}) async {
     final db = await _db;
     
     // Get all active students in class
-    final studentsData = await db.query(
-      'students',
-      where: 'grade_level = ? AND section = ? AND is_active = 1',
-      whereArgs: [className, section],
-    );
+    final studentsData = await db.rawQuery('''
+      SELECT * FROM students 
+      WHERE (grade_level = ? OR class_id IN (SELECT id FROM classes WHERE name = ?))
+      AND section = ? 
+      AND COALESCE(is_active, 1) = 1
+    ''', [className, className, section]);
     
     final studentIds = studentsData.map((s) => s['id'] as String).toList();
     if (studentIds.isEmpty) return [];
     
     // Get all monthly ledger rows for these students
     final placeholders = List.filled(studentIds.length, '?').join(',');
-    final queryArgs = [...studentIds, academicYear, 'monthly'];
+    final queryArgs = <Object?>[...studentIds, academicYear];
     
-    final ledgerData = await db.rawQuery('''
-      SELECT sfl.student_id, sfl.month_label, sfl.status 
+    String query = '''
+      SELECT sfl.student_id, sfl.month_label, sfl.status, sfl.amount_due, sfl.amount_paid
       FROM student_fee_ledger sfl
       JOIN fee_heads fh ON sfl.fee_head_id = fh.id
       WHERE sfl.student_id IN ($placeholders) 
       AND sfl.academic_year = ? 
-      AND fh.frequency = ?
       AND sfl.month_label IS NOT NULL
-    ''', queryArgs);
+    ''';
+
+    if (feeHeadId != null) {
+      query += ' AND fh.id = ?';
+      queryArgs.add(feeHeadId);
+    } else {
+      query += ' AND fh.frequency = ?';
+      queryArgs.add('monthly');
+    }
+
+    final ledgerData = await db.rawQuery(query, queryArgs);
     
     // Group by student, then by month
-    Map<String, Map<String, List<String>>> rawMatrix = {};
+    Map<String, Map<String, List<Map<String, dynamic>>>> rawMatrix = {};
     for (final row in ledgerData) {
       final sId = row['student_id'] as String;
       final mLabel = row['month_label'] as String;
       final status = row['status'] as String;
+      final amtDue = (row['amount_due'] as num?)?.toDouble() ?? 0.0;
+      final amtPaid = (row['amount_paid'] as num?)?.toDouble() ?? 0.0;
+      
+      // month_label is like "April 2024" or "April"
+      String shortMonth = mLabel.length >= 3 ? mLabel.substring(0, 3) : mLabel;
       
       rawMatrix.putIfAbsent(sId, () => {});
-      rawMatrix[sId]!.putIfAbsent(mLabel, () => []).add(status);
+      rawMatrix[sId]!.putIfAbsent(shortMonth, () => []).add({
+        'status': status,
+        'amount_due': amtDue,
+        'amount_paid': amtPaid,
+      });
     }
     
     // Summarize status per month per student
@@ -3848,20 +4170,36 @@ class DatabaseService {
       final lastName = student['last_name'] as String;
       final studentName = '$firstName $lastName';
       
-      Map<String, String> studentMatrix = {};
+      Map<String, dynamic> studentMatrix = {};
       
       if (rawMatrix.containsKey(sId)) {
         for (final monthEntry in rawMatrix[sId]!.entries) {
-          bool hasOverdue = monthEntry.value.contains('overdue');
-          bool hasPendingOrPartial = monthEntry.value.contains('pending') || monthEntry.value.contains('partial');
+          bool hasOverdue = false;
+          bool hasPendingOrPartial = false;
+          double totalDue = 0.0;
+          double totalPaid = 0.0;
           
-          if (hasOverdue) {
-            studentMatrix[monthEntry.key] = 'overdue';
-          } else if (hasPendingOrPartial) {
-            studentMatrix[monthEntry.key] = 'pending';
-          } else {
-            studentMatrix[monthEntry.key] = 'paid';
+          for (final item in monthEntry.value) {
+            final st = item['status'] as String;
+            totalDue += item['amount_due'] as double;
+            totalPaid += item['amount_paid'] as double;
+            
+            if (st == 'overdue') hasOverdue = true;
+            if (st == 'pending' || st == 'partial') hasPendingOrPartial = true;
           }
+          
+          String finalStatus = 'paid';
+          if (hasOverdue) {
+            finalStatus = 'overdue';
+          } else if (hasPendingOrPartial) {
+            finalStatus = 'pending';
+          }
+          
+          studentMatrix[monthEntry.key] = {
+            'status': finalStatus,
+            'amount_due': totalDue,
+            'amount_paid': totalPaid,
+          };
         }
       }
       
@@ -4003,6 +4341,7 @@ class DatabaseService {
   // --- Audit Logging Helpers ---
 
   Future<void> logAction({
+    DatabaseExecutor? executor,
     required String actionType,
     required String module,
     String? entityType,
@@ -4013,7 +4352,7 @@ class DatabaseService {
   }) async {
     if (currentAdminId == null) return;
     
-    final db = await rawDb;
+    final db = executor ?? await rawDb;
     await db.rawInsert(
       'INSERT INTO audit_logs (id, admin_user_id, action_type, module, entity_type, entity_id, description, old_value, new_value, timestamp) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
       [
@@ -4037,6 +4376,7 @@ class DatabaseService {
     String? entityId = values['id']?.toString() ?? id.toString();
     
     await logAction(
+      executor: executor,
       actionType: 'create',
       module: table,
       entityType: table,
@@ -4062,6 +4402,7 @@ class DatabaseService {
     
     if (count > 0) {
       await logAction(
+        executor: executor,
         actionType: 'update',
         module: table,
         entityType: table,
@@ -4089,6 +4430,7 @@ class DatabaseService {
     
     if (count > 0) {
       await logAction(
+        executor: executor,
         actionType: 'delete',
         module: table,
         entityType: table,

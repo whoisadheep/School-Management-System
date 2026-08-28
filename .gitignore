@@ -46,3 +46,12 @@ app.*.map.json
 
 # Database
 *.db
+
+# Environment variables
+.env
+
+# Node modules
+node_modules/
+
+# Installers
+*.exe

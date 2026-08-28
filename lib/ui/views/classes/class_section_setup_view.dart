@@ -244,6 +244,17 @@ class _ClassSectionSetupViewState extends ConsumerState<ClassSectionSetupView> {
                                                         onPressed: () async {
                                                           if (!PermissionHelper.requireAdminRole(context, ref, RiskyAction.deleteRecord)) return;
                                                           final dbService = ref.read(databaseServiceProvider);
+                                                          
+                                                          final count = await dbService.getStudentCountForSection(sec.id);
+                                                          if (count > 0) {
+                                                            if (context.mounted) {
+                                                              ScaffoldMessenger.of(context).showSnackBar(
+                                                                SnackBar(content: Text('Cannot delete section with $count enrolled student(s).'), backgroundColor: AppTheme.error),
+                                                              );
+                                                            }
+                                                            return;
+                                                          }
+
                                                           await dbService.deleteSection(sec.id);
                                                           ref.invalidate(sectionsForClassProvider(classModel.id));
                                                         },
@@ -479,7 +490,7 @@ class _ClassSectionSetupViewState extends ConsumerState<ClassSectionSetupView> {
           content: SizedBox(
             width: 400,
             child: DropdownButtonFormField<String?>(
-              initialValue: selectedStaffId,
+              value: selectedStaffId,
               style: GoogleFonts.poppins(color: AppTheme.textPrimary),
               decoration: const InputDecoration(labelText: 'Select Class Teacher *'),
               items: [
@@ -516,7 +527,37 @@ class _ClassSectionSetupViewState extends ConsumerState<ClassSectionSetupView> {
     );
   }
 
-  void _confirmDeleteClass(BuildContext context, ClassModel classModel) {
+  Future<void> _confirmDeleteClass(BuildContext context, ClassModel classModel) async {
+    final dbService = ref.read(databaseServiceProvider);
+    
+    // Check if any sections have students
+    final sections = await dbService.getSectionsForClass(classModel.id);
+    int totalStudents = 0;
+    for (final sec in sections) {
+      totalStudents += await dbService.getStudentCountForSection(sec.id);
+    }
+
+    if (!context.mounted) return;
+
+    if (totalStudents > 0) {
+      showDialog(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: Text('Cannot Delete Class', style: GoogleFonts.poppins(fontWeight: FontWeight.bold)),
+          content: Text('This class currently has $totalStudents student(s) enrolled across its sections. You must reassign or remove these students before deleting the class.',
+              style: GoogleFonts.poppins(fontSize: 13)),
+          actions: [
+            ElevatedButton(
+              onPressed: () => Navigator.pop(context),
+              style: ElevatedButton.styleFrom(backgroundColor: AppTheme.primaryPurple, foregroundColor: Colors.white),
+              child: const Text('Okay'),
+            ),
+          ],
+        ),
+      );
+      return;
+    }
+
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
@@ -527,7 +568,6 @@ class _ClassSectionSetupViewState extends ConsumerState<ClassSectionSetupView> {
           TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
           ElevatedButton(
             onPressed: () async {
-              final dbService = ref.read(databaseServiceProvider);
               await dbService.deleteClass(classModel.id);
               ref.invalidate(classListProvider);
 

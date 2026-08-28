@@ -281,7 +281,18 @@ class _CatalogTabState extends ConsumerState<_CatalogTab> {
                     onChanged: (v) => setStateDialog(() => categoryId = v),
                   ),
                   const SizedBox(height: 12),
-                  TextField(controller: unitCtrl, decoration: const InputDecoration(labelText: 'Unit (e.g., pcs, kg)')),
+                  DropdownButtonFormField<String>(
+                    value: unitCtrl.text.isEmpty ? 'piece' : unitCtrl.text,
+                    decoration: const InputDecoration(labelText: 'Unit'),
+                    items: const [
+                      DropdownMenuItem(value: 'piece', child: Text('Piece')),
+                      DropdownMenuItem(value: 'box', child: Text('Box')),
+                      DropdownMenuItem(value: 'kg', child: Text('Kg')),
+                      DropdownMenuItem(value: 'litre', child: Text('Litre')),
+                      DropdownMenuItem(value: 'set', child: Text('Set')),
+                    ],
+                    onChanged: (v) => setStateDialog(() => unitCtrl.text = v!),
+                  ),
                   const SizedBox(height: 12),
                   TextField(controller: currentStockCtrl, decoration: const InputDecoration(labelText: 'Current Stock'), keyboardType: TextInputType.number, enabled: !isEdit),
                   const SizedBox(height: 12),
@@ -301,35 +312,38 @@ class _CatalogTabState extends ConsumerState<_CatalogTab> {
             ),
             ElevatedButton(
               onPressed: () async {
-                if (nameCtrl.text.isEmpty || unitCtrl.text.isEmpty || categoryId == null) return;
-                
-                final dbService = ref.read(databaseServiceProvider);
-                final newItem = InventoryItem(
-                  id: isEdit ? item.id : const Uuid().v4(),
-                  name: nameCtrl.text,
-                  categoryId: categoryId!,
-                  unit: unitCtrl.text,
-                  currentStock: double.tryParse(currentStockCtrl.text) ?? 0,
-                  reorderThreshold: double.tryParse(reorderThresholdCtrl.text) ?? 5,
-                  unitCost: double.tryParse(unitCostCtrl.text),
-                  storageLocation: locationCtrl.text,
-                );
-
+                if (nameCtrl.text.isEmpty || unitCtrl.text.isEmpty || categoryId == null) {
+                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Name, Category, and Unit are required')));
+                  return;
+                }
                 try {
+                  final newItem = InventoryItem(
+                    id: isEdit ? item.id : const Uuid().v4(),
+                    name: nameCtrl.text.trim(),
+                    categoryId: categoryId!,
+                    unit: unitCtrl.text.trim(),
+                    currentStock: double.tryParse(currentStockCtrl.text) ?? 0,
+                    reorderThreshold: double.tryParse(reorderThresholdCtrl.text) ?? 5,
+                    unitCost: double.tryParse(unitCostCtrl.text),
+                    storageLocation: locationCtrl.text.trim(),
+                  );
+
                   if (isEdit) {
-                    await dbService.updateInventoryItem(newItem);
+                    await ref.read(databaseServiceProvider).updateInventoryItem(newItem);
                   } else {
-                    await dbService.createInventoryItem(newItem);
+                    await ref.read(databaseServiceProvider).createInventoryItem(newItem);
                   }
                   ref.invalidate(inventoryItemsProvider);
                   ref.invalidate(lowStockItemsProvider);
                   if (context.mounted) Navigator.pop(context);
                 } catch (e) {
-                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
+                  if (context.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
+                  }
                 }
               },
-              style: ElevatedButton.styleFrom(backgroundColor: AppTheme.primaryPurple, foregroundColor: Colors.white),
-              child: const Text('Save'),
+              style: ElevatedButton.styleFrom(backgroundColor: AppTheme.primaryPurple),
+              child: const Text('Save', style: TextStyle(color: AppTheme.textOnPrimary)),
             ),
           ],
         ),
@@ -410,8 +424,9 @@ class _StockEntryTabState extends ConsumerState<_StockEntryTab> {
                     value: _issuedToType,
                     decoration: const InputDecoration(labelText: 'Issued To Type', border: OutlineInputBorder()),
                     items: const [
-                      DropdownMenuItem(value: 'Student', child: Text('Student')),
-                      DropdownMenuItem(value: 'Staff', child: Text('Staff')),
+                      DropdownMenuItem(value: 'staff', child: Text('Staff')),
+                      DropdownMenuItem(value: 'class', child: Text('Class')),
+                      DropdownMenuItem(value: 'department', child: Text('Department')),
                     ],
                     onChanged: (v) => setState(() => _issuedToType = v),
                   ),

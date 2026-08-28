@@ -2,6 +2,8 @@ import 'dart:math';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/models.dart';
 import '../services/services.dart';
+import 'services_provider.dart';
+import 'dashboard_provider.dart';
 
 class AdmissionState {
   final int currentStep;
@@ -153,8 +155,9 @@ class AdmissionState {
 
 class AdmissionFormNotifier extends StateNotifier<AdmissionState> {
   final DatabaseService _dbService;
+  final Ref ref;
 
-  AdmissionFormNotifier({DatabaseService? dbService})
+  AdmissionFormNotifier({DatabaseService? dbService, required this.ref})
       : _dbService = dbService ?? DatabaseService(),
         super(AdmissionState());
 
@@ -328,6 +331,9 @@ class AdmissionFormNotifier extends StateNotifier<AdmissionState> {
 
       await _dbService.insertStudent(student);
 
+      ref.invalidate(studentsListProvider);
+      ref.invalidate(dashboardMetricsProvider);
+
       // Reset draft state after successful admission
       resetForm();
       return true;
@@ -343,5 +349,5 @@ class AdmissionFormNotifier extends StateNotifier<AdmissionState> {
 }
 
 final admissionFormProvider = StateNotifierProvider<AdmissionFormNotifier, AdmissionState>((ref) {
-  return AdmissionFormNotifier();
+  return AdmissionFormNotifier(ref: ref);
 });

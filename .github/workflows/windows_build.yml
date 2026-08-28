@@ -1,16 +1,30 @@
-name: Build Windows App
+name: Auto-Release Windows App
 
 on:
   push:
-    branches: [ "main" ]
+    paths:
+      - 'version.json' # Triggers only when version.json is updated
+    branches:
+      - main
   workflow_dispatch:
 
 jobs:
-  build:
+  build-and-release:
     runs-on: windows-latest
+    permissions:
+      contents: write
 
     steps:
-      - uses: actions/checkout@v3
+      - name: Checkout Code
+        uses: actions/checkout@v3
+
+      - name: Read version from version.json
+        id: get_version
+        run: |
+          $json = Get-Content version.json | ConvertFrom-Json
+          $version = $json.latest_version
+          echo "VERSION=$version" >> $env:GITHUB_ENV
+          echo "CHANGELOG=$($json.changelog)" >> $env:GITHUB_ENV
 
       - name: Set up Flutter
         uses: subosito/flutter-action@v2
@@ -23,11 +37,17 @@ jobs:
       - name: Build Windows release
         run: flutter build windows --release
 
-      - name: Zip the output
-        run: Compress-Archive -Path build\windows\x64\runner\Release\* -DestinationPath SchoolManagementSystem_Windows.zip
+      - name: Build Inno Setup Installer
+        run: |
+          # Use Inno Setup command line compiler to build the installer.iss script
+          iscc installer.iss
 
-      - name: Upload Artifact
-        uses: actions/upload-artifact@v3
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
         with:
-          name: SchoolManagementSystem-Windows-Build
-          path: SchoolManagementSystem_Windows.zip
+          tag_name: v${{ env.VERSION }}
+          name: Release v${{ env.VERSION }}
+          body: ${{ env.CHANGELOG }}
+          files: build/windows/installer/SchoolManagementSystem-Installer.exe
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

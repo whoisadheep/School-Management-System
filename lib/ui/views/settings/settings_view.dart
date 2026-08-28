@@ -10,14 +10,14 @@ import '../../../providers/services_provider.dart';
 import '../../../services/backup_service.dart';
 import '../../../services/settings_service.dart';
 import '../../../services/app_logger.dart';
+import 'data_import_view.dart';
 
 final backupsListProvider = FutureProvider<List<BackupFileInfo>>((ref) async {
   final backupService = BackupService();
   return await backupService.listAvailableBackups();
 });
 
-// ── Settings Tab Enum ──
-enum _SettingsTab { schoolProfile, exportPaths, database, modules, about }
+enum _SettingsTab { schoolProfile, exportPaths, database, modules, about, dataImport }
 
 class SettingsView extends ConsumerStatefulWidget {
   const SettingsView({super.key});
@@ -69,7 +69,7 @@ class _SettingsViewState extends ConsumerState<SettingsView>
     final backupPath =
         await _settingsService.getSetting('backup_export_path') ?? '';
     final schoolName = await _settingsService.getSetting('school_name') ??
-        'EXCELLENCE ACADEMY SCHOOL';
+        'Kishan Company';
     final schoolAddress =
         await _settingsService.getSetting('school_address') ??
             '123 Education Boulevard, Academic District';
@@ -274,6 +274,12 @@ class _SettingsViewState extends ConsumerState<SettingsView>
                   tab: _SettingsTab.modules,
                 ),
                 _buildNavItem(
+                  icon: Icons.import_export_rounded,
+                  label: 'Data Import',
+                  subtitle: 'Import from CSV/Excel',
+                  tab: _SettingsTab.dataImport,
+                ),
+                _buildNavItem(
                   icon: Icons.info_outline_rounded,
                   label: 'About',
                   subtitle: 'System Information',
@@ -433,6 +439,8 @@ class _SettingsViewState extends ConsumerState<SettingsView>
         return _buildModulesTab();
       case _SettingsTab.about:
         return _buildAboutTab();
+      case _SettingsTab.dataImport:
+        return const DataImportView();
     }
   }
 
@@ -551,7 +559,7 @@ class _SettingsViewState extends ConsumerState<SettingsView>
               _buildSettingsField(
                 controller: _schoolNameController,
                 label: 'Official School Name',
-                hint: 'e.g. EXCELLENCE ACADEMY SCHOOL',
+                hint: 'e.g. Kishan Company',
                 icon: Icons.business_rounded,
                 helper:
                     'Printed at the top of all A4 fee receipts and ID cards.',

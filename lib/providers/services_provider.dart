@@ -274,6 +274,12 @@ final feeHeadsProvider = FutureProvider<List<FeeHead>>((ref) async {
   return await dbService.getAllFeeHeads();
 });
 
+/// All classes provider
+final classesProvider = FutureProvider<List<ClassModel>>((ref) async {
+  final dbService = ref.watch(databaseServiceProvider);
+  return await dbService.getAllClasses();
+});
+
 class ClassYearParam {
   final String className;
   final String academicYear;
@@ -360,13 +366,13 @@ final studentNetFeeBreakdownProvider = FutureProvider.family<List<StudentNetFeeB
 // ============================================================================
 
 /// Student Fee Ledger Provider — returns all ledger entries for a student + academic year
-final studentFeeLedgerProvider = FutureProvider.family<List<StudentFeeLedger>, StudentYearParam>((ref, param) async {
+final studentFeeLedgerProvider = FutureProvider.family.autoDispose<List<StudentFeeLedger>, StudentYearParam>((ref, param) async {
   final dbService = ref.watch(databaseServiceProvider);
   return await dbService.getStudentFeeLedger(param.studentId, param.academicYear);
 });
 
 /// Student Ledger Summary Provider — returns {total_due, total_paid, total_overdue}
-final studentLedgerSummaryProvider = FutureProvider.family<Map<String, double>, StudentYearParam>((ref, param) async {
+final studentLedgerSummaryProvider = FutureProvider.family.autoDispose<Map<String, double>, StudentYearParam>((ref, param) async {
   final dbService = ref.watch(databaseServiceProvider);
   return await dbService.getStudentLedgerSummary(param.studentId, param.academicYear);
 });
@@ -374,10 +380,27 @@ final studentLedgerSummaryProvider = FutureProvider.family<Map<String, double>, 
 // FEE REPORTING PROVIDERS (PHASE 4)
 // ============================================================================
 
+class ClassWiseDuesParam {
+  final String academicYear;
+  final String? feeHeadId;
+
+  const ClassWiseDuesParam({required this.academicYear, this.feeHeadId});
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is ClassWiseDuesParam &&
+          other.academicYear == academicYear &&
+          other.feeHeadId == feeHeadId);
+
+  @override
+  int get hashCode => academicYear.hashCode ^ feeHeadId.hashCode;
+}
+
 /// Class-wise dues summary provider
-final classWiseDuesSummaryProvider = FutureProvider.family<List<Map<String, dynamic>>, String>((ref, academicYear) async {
+final classWiseDuesSummaryProvider = FutureProvider.family<List<Map<String, dynamic>>, ClassWiseDuesParam>((ref, param) async {
   final dbService = ref.watch(databaseServiceProvider);
-  return await dbService.getClassWiseDuesSummary(academicYear);
+  return await dbService.getClassWiseDuesSummary(param.academicYear, feeHeadId: param.feeHeadId);
 });
 
 /// Overdue students list provider

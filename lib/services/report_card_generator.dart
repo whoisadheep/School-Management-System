@@ -12,7 +12,7 @@ class ReportCardGenerator {
   static Future<File> generateReportCard({
     required ExamResultData examResult,
     int? rankInClass,
-    String schoolName = 'EXCELLENCE ACADEMY SCHOOL',
+    String schoolName = 'Kishan Company',
     String schoolAddress = '123 Education Boulevard, Academic District',
     String schoolContact = 'Phone: +1 800 555-0199 | Email: exams@school.edu',
   }) async {

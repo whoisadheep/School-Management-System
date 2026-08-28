@@ -11,6 +11,7 @@ import '../views/students/student_directory_view.dart';
 import '../views/staff/staff_directory_view.dart';
 import '../views/auth/login_view.dart';
 import '../views/auth/password_change_view.dart';
+import '../views/auth/security_question_setup_view.dart';
 import '../views/classes/class_section_setup_view.dart';
 import '../views/dashboard/dashboard_view.dart';
 import '../views/expenses/expenses_view.dart';
@@ -71,6 +72,11 @@ class _MainLayoutState extends ConsumerState<MainLayout> {
 
     if (authState.forcePasswordChange) {
       return const PasswordChangeView();
+    }
+
+    final securityQuestionPending = ref.watch(securityQuestionPendingProvider);
+    if (securityQuestionPending) {
+      return const SecurityQuestionSetupView();
     }
 
     final selectedTab = ref.watch(selectedTabProvider);

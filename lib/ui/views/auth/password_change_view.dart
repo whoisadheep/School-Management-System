@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../../providers/auth_provider.dart';
 import '../../../core/theme/app_theme.dart';
+import 'security_question_setup_view.dart';
 
 class PasswordChangeView extends ConsumerStatefulWidget {
   const PasswordChangeView({super.key});
@@ -19,7 +20,10 @@ class _PasswordChangeViewState extends ConsumerState<PasswordChangeView> {
   Future<void> _submit() async {
     if (_formKey.currentState!.validate()) {
       final success = await ref.read(authProvider.notifier).changePassword(_newPasswordController.text);
-      if (!success && mounted) {
+      if (success && mounted) {
+        // Trigger security question setup
+        ref.read(securityQuestionPendingProvider.notifier).state = true;
+      } else if (!success && mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Failed to change password. Please try again.')),
         );

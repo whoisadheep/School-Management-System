@@ -682,11 +682,24 @@ class _AdmissionViewState extends ConsumerState<AdmissionView> {
                     Row(
                       children: [
                         Expanded(
-                          child: _buildDropdownField(
-                            label: 'Transport Facility Route',
-                            value: state.transportRouteId,
-                            items: ['None', 'Route 1 - North City', 'Route 2 - South Express', 'Route 3 - Central Loop'],
-                            onChanged: (val) => notifier.updateTransportRouteId(val!),
+                          child: Consumer(
+                            builder: (context, ref, child) {
+                              final routesAsync = ref.watch(routesListProvider);
+                              final Map<String, String> routeMap = {'None': 'None'};
+                              
+                              if (routesAsync.value != null) {
+                                for (final r in routesAsync.value!) {
+                                  routeMap[r.id] = r.routeName;
+                                }
+                              }
+                              
+                              return _buildMapDropdownField(
+                                label: 'Transport Facility Route',
+                                value: state.transportRouteId,
+                                items: routeMap,
+                                onChanged: (val) => notifier.updateTransportRouteId(val!),
+                              );
+                            },
                           ),
                         ),
                         const SizedBox(width: 16),
@@ -734,7 +747,17 @@ class _AdmissionViewState extends ConsumerState<AdmissionView> {
                       _buildSummaryRow('Primary Parent', state.fatherName.isNotEmpty ? state.fatherName : state.motherName),
                       _buildSummaryRow('Contact Phone', state.primaryContactNumber.isNotEmpty ? state.primaryContactNumber : state.fatherPhone),
                       _buildSummaryRow('Residential Address', state.residentialAddress.isNotEmpty ? state.residentialAddress : "Not provided"),
-                      _buildSummaryRow('Transport / Hostel', '${state.transportRouteId} / ${state.hostelId}'),
+                      Consumer(
+                        builder: (context, ref, child) {
+                          final routesAsync = ref.watch(routesListProvider);
+                          final dynamic route = routesAsync.value?.cast<dynamic>().firstWhere(
+                            (r) => r.id == state.transportRouteId,
+                            orElse: () => null,
+                          );
+                          final routeName = route?.routeName ?? state.transportRouteId;
+                          return _buildSummaryRow('Transport / Hostel', '$routeName / ${state.hostelId}');
+                        }
+                      ),
                     ],
                   ),
                 ),
@@ -816,7 +839,7 @@ class _AdmissionViewState extends ConsumerState<AdmissionView> {
         Text(label, style: const TextStyle(color: Color(0xFF757575), fontSize: 11, fontWeight: FontWeight.bold)),
         const SizedBox(height: 6),
         DropdownButtonFormField<String>(
-          initialValue: items.contains(value) ? value : items.first,
+          value: items.contains(value) ? value : items.first,
           dropdownColor: Colors.white,
           style: const TextStyle(color: AppTheme.textPrimary, fontSize: 13),
           onChanged: onChanged,
@@ -831,6 +854,39 @@ class _AdmissionViewState extends ConsumerState<AdmissionView> {
           ),
           items: items.map((item) {
             return DropdownMenuItem(value: item, child: Text(item));
+          }).toList(),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildMapDropdownField({
+    required String label,
+    required String value,
+    required Map<String, String> items,
+    required ValueChanged<String?> onChanged,
+  }) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(label, style: const TextStyle(color: Color(0xFF757575), fontSize: 11, fontWeight: FontWeight.bold)),
+        const SizedBox(height: 6),
+        DropdownButtonFormField<String>(
+          value: items.containsKey(value) ? value : items.keys.first,
+          dropdownColor: Colors.white,
+          style: const TextStyle(color: AppTheme.textPrimary, fontSize: 13),
+          onChanged: onChanged,
+          decoration: InputDecoration(
+            filled: true,
+            fillColor: Colors.white,
+            contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(8),
+              borderSide: const BorderSide(color: Color(0xFFEEEEEE)),
+            ),
+          ),
+          items: items.entries.map((entry) {
+            return DropdownMenuItem(value: entry.key, child: Text(entry.value));
           }).toList(),
         ),
       ],

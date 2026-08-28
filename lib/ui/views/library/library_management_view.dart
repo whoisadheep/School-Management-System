@@ -188,16 +188,26 @@ class _CatalogTabState extends ConsumerState<_CatalogTab> {
           ),
           ElevatedButton(
             onPressed: () async {
-              final copies = int.tryParse(totalCopiesCtrl.text) ?? 1;
-              final book = Book.create(
-                title: titleCtrl.text,
-                author: authorCtrl.text,
-                totalCopies: copies,
-                rackLocation: rackCtrl.text,
-              );
-              await ref.read(databaseServiceProvider).createBook(book);
-              ref.invalidate(allBooksProvider);
-              if (context.mounted) Navigator.pop(context);
+              if (titleCtrl.text.trim().isEmpty || authorCtrl.text.trim().isEmpty) {
+                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Title and Author are required')));
+                return;
+              }
+              try {
+                final copies = int.tryParse(totalCopiesCtrl.text) ?? 1;
+                final book = Book.create(
+                  title: titleCtrl.text.trim(),
+                  author: authorCtrl.text.trim(),
+                  totalCopies: copies,
+                  rackLocation: rackCtrl.text.trim(),
+                );
+                await ref.read(databaseServiceProvider).createBook(book);
+                ref.invalidate(allBooksProvider);
+                if (context.mounted) Navigator.pop(context);
+              } catch (e) {
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
+                }
+              }
             },
             style: ElevatedButton.styleFrom(backgroundColor: AppTheme.primaryPurple),
             child: const Text('Add', style: TextStyle(color: AppTheme.textOnPrimary)),
@@ -243,7 +253,7 @@ class _IssueBookTabState extends ConsumerState<_IssueBookTab> {
                 const Text('Issue Book', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: AppTheme.textPrimary)),
                 const SizedBox(height: 24),
                 DropdownButtonFormField<String>(
-                  initialValue: _borrowerType,
+                  value: _borrowerType,
                   decoration: InputDecoration(
                     labelText: 'Borrower Type',
                     border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),

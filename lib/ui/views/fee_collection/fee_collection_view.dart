@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
+import 'package:url_launcher/url_launcher.dart';
+import '../../../services/ai_message_service.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../models/models.dart';
 import '../../../providers/fee_collection_provider.dart';
@@ -11,6 +13,7 @@ import '../../../providers/license_provider.dart';
 import '../../../providers/services_provider.dart';
 import '../../../services/bulk_invoice_service.dart';
 import '../../../services/report_generator.dart';
+import '../../widgets/pdf_preview_dialog.dart';
 import '../../../services/settings_service.dart';
 import '../../../services/app_logger.dart';
 import '../../layout/widgets/glass_card.dart';
@@ -96,7 +99,7 @@ class _FeeCollectionViewState extends ConsumerState<FeeCollectionView> with Sing
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   DropdownButtonFormField<String>(
-                    initialValue: selectedGrade,
+                    value: selectedGrade,
                     dropdownColor: Colors.white,
                     style: GoogleFonts.poppins(color: AppTheme.textPrimary),
                     decoration: InputDecoration(
@@ -296,7 +299,7 @@ class _FeeCollectionViewState extends ConsumerState<FeeCollectionView> with Sing
                           });
                         },
                         decoration: InputDecoration(
-                          hintText: 'Search by student name or phone...',
+                          hintText: 'Search by name, phone, or class...',
                           hintStyle: GoogleFonts.poppins(color: AppTheme.textHint, fontSize: 13),
                           prefixIcon: const Icon(Icons.search_rounded, size: 20, color: AppTheme.textSecondary),
                           suffixIcon: searchQuery.isNotEmpty
@@ -335,7 +338,8 @@ class _FeeCollectionViewState extends ConsumerState<FeeCollectionView> with Sing
                         if (searchQuery.isEmpty) return true;
                         final q = searchQuery.toLowerCase();
                         return s.name.toLowerCase().contains(q) ||
-                            (s.guardianPhone != null && s.guardianPhone!.contains(q));
+                            (s.guardianPhone != null && s.guardianPhone!.contains(q)) ||
+                            s.gradeLevel.toLowerCase().contains(q);
                       }).toList();
 
                       if (filteredStudents.isEmpty) {
@@ -495,6 +499,9 @@ class _StudentDetailPaneState extends ConsumerState<_StudentDetailPane> {
   final _refController = TextEditingController();
   PaymentMethod _selectedMethod = PaymentMethod.cash;
   bool _isProcessing = false;
+  
+  String? _selectedFeeHeadId;
+  final Set<String> _selectedLedgerIds = {};
 
   @override
   void dispose() {
@@ -612,29 +619,89 @@ class _StudentDetailPaneState extends ConsumerState<_StudentDetailPane> {
 
           const SizedBox(height: 16),
 
-          // ── View Fee Ledger Button ──
-          SizedBox(
-            width: double.infinity,
-            child: OutlinedButton.icon(
-              onPressed: () {
-                Navigator.of(context).push(
-                  MaterialPageRoute(
-                    builder: (_) => StudentFeeLedgerView(student: widget.student),
+          // ── Action Buttons ──
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: () {
+                    Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) => StudentFeeLedgerView(student: widget.student),
+                      ),
+                    );
+                  },
+                  icon: const Icon(Icons.receipt_long_rounded, size: 16),
+                  label: Text(
+                    'View Fee Ledger',
+                    style: GoogleFonts.poppins(fontSize: 12, fontWeight: FontWeight.w600),
                   ),
-                );
-              },
-              icon: const Icon(Icons.receipt_long_rounded, size: 16),
-              label: Text(
-                'View Fee Ledger',
-                style: GoogleFonts.poppins(fontSize: 12, fontWeight: FontWeight.w600),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: AppTheme.primaryPurple,
+                    side: const BorderSide(color: AppTheme.primaryPurple),
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                  ),
+                ),
               ),
-              style: OutlinedButton.styleFrom(
-                foregroundColor: AppTheme.primaryPurple,
-                side: const BorderSide(color: AppTheme.primaryPurple),
-                padding: const EdgeInsets.symmetric(vertical: 12),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-              ),
-            ),
+              
+              if (widget.student.currentBalance > 0) ...[
+                const SizedBox(width: 16),
+                Expanded(
+                  child: ElevatedButton.icon(
+                    onPressed: () async {
+                      final phone = widget.student.fatherPhone?.isNotEmpty == true
+                          ? widget.student.fatherPhone!
+                          : (widget.student.motherPhone ?? '');
+
+                      if (phone.isEmpty) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(content: Text('No phone number found for ${widget.student.name}', style: GoogleFonts.poppins()), backgroundColor: const Color(0xFFF59E0B)),
+                        );
+                        return;
+                      }
+
+                      final cleanPhone = phone.replaceAll(RegExp(r'[^\d+]'), '');
+                      final finalPhone = cleanPhone.startsWith('+') ? cleanPhone : '+91$cleanPhone';
+
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text('Generating smart message...', style: GoogleFonts.poppins()), duration: const Duration(milliseconds: 1500)),
+                      );
+
+                      final aiService = ref.read(aiMessageServiceProvider);
+                      final text = await aiService.generateOverdueReminder(
+                        studentName: widget.student.name,
+                        amountStr: currencyFormatter.format(widget.student.currentBalance),
+                        grade: '${widget.student.gradeLevel} - ${widget.student.section}',
+                      );
+
+                      final url = Uri.parse('https://wa.me/$finalPhone?text=${Uri.encodeComponent(text)}');
+                      if (await canLaunchUrl(url)) {
+                        await launchUrl(url);
+                      } else {
+                        if (context.mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(content: Text('Could not launch WhatsApp.', style: GoogleFonts.poppins()), backgroundColor: const Color(0xFFEF4444)),
+                          );
+                        }
+                      }
+                    },
+                    icon: const Icon(Icons.chat_bubble_outline_rounded, size: 16),
+                    label: Text(
+                      'WhatsApp Reminder',
+                      style: GoogleFonts.poppins(fontSize: 12, fontWeight: FontWeight.w600),
+                    ),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF25D366),
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                      elevation: 0,
+                    ),
+                  ),
+                ),
+              ]
+            ],
           ),
 
           const SizedBox(height: 32),
@@ -658,6 +725,142 @@ class _StudentDetailPaneState extends ConsumerState<_StudentDetailPane> {
                 ),
                 const SizedBox(height: 24),
 
+                // ── Fee Selection ──
+                Consumer(
+                  builder: (context, ref, child) {
+                    final ledgerAsync = ref.watch(studentFeeLedgerProvider(StudentYearParam(studentId: widget.student.id, academicYear: '2024-2025')));
+                    
+                    return ledgerAsync.when(
+                      data: (ledgers) {
+                        final unpaidLedgers = ledgers.where((l) => l.remainingAmount > 0).toList();
+                        
+                        if (unpaidLedgers.isEmpty) {
+                          return Container(
+                            padding: const EdgeInsets.all(16),
+                            margin: const EdgeInsets.only(bottom: 24),
+                            decoration: BoxDecoration(
+                              color: AppTheme.success.withValues(alpha: 0.1),
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: Row(
+                              children: [
+                                const Icon(Icons.check_circle, color: AppTheme.success),
+                                const SizedBox(width: 12),
+                                Text(
+                                  'All fees for this academic year are cleared.',
+                                  style: GoogleFonts.poppins(color: AppTheme.success, fontWeight: FontWeight.w600),
+                                ),
+                              ],
+                            ),
+                          );
+                        }
+
+                        // Map fee heads
+                        final Map<String, String> feeHeadMap = {};
+                        for (var l in unpaidLedgers) {
+                          feeHeadMap[l.feeHeadId] = l.feeHeadName ?? l.feeHeadId;
+                        }
+
+                        final feeHeadsList = feeHeadMap.entries.toList();
+                        if (_selectedFeeHeadId != null && !feeHeadMap.containsKey(_selectedFeeHeadId)) {
+                          WidgetsBinding.instance.addPostFrameCallback((_) {
+                            if (mounted) setState(() => _selectedFeeHeadId = null);
+                          });
+                        }
+
+                        final availableMonthsForHead = _selectedFeeHeadId == null 
+                            ? <StudentFeeLedger>[] 
+                            : unpaidLedgers.where((l) => l.feeHeadId == _selectedFeeHeadId).toList();
+
+                        return Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            // Fee Head Dropdown
+                            DropdownButtonFormField<String>(
+                              value: _selectedFeeHeadId,
+                              isExpanded: true,
+                              dropdownColor: Colors.white,
+                              style: GoogleFonts.poppins(color: AppTheme.textPrimary),
+                              decoration: _buildInputDecoration('Select Fee Head (Required)'),
+                              items: feeHeadsList.map((e) {
+                                return DropdownMenuItem(
+                                  value: e.key,
+                                  child: Text(e.value),
+                                );
+                              }).toList(),
+                              onChanged: (val) {
+                                if (val != null) {
+                                  setState(() {
+                                    _selectedFeeHeadId = val;
+                                    _selectedLedgerIds.clear();
+                                    _amountController.text = '0.0';
+                                  });
+                                }
+                              },
+                            ),
+                            
+                            if (_selectedFeeHeadId != null && availableMonthsForHead.isNotEmpty) ...[
+                              const SizedBox(height: 16),
+                              Text(
+                                'Select Months/Items to Pay',
+                                style: GoogleFonts.poppins(fontSize: 12, fontWeight: FontWeight.w600, color: AppTheme.textSecondary),
+                              ),
+                              const SizedBox(height: 8),
+                              Wrap(
+                                spacing: 8,
+                                runSpacing: 8,
+                                children: availableMonthsForHead.map((ledgerItem) {
+                                  final isSelected = _selectedLedgerIds.contains(ledgerItem.id);
+                                  return FilterChip(
+                                    selected: isSelected,
+                                    label: Text(
+                                      ledgerItem.monthLabel ?? 'Unknown',
+                                      style: GoogleFonts.poppins(
+                                        fontSize: 12,
+                                        fontWeight: isSelected ? FontWeight.w600 : FontWeight.w400,
+                                        color: isSelected ? Colors.white : AppTheme.textPrimary,
+                                      ),
+                                    ),
+                                    backgroundColor: AppTheme.primaryPurple.withValues(alpha: 0.05),
+                                    selectedColor: AppTheme.primaryPurple,
+                                    checkmarkColor: Colors.white,
+                                    onSelected: (selected) {
+                                      setState(() {
+                                        if (selected) {
+                                          _selectedLedgerIds.add(ledgerItem.id);
+                                        } else {
+                                          _selectedLedgerIds.remove(ledgerItem.id);
+                                        }
+                                        
+                                        // Auto-calculate amount
+                                        double total = 0.0;
+                                        for (var id in _selectedLedgerIds) {
+                                          final l = availableMonthsForHead.firstWhere((e) => e.id == id);
+                                          total += l.remainingAmount;
+                                        }
+                                        _amountController.text = total.toStringAsFixed(2);
+                                      });
+                                    },
+                                  );
+                                }).toList(),
+                              ),
+                            ],
+                            const SizedBox(height: 24),
+                          ],
+                        );
+                      },
+                      loading: () => const Padding(
+                        padding: EdgeInsets.symmetric(vertical: 24),
+                        child: Center(child: CircularProgressIndicator(color: AppTheme.primaryPurple, strokeWidth: 2)),
+                      ),
+                      error: (err, stack) => Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 24),
+                        child: Text('Error loading fee details: $err', style: GoogleFonts.poppins(color: AppTheme.error)),
+                      ),
+                    );
+                  },
+                ),
+
                 LayoutBuilder(
                   builder: (context, constraints) {
                     final isSmallScreen = constraints.maxWidth < 600;
@@ -670,10 +873,13 @@ class _StudentDetailPaneState extends ConsumerState<_StudentDetailPane> {
                           flex: isSmallScreen ? 0 : 1,
                           child: TextField(
                             controller: _amountController,
+                            readOnly: true,
                             keyboardType: const TextInputType.numberWithOptions(decimal: true),
                             onChanged: (_) => setState(() {}),
-                            style: GoogleFonts.poppins(color: AppTheme.textPrimary),
-                            decoration: _buildInputDecoration('Payment Amount (₹)', prefix: '₹ '),
+                            style: GoogleFonts.poppins(color: AppTheme.textPrimary, fontWeight: FontWeight.w600),
+                            decoration: _buildInputDecoration('Payment Amount (₹)', prefix: '₹ ').copyWith(
+                              fillColor: AppTheme.primarySoft.withValues(alpha: 0.1),
+                            ),
                           ),
                         ),
                         SizedBox(width: isSmallScreen ? 0 : 16, height: isSmallScreen ? 16 : 0),
@@ -682,7 +888,7 @@ class _StudentDetailPaneState extends ConsumerState<_StudentDetailPane> {
                         Expanded(
                           flex: isSmallScreen ? 0 : 1,
                           child: DropdownButtonFormField<PaymentMethod>(
-                            initialValue: _selectedMethod,
+                            value: _selectedMethod,
                             isExpanded: true,
                             dropdownColor: Colors.white,
                             style: GoogleFonts.poppins(color: AppTheme.textPrimary),
@@ -947,77 +1153,59 @@ class _StudentDetailPaneState extends ConsumerState<_StudentDetailPane> {
   Future<void> _handleProcessPayment() async {
     final amount = double.tryParse(_amountController.text) ?? 0.0;
     if (amount <= 0) return;
+    
+    if (_selectedFeeHeadId == null || _selectedLedgerIds.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Please select a Fee Head and at least one month.', style: GoogleFonts.poppins()),
+          backgroundColor: AppTheme.error,
+        ),
+      );
+      return;
+    }
 
     setState(() => _isProcessing = true);
 
     try {
-      final paymentService = ref.read(paymentServiceProvider);
-      // final currentUserId = ref.read(authProvider).currentUser?.id ?? 'usr-admin-001';
-
       final dbService = ref.read(databaseServiceProvider);
-      final invoices = await ref.read(selectedStudentInvoicesProvider.future);
       
-      Invoice targetInvoice;
-      final openInvoices = invoices.where((inv) => 
-        inv.status == InvoiceStatus.pending || 
-        inv.status == InvoiceStatus.partial || 
-        inv.status == InvoiceStatus.overdue
-      ).toList();
-
-      if (openInvoices.isNotEmpty) {
-        targetInvoice = openInvoices.first;
-      } else {
-        // Auto-create an ad-hoc invoice for this payment if no open invoice exists
-        final newInv = Invoice.create(
-          studentId: widget.student.id,
-          totalAmount: amount,
-          dueDate: DateTime.now(),
-          notes: 'Ad-hoc Fee Collection',
-        );
-        await dbService.insertInvoice(newInv);
-        targetInvoice = newInv;
-      }
-
-      final result = await paymentService.processPayment(
-        invoiceId: targetInvoice.id,
-        amountPaid: amount,
+      // We need to use recordMultiMonthPayment from dbService
+      final updatedLedgers = await dbService.recordMultiMonthPayment(
+        studentId: widget.student.id,
+        academicYear: '2024-2025',
+        ledgerIds: _selectedLedgerIds.toList(),
         paymentMethod: _selectedMethod,
         referenceNumber: _refController.text.isNotEmpty ? _refController.text : null,
-        currentUserId: 'usr-admin-001',
       );
 
-      final receiptNumber = await dbService.getNextReceiptNumber();
-      final settingsService = SettingsService();
-      final schoolName = await settingsService.getSetting('school_name') ?? 'EXCELLENCE ACADEMY SCHOOL';
-      final schoolAddress = await settingsService.getSetting('school_address') ?? '123 Education Boulevard, Academic District';
-      final schoolContact = await settingsService.getSetting('school_contact') ?? 'Phone: +1 800 555-0199 | Email: finance@school.edu';
-
-      // Generate A4 PDF Receipt directly with custom school branding and sequential RCT number
-      final pdfFile = await ReportGenerator.generatePaymentReceipt(
-        transaction: result.transaction,
-        invoice: targetInvoice,
-        student: widget.student,
-        receiptNumber: receiptNumber,
-        schoolName: schoolName,
-        schoolAddress: schoolAddress,
-        schoolContact: schoolContact,
-      );
-
+      if (updatedLedgers.isEmpty) {
+        throw Exception('Payment recording failed.');
+      }
+      
       ref.invalidate(studentsListProvider);
       ref.invalidate(selectedStudentInvoicesProvider);
       ref.invalidate(dashboardMetricsProvider);
+      ref.invalidate(studentFeeLedgerProvider);
+      ref.invalidate(studentLedgerSummaryProvider);
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Payment processed! Receipt saved to: ${pdfFile.path}', style: GoogleFonts.poppins(color: Colors.white, fontWeight: FontWeight.w600)),
-            backgroundColor: AppTheme.primaryPurple,
+            content: Text(
+              'Payment of ${amount.toStringAsFixed(2)} allocated across ${updatedLedgers.length} fee entries.',
+              style: GoogleFonts.poppins(color: Colors.white, fontWeight: FontWeight.w600),
+            ),
+            backgroundColor: AppTheme.success,
           ),
         );
       }
 
       _amountController.clear();
       _refController.clear();
+      setState(() {
+        _selectedFeeHeadId = null;
+        _selectedLedgerIds.clear();
+      });
 
     } catch (e, stackTrace) {
       AppLogger.instance.error('Payment processing failed', e, stackTrace);

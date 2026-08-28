@@ -1,7 +1,9 @@
 import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
+import 'package:sqflite_common_ffi_web/sqflite_ffi_web.dart';
 import 'package:bcrypt/bcrypt.dart';
 import 'package:uuid/uuid.dart';
 import '../../models/user.dart';
@@ -16,19 +18,44 @@ class DatabaseHelper {
   DatabaseHelper._internal();
 
   /// Schema version 27 (Admin Users RBAC)
-  static const int _databaseVersion = 29;
+  static const int _databaseVersion = 30;
   static const String _databaseName = 'school_management.db';
 
   Future<Database> get database async {
     if (_database == null) {
       _database = await _initDatabase();
-      // Auto-run overdue status check on database initialization
-      await autoUpdateOverdueInvoices(_database!);
+      try {
+        await autoUpdateOverdueInvoices(_database!);
+      } catch (_) {}
     }
     return _database!;
   }
 
+  /// Closes active database connection and resets the singleton instance
+  Future<void> close() async {
+    if (_database != null && _database!.isOpen) {
+      await _database!.close();
+      _database = null;
+    }
+  }
+
   Future<Database> _initDatabase() async {
+    if (kIsWeb) {
+      databaseFactory = databaseFactoryFfiWeb;
+      final db = await databaseFactory.openDatabase(
+        inMemoryDatabasePath,
+        options: OpenDatabaseOptions(
+          version: _databaseVersion,
+          onCreate: _onCreate,
+          onUpgrade: _onUpgrade,
+          onConfigure: _onConfigure,
+        ),
+      );
+      await ensureSchemaIntegrity(db);
+      await autoUpdateOverdueInvoices(db);
+      return db;
+    }
+
     sqfliteFfiInit();
     databaseFactory = databaseFactoryFfi;
 
@@ -40,7 +67,7 @@ class DatabaseHelper {
       await dbDir.create(recursive: true);
     }
 
-    return await databaseFactoryFfi.openDatabase(
+    final db = await databaseFactoryFfi.openDatabase(
       dbPath,
       options: OpenDatabaseOptions(
         version: _databaseVersion,
@@ -49,11 +76,21 @@ class DatabaseHelper {
         onConfigure: _onConfigure,
       ),
     );
+    await ensureSchemaIntegrity(db);
+    await autoUpdateOverdueInvoices(db);
+    return db;
   }
 
   Future<void> _onConfigure(Database db) async {
-    await db.execute('PRAGMA foreign_keys = ON');
-    await db.execute('PRAGMA journal_mode = WAL');
+    try {
+      await db.execute('PRAGMA foreign_keys = ON');
+    } catch (_) {}
+    if (!kIsWeb) {
+      try {
+        await db.execute('PRAGMA journal_mode = WAL');
+        await db.execute('PRAGMA busy_timeout = 5000');
+      } catch (_) {}
+    }
   }
 
   /// Automated job: Flips pending/partial invoices to 'overdue' when due_date < current date
@@ -206,6 +243,8 @@ class DatabaseHelper {
         status            TEXT NOT NULL DEFAULT 'pending'
                           CHECK (status IN ('pending', 'paid', 'overdue', 'partial', 'cancelled')),
         notes             TEXT,
+        fee_head_id       TEXT,
+        ledger_id         TEXT,
         created_at        TEXT NOT NULL DEFAULT (datetime('now')),
         updated_at        TEXT NOT NULL DEFAULT (datetime('now')),
         FOREIGN KEY (student_id) REFERENCES students (id) ON DELETE RESTRICT ON UPDATE CASCADE,
@@ -547,19 +586,11 @@ class DatabaseHelper {
 
     await batch.commit(noResult: true);
 
-    // Seed default principal user if not exists
-    final adminExists = await db.rawQuery('SELECT id FROM admin_users WHERE username = ?', ['admin']);
-    if (adminExists.isEmpty) {
-      final initialPassword = BCrypt.hashpw('ChangeMe@2026', BCrypt.gensalt());
-      await db.insert('admin_users', {
-        'id': const Uuid().v4(),
-        'username': 'admin',
-        'password_hash': initialPassword,
-        'full_name': 'System Administrator',
-        'role': 'principal',
-        'force_password_change': 1,
-      });
-    }
+    // Run all schema migrations to ensure all latest tables and columns are created
+    await _onUpgrade(db, 1, version);
+
+    // Run comprehensive schema self-repair and seed initial master data
+    await ensureSchemaIntegrity(db);
   }
 
   /// Versioned Schema Migration Runner (v1 -> v2 -> v3)
@@ -1921,7 +1952,6 @@ class DatabaseHelper {
           final academicYear = row['academic_year'] as String;
           final amountDue = (row['amount_due'] as num).toDouble();
           final amountPaid = (row['amount_paid'] as num).toDouble();
-          final originalDueDateStr = row['due_date'] as String;
           final createdAt = row['created_at'] as String;
           final updatedAt = row['updated_at'] as String;
 
@@ -2082,12 +2112,611 @@ class DatabaseHelper {
         print("Failed to run version 29 migration: $e");
       }
     }
+
+    if (oldVersion < 30) {
+      try {
+        await db.execute('ALTER TABLE admin_users ADD COLUMN security_question TEXT');
+        await db.execute('ALTER TABLE admin_users ADD COLUMN security_answer_hash TEXT');
+      } catch (e) {
+        print("Failed to run version 30 migration: $e");
+      }
+    }
   }
 
-  Future<void> close() async {
-    if (_database != null) {
-      await _database!.close();
-      _database = null;
+  /// Self-Healing Schema Verifier & Master Data Bootstrapper
+  /// Runs on EVERY database open to guarantee all tables, columns, and seed rows exist.
+  Future<void> ensureSchemaIntegrity(Database db) async {
+    try {
+      // 1. Classes & Sections
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS classes (
+          id             TEXT PRIMARY KEY,
+          name           TEXT NOT NULL,
+          academic_year  TEXT,
+          capacity       INTEGER,
+          created_at     TEXT NOT NULL DEFAULT (datetime('now'))
+        )
+      ''');
+
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS sections (
+          id                TEXT PRIMARY KEY,
+          class_id          TEXT NOT NULL,
+          name              TEXT NOT NULL,
+          capacity          INTEGER,
+          class_teacher_id  TEXT,
+          FOREIGN KEY (class_id) REFERENCES classes (id) ON DELETE CASCADE,
+          FOREIGN KEY (class_teacher_id) REFERENCES staff (id) ON DELETE SET NULL,
+          CONSTRAINT unq_class_sec UNIQUE (class_id, name)
+        )
+      ''');
+
+      // Ensure invoices table has newer columns
+      try {
+        await db.execute("ALTER TABLE invoices ADD COLUMN fee_head_id TEXT");
+      } catch (_) {}
+      try {
+        await db.execute("ALTER TABLE invoices ADD COLUMN ledger_id TEXT");
+      } catch (_) {}
+
+      // Ensure 2024-2025 academic year exists for foreign keys
+      await db.execute(
+        "INSERT OR IGNORE INTO academic_years (id, name, start_date, end_date, is_current) VALUES ('ay-2024-2025', '2024-2025', '2024-06-01', '2025-04-30', 0)"
+      );
+
+      // Seed default classes if none exist
+      final classCountRes = await db.rawQuery('SELECT COUNT(*) as count FROM classes');
+      final classCount = (classCountRes.first['count'] as int?) ?? 0;
+      if (classCount == 0) {
+        final defaultGrades = [
+          'Grade 1', 'Grade 2', 'Grade 3', 'Grade 4', 'Grade 5',
+          'Grade 6', 'Grade 7', 'Grade 8', 'Grade 9', 'Grade 10'
+        ];
+        for (final g in defaultGrades) {
+          final cid = 'cls-${g.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '')}';
+          await db.execute(
+            "INSERT OR IGNORE INTO classes (id, name, academic_year, capacity, created_at) VALUES (?, ?, '2024-2025', 40, datetime('now'))",
+            [cid, g],
+          );
+          for (final sec in ['A', 'B']) {
+            final secId = 'sec-${cid.replaceFirst('cls-', '')}-${sec.toLowerCase()}';
+            await db.execute(
+              "INSERT OR IGNORE INTO sections (id, class_id, name, capacity) VALUES (?, ?, ?, 40)",
+              [secId, cid, sec],
+            );
+          }
+        }
+      }
+
+      // Ensure student columns exist
+      final studentCols = [
+        'class_id TEXT',
+        'section_id TEXT',
+        'first_name TEXT',
+        'last_name TEXT',
+        'dob TEXT',
+        'gender TEXT',
+        'blood_group TEXT',
+        'photograph_path TEXT',
+        'caste TEXT',
+        'religion TEXT',
+        'aadhaar_number TEXT',
+        'admission_number TEXT',
+        'roll_number TEXT',
+        'section TEXT',
+        'admission_date TEXT',
+        'father_name TEXT',
+        'father_occupation TEXT',
+        'father_phone TEXT',
+        'mother_name TEXT',
+        'mother_occupation TEXT',
+        'mother_phone TEXT',
+        'residential_address TEXT',
+        'permanent_address TEXT',
+        'transport_route_id TEXT',
+        'hostel_id TEXT'
+      ];
+      for (final col in studentCols) {
+        try {
+          await db.execute('ALTER TABLE students ADD COLUMN $col');
+        } catch (_) {}
+      }
+
+      // 2. Fee Heads, Fee Structures & Ledger
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS fee_heads (
+          id           TEXT PRIMARY KEY,
+          name         TEXT NOT NULL UNIQUE,
+          description  TEXT,
+          is_recurring INTEGER NOT NULL DEFAULT 1,
+          frequency    TEXT NOT NULL CHECK (frequency IN ('monthly','quarterly','annual','one_time'))
+        )
+      ''');
+
+      await db.execute('''
+        INSERT OR IGNORE INTO fee_heads (id, name, description, is_recurring, frequency) VALUES
+        ('fh-tuition', 'Tuition Fee', 'Core monthly academic tuition charges', 1, 'monthly'),
+        ('fh-transport', 'Transport Fee', 'Monthly school bus and conveyance charges', 1, 'monthly'),
+        ('fh-lab', 'Lab Fee', 'Science and computer lab equipment maintenance', 1, 'quarterly'),
+        ('fh-exam', 'Exam Fee', 'Term assessment and examination evaluation fee', 1, 'quarterly'),
+        ('fh-admission', 'Admission Fee', 'One-time student enrolment & registration fee', 0, 'one_time'),
+        ('fh-library', 'Library Fee', 'Annual library resources & digital catalog access', 1, 'annual')
+      ''');
+
+      final feeStructureCols = [
+        'class TEXT',
+        'section TEXT',
+        'academic_year TEXT',
+        'fee_head_id TEXT',
+        'due_day_of_month INTEGER'
+      ];
+      for (final col in feeStructureCols) {
+        try {
+          await db.execute('ALTER TABLE fee_structures ADD COLUMN $col');
+        } catch (_) {}
+      }
+
+      try {
+        await db.execute("UPDATE fee_structures SET class = grade_level WHERE class IS NULL");
+        await db.execute("UPDATE fee_structures SET academic_year = academic_year_id WHERE academic_year IS NULL");
+      } catch (_) {}
+
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS discount_types (
+          id            TEXT PRIMARY KEY,
+          name          TEXT NOT NULL,
+          discount_kind TEXT NOT NULL CHECK (discount_kind IN ('percentage','flat')),
+          value         REAL NOT NULL
+        )
+      ''');
+
+      await db.execute('''
+        INSERT OR IGNORE INTO discount_types (id, name, discount_kind, value) VALUES
+        ('dt-sibling', 'Sibling Discount', 'percentage', 15.0),
+        ('dt-staff', 'Staff Ward Discount', 'percentage', 50.0),
+        ('dt-merit', 'Merit Scholarship', 'percentage', 25.0),
+        ('dt-aid', 'Financial Aid', 'flat', 5000.0)
+      ''');
+
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS student_discounts (
+          id                TEXT PRIMARY KEY,
+          student_id        TEXT NOT NULL,
+          discount_type_id  TEXT NOT NULL,
+          academic_year     TEXT NOT NULL,
+          approved_by       TEXT,
+          remarks           TEXT,
+          FOREIGN KEY (student_id) REFERENCES students (id) ON DELETE CASCADE,
+          FOREIGN KEY (discount_type_id) REFERENCES discount_types (id) ON DELETE CASCADE
+        )
+      ''');
+
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS student_fee_ledger (
+          id              TEXT PRIMARY KEY,
+          student_id      TEXT NOT NULL,
+          fee_head_id     TEXT NOT NULL,
+          academic_year   TEXT NOT NULL,
+          amount_due      REAL NOT NULL,
+          amount_paid     REAL NOT NULL DEFAULT 0.0,
+          due_date        TEXT NOT NULL,
+          status          TEXT NOT NULL DEFAULT 'pending'
+                          CHECK (status IN ('pending', 'partial', 'paid', 'overdue')),
+          month_label     TEXT,
+          created_at      TEXT NOT NULL DEFAULT (datetime('now')),
+          updated_at      TEXT NOT NULL DEFAULT (datetime('now')),
+          FOREIGN KEY (student_id) REFERENCES students (id) ON DELETE CASCADE,
+          FOREIGN KEY (fee_head_id) REFERENCES fee_heads (id) ON DELETE CASCADE
+        )
+      ''');
+
+      try {
+        await db.execute('CREATE INDEX IF NOT EXISTS idx_sfl_student ON student_fee_ledger (student_id)');
+        await db.execute('CREATE INDEX IF NOT EXISTS idx_sfl_year ON student_fee_ledger (academic_year)');
+        await db.execute('CREATE INDEX IF NOT EXISTS idx_sfl_status ON student_fee_ledger (status)');
+        await db.execute('CREATE INDEX IF NOT EXISTS idx_sfl_due ON student_fee_ledger (due_date)');
+      } catch (_) {}
+
+      // 3. Vehicles & Transport
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS vehicles (
+          id                TEXT PRIMARY KEY,
+          vehicle_number    TEXT NOT NULL UNIQUE,
+          vehicle_type      TEXT NOT NULL DEFAULT 'bus' CHECK (vehicle_type IN ('bus', 'van')),
+          capacity          INTEGER NOT NULL,
+          driver_staff_id   TEXT,
+          conductor_name    TEXT,
+          insurance_expiry  TEXT,
+          fitness_expiry    TEXT,
+          is_active         INTEGER NOT NULL DEFAULT 1,
+          FOREIGN KEY (driver_staff_id) REFERENCES staff (id) ON DELETE SET NULL
+        )
+      ''');
+
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS routes (
+          id           TEXT PRIMARY KEY,
+          route_name   TEXT NOT NULL,
+          vehicle_id   TEXT,
+          start_point  TEXT NOT NULL,
+          end_point    TEXT NOT NULL,
+          FOREIGN KEY (vehicle_id) REFERENCES vehicles (id) ON DELETE SET NULL
+        )
+      ''');
+
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS route_stops (
+          id           TEXT PRIMARY KEY,
+          route_id     TEXT NOT NULL,
+          stop_name    TEXT NOT NULL,
+          stop_order   INTEGER NOT NULL,
+          pickup_time  TEXT,
+          drop_time    TEXT,
+          FOREIGN KEY (route_id) REFERENCES routes (id) ON DELETE CASCADE
+        )
+      ''');
+
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS student_transport (
+          id             TEXT PRIMARY KEY,
+          student_id     TEXT NOT NULL,
+          route_id       TEXT NOT NULL,
+          stop_id        TEXT NOT NULL,
+          monthly_fee    REAL NOT NULL,
+          academic_year  TEXT NOT NULL,
+          is_active      INTEGER NOT NULL DEFAULT 1,
+          FOREIGN KEY (student_id) REFERENCES students (id) ON DELETE CASCADE,
+          FOREIGN KEY (route_id) REFERENCES routes (id) ON DELETE CASCADE,
+          FOREIGN KEY (stop_id) REFERENCES route_stops (id) ON DELETE CASCADE,
+          CONSTRAINT unq_student_transport UNIQUE (student_id, academic_year)
+        )
+      ''');
+
+      // 4. Exams & Assessment
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS exam_types (
+          id                TEXT PRIMARY KEY,
+          name              TEXT NOT NULL UNIQUE,
+          weightage_percent REAL NOT NULL
+        )
+      ''');
+
+      await db.execute('''
+        INSERT OR IGNORE INTO exam_types (id, name, weightage_percent) VALUES
+        ('et-unit-1', 'Unit Test 1', 10.0),
+        ('et-unit-2', 'Unit Test 2', 10.0),
+        ('et-midterm', 'Mid-Term Exam', 30.0),
+        ('et-final', 'Final Exam', 50.0)
+      ''');
+
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS exams (
+          id             TEXT PRIMARY KEY,
+          exam_type_id   TEXT NOT NULL,
+          name           TEXT NOT NULL,
+          class          TEXT NOT NULL,
+          section        TEXT,
+          academic_year  TEXT NOT NULL,
+          start_date     TEXT NOT NULL,
+          end_date       TEXT NOT NULL,
+          FOREIGN KEY (exam_type_id) REFERENCES exam_types (id) ON DELETE CASCADE
+        )
+      ''');
+
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS exam_subjects (
+          id             TEXT PRIMARY KEY,
+          exam_id        TEXT NOT NULL,
+          subject        TEXT NOT NULL,
+          exam_date      TEXT NOT NULL,
+          max_marks      REAL NOT NULL,
+          passing_marks  REAL NOT NULL,
+          staff_id       TEXT,
+          FOREIGN KEY (exam_id) REFERENCES exams (id) ON DELETE CASCADE,
+          FOREIGN KEY (staff_id) REFERENCES staff (id) ON DELETE SET NULL
+        )
+      ''');
+
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS marks (
+          id               TEXT PRIMARY KEY,
+          exam_subject_id  TEXT NOT NULL,
+          student_id       TEXT NOT NULL,
+          marks_obtained   REAL,
+          is_absent        INTEGER NOT NULL DEFAULT 0,
+          remarks          TEXT,
+          entered_by       TEXT,
+          entered_at       TEXT NOT NULL DEFAULT (datetime('now')),
+          FOREIGN KEY (exam_subject_id) REFERENCES exam_subjects (id) ON DELETE CASCADE,
+          FOREIGN KEY (student_id) REFERENCES students (id) ON DELETE CASCADE,
+          CONSTRAINT unq_exam_subj_student UNIQUE (exam_subject_id, student_id)
+        )
+      ''');
+
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS grade_scale (
+          id             TEXT PRIMARY KEY,
+          academic_year  TEXT NOT NULL,
+          min_percent    REAL NOT NULL,
+          max_percent    REAL NOT NULL,
+          grade          TEXT NOT NULL,
+          grade_point    REAL
+        )
+      ''');
+
+      await db.execute('''
+        INSERT OR IGNORE INTO grade_scale (id, academic_year, min_percent, max_percent, grade, grade_point) VALUES
+        ('gs-a-plus', '2024-2025', 90.0, 100.0, 'A+', 4.0),
+        ('gs-a', '2024-2025', 80.0, 89.99, 'A', 3.5),
+        ('gs-b', '2024-2025', 70.0, 79.99, 'B', 3.0),
+        ('gs-c', '2024-2025', 60.0, 69.99, 'C', 2.5),
+        ('gs-d', '2024-2025', 50.0, 59.99, 'D', 2.0),
+        ('gs-e', '2024-2025', 35.0, 49.99, 'E', 1.0),
+        ('gs-f', '2024-2025', 0.0, 34.99, 'F', 0.0)
+      ''');
+
+      // 5. Staff, Timetable, Circulars, Documents
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS student_documents (
+          id           TEXT PRIMARY KEY,
+          student_id   TEXT NOT NULL,
+          doc_type     TEXT NOT NULL,
+          file_path    TEXT NOT NULL,
+          file_name    TEXT NOT NULL,
+          uploaded_at  TEXT NOT NULL DEFAULT (datetime('now')),
+          FOREIGN KEY (student_id) REFERENCES students (id) ON DELETE CASCADE
+        )
+      ''');
+
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS class_teacher_assignments (
+          id             TEXT PRIMARY KEY,
+          class          TEXT NOT NULL,
+          section        TEXT NOT NULL,
+          staff_id       TEXT NOT NULL,
+          academic_year  TEXT NOT NULL,
+          class_id       TEXT,
+          section_id     TEXT,
+          FOREIGN KEY (staff_id) REFERENCES staff (id) ON DELETE CASCADE
+        )
+      ''');
+
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS timetable (
+          id             TEXT PRIMARY KEY,
+          class          TEXT NOT NULL,
+          section        TEXT NOT NULL,
+          day_of_week    TEXT NOT NULL,
+          period_number  INTEGER NOT NULL,
+          subject        TEXT NOT NULL,
+          staff_id       TEXT NOT NULL,
+          start_time     TEXT NOT NULL,
+          end_time       TEXT NOT NULL,
+          academic_year  TEXT NOT NULL,
+          class_id       TEXT,
+          section_id     TEXT,
+          FOREIGN KEY (staff_id) REFERENCES staff (id) ON DELETE CASCADE
+        )
+      ''');
+
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS teacher_attendance (
+          id             TEXT PRIMARY KEY,
+          staff_id       TEXT NOT NULL,
+          date           TEXT NOT NULL,
+          status         TEXT NOT NULL CHECK (status IN ('present', 'absent', 'half_day', 'on_leave', 'holiday')),
+          time_in        TEXT,
+          time_out       TEXT,
+          remarks        TEXT,
+          corrected_by   TEXT,
+          corrected_at   TEXT,
+          FOREIGN KEY (staff_id) REFERENCES staff (id) ON DELETE CASCADE,
+          UNIQUE (staff_id, date)
+        )
+      ''');
+
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS leave_types (
+          id              TEXT PRIMARY KEY,
+          name            TEXT NOT NULL UNIQUE,
+          days_allowed    REAL NOT NULL,
+          is_carryover    INTEGER NOT NULL DEFAULT 0
+        )
+      ''');
+
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS leave_applications (
+          id              TEXT PRIMARY KEY,
+          staff_id        TEXT NOT NULL,
+          leave_type_id   TEXT NOT NULL,
+          from_date       TEXT NOT NULL,
+          to_date         TEXT NOT NULL,
+          reason          TEXT NOT NULL,
+          status          TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'approved', 'rejected')),
+          reviewed_by     TEXT,
+          reviewed_at     TEXT,
+          FOREIGN KEY (staff_id) REFERENCES staff (id) ON DELETE CASCADE,
+          FOREIGN KEY (leave_type_id) REFERENCES leave_types (id) ON DELETE CASCADE
+        )
+      ''');
+
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS substitutions (
+          id                      TEXT PRIMARY KEY,
+          absent_staff_id         TEXT NOT NULL,
+          substitute_staff_id     TEXT NOT NULL,
+          date                    TEXT NOT NULL,
+          period_number           INTEGER NOT NULL,
+          class                   TEXT NOT NULL,
+          section                 TEXT NOT NULL,
+          status                  TEXT NOT NULL DEFAULT 'assigned' CHECK (status IN ('assigned', 'completed', 'cancelled')),
+          FOREIGN KEY (absent_staff_id) REFERENCES staff (id) ON DELETE CASCADE,
+          FOREIGN KEY (substitute_staff_id) REFERENCES staff (id) ON DELETE CASCADE
+        )
+      ''');
+
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS exam_duty (
+          id             TEXT PRIMARY KEY,
+          staff_id       TEXT NOT NULL,
+          exam_name      TEXT NOT NULL,
+          date           TEXT NOT NULL,
+          room_number    TEXT NOT NULL,
+          start_time     TEXT NOT NULL,
+          end_time       TEXT NOT NULL,
+          FOREIGN KEY (staff_id) REFERENCES staff (id) ON DELETE CASCADE
+        )
+      ''');
+
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS circulars (
+          id            TEXT PRIMARY KEY,
+          title         TEXT NOT NULL,
+          body          TEXT NOT NULL,
+          sent_by       TEXT NOT NULL,
+          sent_at       TEXT NOT NULL,
+          target_type   TEXT NOT NULL CHECK (target_type IN ('all','department','individual')),
+          target_id     TEXT
+        )
+      ''');
+
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS appraisals (
+          id                 TEXT PRIMARY KEY,
+          staff_id           TEXT NOT NULL,
+          review_period      TEXT NOT NULL,
+          self_assessment    TEXT NOT NULL,
+          principal_remarks  TEXT NOT NULL,
+          rating             INTEGER NOT NULL,
+          created_at         TEXT NOT NULL,
+          FOREIGN KEY (staff_id) REFERENCES staff (id) ON DELETE CASCADE
+        )
+      ''');
+
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS trainings (
+          id                TEXT PRIMARY KEY,
+          staff_id          TEXT NOT NULL,
+          training_name     TEXT NOT NULL,
+          provider          TEXT NOT NULL,
+          date              TEXT NOT NULL,
+          certificate_path  TEXT,
+          FOREIGN KEY (staff_id) REFERENCES staff (id) ON DELETE CASCADE
+        )
+      ''');
+
+      // 6. Inventory
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS inventory_categories (
+          id      TEXT PRIMARY KEY,
+          name    TEXT UNIQUE NOT NULL
+        )
+      ''');
+
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS inventory_items (
+          id                  TEXT PRIMARY KEY,
+          name                TEXT NOT NULL,
+          category_id         TEXT NOT NULL,
+          unit                TEXT NOT NULL CHECK (unit IN ('piece', 'box', 'kg', 'litre', 'set')),
+          current_stock       REAL NOT NULL DEFAULT 0,
+          reorder_threshold   REAL NOT NULL DEFAULT 0,
+          unit_cost           REAL,
+          storage_location    TEXT,
+          FOREIGN KEY (category_id) REFERENCES inventory_categories (id) ON DELETE RESTRICT
+        )
+      ''');
+
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS stock_transactions (
+          id                  TEXT PRIMARY KEY,
+          item_id             TEXT NOT NULL,
+          transaction_type    TEXT NOT NULL CHECK (transaction_type IN ('purchase', 'issue', 'return', 'adjustment', 'damage')),
+          quantity            REAL NOT NULL,
+          issued_to_type      TEXT CHECK (issued_to_type IN ('staff', 'class', 'department')),
+          issued_to_id        TEXT,
+          transaction_date    TEXT NOT NULL,
+          remarks             TEXT,
+          recorded_by         TEXT NOT NULL,
+          FOREIGN KEY (item_id) REFERENCES inventory_items (id) ON DELETE CASCADE
+        )
+      ''');
+
+      final invCategories = [
+        'Stationery', 'Sports Equipment', 'Lab Equipment',
+        'Furniture', 'Electronics', 'Cleaning Supplies'
+      ];
+      for (var i = 0; i < invCategories.length; i++) {
+        await db.execute(
+          "INSERT OR IGNORE INTO inventory_categories (id, name) VALUES (?, ?)",
+          ['cat-${i + 1}', invCategories[i]],
+        );
+      }
+
+      // 7. Admin Users & Default Principal
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS admin_users (
+          id TEXT PRIMARY KEY,
+          username TEXT UNIQUE NOT NULL,
+          password_hash TEXT NOT NULL,
+          full_name TEXT NOT NULL,
+          role TEXT NOT NULL CHECK (role IN ('principal','administration')),
+          is_active INTEGER NOT NULL DEFAULT 1,
+          force_password_change INTEGER NOT NULL DEFAULT 1,
+          created_at TEXT NOT NULL DEFAULT (datetime('now')),
+          last_login TEXT,
+          security_question TEXT,
+          security_answer_hash TEXT
+        )
+      ''');
+
+      final adminCountRes = await db.rawQuery('SELECT COUNT(*) as count FROM admin_users');
+      final adminCount = (adminCountRes.first['count'] as int?) ?? 0;
+      if (adminCount == 0) {
+        final initialPassword = BCrypt.hashpw('ChangeMe@2026', BCrypt.gensalt());
+        await db.insert('admin_users', {
+          'id': 'usr-admin-001',
+          'username': 'admin',
+          'password_hash': initialPassword,
+          'full_name': 'System Administrator',
+          'role': 'principal',
+          'force_password_change': 1,
+        });
+      } else {
+        // Ensure 'usr-admin-001' exists to satisfy hardcoded references (e.g. PaymentService)
+        final usrAdminRes = await db.rawQuery("SELECT id FROM admin_users WHERE id = 'usr-admin-001'");
+        if (usrAdminRes.isEmpty) {
+          final initialPassword = BCrypt.hashpw('ChangeMe@2026', BCrypt.gensalt());
+          await db.insert('admin_users', {
+            'id': 'usr-admin-001',
+            'username': 'admin_legacy', // Avoid UNIQUE constraint on username 'admin' if it exists
+            'password_hash': initialPassword,
+            'full_name': 'Legacy System Administrator',
+            'role': 'principal',
+            'force_password_change': 1,
+          });
+        }
+      }
+
+      // Ensure security question columns exist for older databases
+      try {
+        await db.execute('ALTER TABLE admin_users ADD COLUMN security_question TEXT');
+      } catch (_) {}
+      try {
+        await db.execute('ALTER TABLE admin_users ADD COLUMN security_answer_hash TEXT');
+      } catch (_) {}
+
+      // 8. Default App Settings
+      await db.execute('''
+        INSERT OR REPLACE INTO app_settings (key, value)
+        VALUES ('school_name', 'Kishan Company')
+      ''');
+      await db.execute('''
+        INSERT OR REPLACE INTO app_settings (key, value)
+        VALUES ('school_motto', 'Inspiring Excellence, Building Futures')
+      ''');
+    } catch (e) {
+      print('DatabaseHelper ensureSchemaIntegrity warning: $e');
     }
   }
 }

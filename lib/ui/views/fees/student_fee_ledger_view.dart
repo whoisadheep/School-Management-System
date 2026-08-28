@@ -5,7 +5,9 @@ import 'package:intl/intl.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../models/models.dart';
 import '../../../providers/services_provider.dart';
+import '../../../providers/dashboard_provider.dart';
 import '../../../services/report_generator.dart';
+import '../../widgets/pdf_preview_dialog.dart';
 import '../../../services/settings_service.dart';
 import '../../../services/app_logger.dart';
 
@@ -27,10 +29,11 @@ class StudentFeeLedgerView extends ConsumerStatefulWidget {
 }
 
 class _StudentFeeLedgerViewState extends ConsumerState<StudentFeeLedgerView> with SingleTickerProviderStateMixin {
-  bool _isGenerating = false;
-  bool _isProcessingPayment = false;
-  final _currencyFormat = NumberFormat.currency(locale: 'en_IN', symbol: '₹', decimalDigits: 2);
   late TabController _tabController;
+  bool _isProcessingPayment = false;
+  final Set<String> _selectedMonthsForPayment = {};
+  final _currencyFormat = NumberFormat.currency(locale: 'en_IN', symbol: '₹', decimalDigits: 2);
+  bool _isGenerating = false;
 
   @override
   void initState() {
@@ -147,6 +150,16 @@ class _StudentFeeLedgerViewState extends ConsumerState<StudentFeeLedgerView> wit
           'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec', 'Jan', 'Feb', 'Mar'
         ];
 
+        double totalSelectedDue = 0;
+        for (final m in _selectedMonthsForPayment) {
+          final ledgers = monthlyLedgers[m] as List<dynamic>? ?? [];
+          for (final l in ledgers) {
+            if (l.status == LedgerStatus.pending || l.status == LedgerStatus.partial || l.status == LedgerStatus.overdue) {
+              totalSelectedDue += (l.amountDue - l.amountPaid);
+            }
+          }
+        }
+
         return Padding(
           padding: const EdgeInsets.all(24),
           child: Container(
@@ -167,9 +180,25 @@ class _StudentFeeLedgerViewState extends ConsumerState<StudentFeeLedgerView> wit
                       topRight: Radius.circular(12),
                     ),
                   ),
-                  child: Text(
-                    'Monthly Fee Status (AY ${widget.academicYear})',
-                    style: GoogleFonts.poppins(fontSize: 14, fontWeight: FontWeight.bold, color: AppTheme.textPrimary),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        'Monthly Fee Status (AY ${widget.academicYear})',
+                        style: GoogleFonts.poppins(fontSize: 14, fontWeight: FontWeight.bold, color: AppTheme.textPrimary),
+                      ),
+                      if (_selectedMonthsForPayment.isNotEmpty)
+                        ElevatedButton.icon(
+                          onPressed: _isProcessingPayment ? null : () => _processSelectedMonthsPayment(monthlyLedgers),
+                          icon: const Icon(Icons.payment, size: 16),
+                          label: Text('Pay ${_currencyFormat.format(totalSelectedDue)}'),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: AppTheme.primaryPurple,
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                          ),
+                        ),
+                    ],
                   ),
                 ),
                 const Divider(height: 1, color: AppTheme.divider),
@@ -180,13 +209,22 @@ class _StudentFeeLedgerViewState extends ConsumerState<StudentFeeLedgerView> wit
                       crossAxisCount: 4,
                       crossAxisSpacing: 16,
                       mainAxisSpacing: 16,
-                      childAspectRatio: 1.2,
+                      childAspectRatio: 1.1,
                     ),
                     itemCount: months.length,
                     itemBuilder: (context, index) {
                       final month = months[index];
                       final statusStr = monthlyStatus[month] as String? ?? 'none';
                       final ledgers = monthlyLedgers[month] as List<dynamic>? ?? [];
+
+                      double monthDue = 0;
+                      double monthCollected = 0;
+                      for (final l in ledgers) {
+                        monthCollected += l.amountPaid;
+                        if (l.status == LedgerStatus.pending || l.status == LedgerStatus.partial || l.status == LedgerStatus.overdue) {
+                          monthDue += (l.amountDue - l.amountPaid);
+                        }
+                      }
 
                       Color bgColor;
                       Color textColor;
@@ -214,18 +252,22 @@ class _StudentFeeLedgerViewState extends ConsumerState<StudentFeeLedgerView> wit
                           textColor = AppTheme.textHint;
                       }
 
+                      final isSelected = _selectedMonthsForPayment.contains(month);
+                      if (isSelected) {
+                        borderColor = AppTheme.primaryPurple;
+                        bgColor = AppTheme.primaryPurple.withValues(alpha: 0.1);
+                      }
+
                       return InkWell(
                         onTap: (statusStr == 'pending' || statusStr == 'overdue') && ledgers.isNotEmpty
                             ? () {
-                                // Find the first pending ledger in this month to pay, or show a dialog.
-                                // For simplicity, we just trigger payment on the first pending ledger of that month
-                                final firstPending = ledgers.firstWhere(
-                                  (l) => l.status == LedgerStatus.pending || l.status == LedgerStatus.overdue,
-                                  orElse: () => null,
-                                );
-                                if (firstPending != null) {
-                                  _showRowPaymentDialog(context, firstPending);
-                                }
+                                setState(() {
+                                  if (isSelected) {
+                                    _selectedMonthsForPayment.remove(month);
+                                  } else {
+                                    _selectedMonthsForPayment.add(month);
+                                  }
+                                });
                               }
                             : null,
                         borderRadius: BorderRadius.circular(12),
@@ -233,7 +275,7 @@ class _StudentFeeLedgerViewState extends ConsumerState<StudentFeeLedgerView> wit
                           decoration: BoxDecoration(
                             color: bgColor,
                             borderRadius: BorderRadius.circular(12),
-                            border: Border.all(color: borderColor),
+                            border: Border.all(color: borderColor, width: isSelected ? 2 : 1),
                           ),
                           child: Column(
                             mainAxisAlignment: MainAxisAlignment.center,
@@ -242,11 +284,21 @@ class _StudentFeeLedgerViewState extends ConsumerState<StudentFeeLedgerView> wit
                                 month,
                                 style: GoogleFonts.poppins(fontSize: 16, fontWeight: FontWeight.bold, color: textColor),
                               ),
-                              const SizedBox(height: 8),
+                              const SizedBox(height: 4),
                               Text(
                                 statusStr.toUpperCase(),
                                 style: GoogleFonts.poppins(fontSize: 10, fontWeight: FontWeight.w600, color: textColor),
                               ),
+                              if (monthDue > 0)
+                                Padding(
+                                  padding: const EdgeInsets.only(top: 4.0),
+                                  child: Text('Due: ${_currencyFormat.format(monthDue)}', style: GoogleFonts.poppins(fontSize: 10, color: AppTheme.error)),
+                                ),
+                              if (monthCollected > 0)
+                                Padding(
+                                  padding: const EdgeInsets.only(top: 4.0),
+                                  child: Text('Paid: ${_currencyFormat.format(monthCollected)}', style: GoogleFonts.poppins(fontSize: 10, color: AppTheme.success)),
+                                ),
                             ],
                           ),
                         ),
@@ -846,7 +898,7 @@ class _StudentFeeLedgerViewState extends ConsumerState<StudentFeeLedgerView> wit
       // Also create invoice + transaction for accounting
       final invoice = Invoice.create(
         studentId: widget.student.id,
-        academicYearId: widget.academicYear,
+        academicYearId: widget.academicYear.startsWith('ay-') ? widget.academicYear : 'ay-${widget.academicYear}',
         totalAmount: amount,
         dueDate: entry.dueDate,
         ledgerId: entry.id,
@@ -864,11 +916,11 @@ class _StudentFeeLedgerViewState extends ConsumerState<StudentFeeLedgerView> wit
       // Generate sequential RCT-{year}-{seq} PDF Receipt
       final receiptNumber = await dbService.getNextReceiptNumber();
       final settingsService = SettingsService();
-      final schoolName = await settingsService.getSetting('school_name') ?? 'EXCELLENCE ACADEMY SCHOOL';
+      final schoolName = await settingsService.getSetting('school_name') ?? 'Kishan Company';
       final schoolAddress = await settingsService.getSetting('school_address') ?? '123 Education Boulevard, Academic District';
       final schoolContact = await settingsService.getSetting('school_contact') ?? 'Phone: +1 800 555-0199 | Email: finance@school.edu';
 
-      final pdfFile = await ReportGenerator.generatePaymentReceipt(
+      final pdfBytes = await ReportGenerator.buildPaymentReceiptPdfBytes(
         transaction: paymentResult.transaction,
         invoice: invoice,
         student: widget.student,
@@ -883,15 +935,25 @@ class _StudentFeeLedgerViewState extends ConsumerState<StudentFeeLedgerView> wit
       ref.invalidate(studentFeeLedgerProvider(_param));
       ref.invalidate(studentLedgerSummaryProvider(_param));
       ref.invalidate(studentsListProvider);
+      ref.invalidate(dashboardMetricsProvider);
 
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Payment of ${_currencyFormat.format(amount)} recorded! Receipt: $receiptNumber (${pdfFile.path})',
-                style: GoogleFonts.poppins(color: Colors.white)),
-            backgroundColor: AppTheme.primaryPurple,
-          ),
+        final savedFile = await PdfPreviewDialog.show(
+          context: context,
+          title: 'Payment Receipt — $receiptNumber',
+          pdfBytes: pdfBytes,
+          defaultFileName: 'Receipt_${paymentResult.transaction.id.substring(0, 8)}.pdf',
+          defaultSubDirectory: 'Receipts',
         );
+        if (mounted && savedFile != null) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Payment of ${_currencyFormat.format(amount)} recorded! Receipt saved: ${savedFile.path}',
+                  style: GoogleFonts.poppins(color: Colors.white)),
+              backgroundColor: AppTheme.primaryPurple,
+            ),
+          );
+        }
       }
     } catch (e, stackTrace) {
       AppLogger.instance.error('Failed to record row payment', e, stackTrace);
@@ -1037,6 +1099,172 @@ class _StudentFeeLedgerViewState extends ConsumerState<StudentFeeLedgerView> wit
     );
   }
 
+  void _showSelectedMonthsPaymentDialog(List<StudentFeeLedger> ledgersToPay, double totalAmount) {
+    PaymentMethod selectedMethod = PaymentMethod.cash;
+    final refController = TextEditingController();
+
+    showDialog(
+      context: context,
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              backgroundColor: Colors.white,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+              title: Row(
+                children: [
+                  const Icon(Icons.payments_rounded, color: AppTheme.primaryPurple, size: 20),
+                  const SizedBox(width: 8),
+                  Text(
+                    'Pay Selected Months',
+                    style: GoogleFonts.poppins(fontSize: 16, fontWeight: FontWeight.bold, color: AppTheme.textPrimary),
+                  ),
+                ],
+              ),
+              content: SizedBox(
+                width: 400,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: AppTheme.primaryPurple.withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: AppTheme.primaryPurple.withValues(alpha: 0.3)),
+                      ),
+                      child: Column(
+                        children: [
+                          Text('Total Due for Selected Months', style: GoogleFonts.poppins(fontSize: 12, color: AppTheme.primaryPurple)),
+                          const SizedBox(height: 4),
+                          Text(
+                            _currencyFormat.format(totalAmount),
+                            style: GoogleFonts.poppins(fontSize: 24, fontWeight: FontWeight.bold, color: AppTheme.primaryPurple),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 20),
+                    // Payment Method
+                    Text('Payment Method', style: GoogleFonts.poppins(fontSize: 11, fontWeight: FontWeight.w600, color: AppTheme.textSecondary)),
+                    const SizedBox(height: 6),
+                    DropdownButtonFormField<PaymentMethod>(
+                      value: selectedMethod,
+                      decoration: InputDecoration(
+                        isDense: true,
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                      ),
+                      items: PaymentMethod.values.map((m) => DropdownMenuItem(value: m, child: Text(m.displayName))).toList(),
+                      onChanged: (v) {
+                        if (v != null) setDialogState(() => selectedMethod = v);
+                      },
+                    ),
+                    const SizedBox(height: 16),
+                    Text('Reference Number (Optional)', style: GoogleFonts.poppins(fontSize: 11, fontWeight: FontWeight.w600, color: AppTheme.textSecondary)),
+                    const SizedBox(height: 6),
+                    TextFormField(
+                      controller: refController,
+                      decoration: InputDecoration(
+                        hintText: 'e.g. Check #, Txn ID',
+                        hintStyle: GoogleFonts.poppins(fontSize: 13, color: AppTheme.textHint),
+                        isDense: true,
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(ctx),
+                  child: Text('Cancel', style: GoogleFonts.poppins(color: AppTheme.textSecondary)),
+                ),
+                ElevatedButton(
+                  onPressed: _isProcessingPayment
+                      ? null
+                      : () async {
+                          Navigator.pop(ctx);
+                          await _processSelectedLedgersPayment(ledgersToPay, totalAmount, selectedMethod, refController.text);
+                        },
+                  style: ElevatedButton.styleFrom(backgroundColor: AppTheme.primaryPurple, foregroundColor: Colors.white),
+                  child: Text('Process Payment', style: GoogleFonts.poppins(fontWeight: FontWeight.w600)),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Future<void> _processSelectedLedgersPayment(List<StudentFeeLedger> ledgersToPay, double totalAmount, PaymentMethod method, String ref_) async {
+    setState(() => _isProcessingPayment = true);
+    try {
+      final dbService = ref.read(databaseServiceProvider);
+
+      final updatedEntries = await dbService.recordMultiMonthPayment(
+        studentId: widget.student.id,
+        academicYear: widget.academicYear,
+        ledgerIds: ledgersToPay.map((l) => l.id).toList(),
+        paymentMethod: method,
+        referenceNumber: ref_.isNotEmpty ? ref_ : null,
+      );
+
+      // Deselect all
+      _selectedMonthsForPayment.clear();
+
+      // Invalidate providers
+      ref.invalidate(studentFeeLedgerProvider(_param));
+      ref.invalidate(studentLedgerSummaryProvider(_param));
+      ref.invalidate(studentsListProvider);
+      ref.invalidate(dashboardMetricsProvider);
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Payment of ${_currencyFormat.format(totalAmount)} allocated across ${updatedEntries.length} fee entries.',
+              style: GoogleFonts.poppins(color: Colors.white),
+            ),
+            backgroundColor: AppTheme.success,
+          ),
+        );
+      }
+    } catch (e, stackTrace) {
+      AppLogger.instance.error('Failed to process multi-month payment', e, stackTrace);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to process payment: $e'), backgroundColor: AppTheme.error),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isProcessingPayment = false);
+    }
+  }
+
+  void _processSelectedMonthsPayment(Map<String, dynamic> monthlyLedgers) {
+    List<StudentFeeLedger> ledgersToPay = [];
+    for (final month in _selectedMonthsForPayment) {
+      final ledgers = monthlyLedgers[month] as List<dynamic>? ?? [];
+      for (final l in ledgers) {
+        if (l.status == LedgerStatus.pending || l.status == LedgerStatus.partial || l.status == LedgerStatus.overdue) {
+          ledgersToPay.add(l as StudentFeeLedger);
+        }
+      }
+    }
+
+    if (ledgersToPay.isEmpty) return;
+
+    double totalAmount = 0;
+    for (final l in ledgersToPay) {
+      totalAmount += (l.amountDue - l.amountPaid);
+    }
+    _showSelectedMonthsPaymentDialog(ledgersToPay, totalAmount);
+  }
+
   Future<void> _processLumpSumPayment(double amount, PaymentMethod method, String ref_) async {
     setState(() => _isProcessingPayment = true);
     try {
@@ -1053,6 +1281,7 @@ class _StudentFeeLedgerViewState extends ConsumerState<StudentFeeLedgerView> wit
       ref.invalidate(studentFeeLedgerProvider(_param));
       ref.invalidate(studentLedgerSummaryProvider(_param));
       ref.invalidate(studentsListProvider);
+      ref.invalidate(dashboardMetricsProvider);
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(

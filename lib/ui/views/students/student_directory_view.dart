@@ -12,8 +12,8 @@ import '../../../providers/navigation_provider.dart';
 import '../../../providers/dashboard_provider.dart';
 import '../../../services/csv_export_service.dart';
 import '../../../services/file_storage_service.dart';
-import '../../../services/database_seeder.dart';
 import '../../../services/report_generator.dart';
+import '../../widgets/pdf_preview_dialog.dart';
 import '../../../services/app_logger.dart';
 import '../../layout/widgets/glass_card.dart';
 import '../fees/student_fee_ledger_view.dart';
@@ -176,11 +176,10 @@ class _StudentDirectoryViewState extends ConsumerState<StudentDirectoryView>
         Container(
           padding: const EdgeInsets.all(32),
           child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // ── Header ──
+              // ── Header Banner ──
               Container(
-                padding: const EdgeInsets.all(24),
+                padding: const EdgeInsets.all(20),
                 decoration: BoxDecoration(
                   gradient: const LinearGradient(
                     colors: [Color(0xFF5B4BC4), Color(0xFF7B68EE)],
@@ -205,7 +204,7 @@ class _StudentDirectoryViewState extends ConsumerState<StudentDirectoryView>
                         Text(
                           'Student Directory',
                           style: GoogleFonts.poppins(
-                            fontSize: 28,
+                            fontSize: 24,
                             fontWeight: FontWeight.w600,
                             color: Colors.white,
                           ),
@@ -222,11 +221,29 @@ class _StudentDirectoryViewState extends ConsumerState<StudentDirectoryView>
                         ),
                       ],
                     ),
+                    studentsAsync.maybeWhen(
+                      data: (students) => Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withValues(alpha: 0.2),
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        child: Text(
+                          '${students.length} Students',
+                          style: GoogleFonts.poppins(
+                            color: Colors.white,
+                            fontWeight: FontWeight.w600,
+                            fontSize: 14,
+                          ),
+                        ),
+                      ),
+                      orElse: () => const SizedBox.shrink(),
+                    ),
                   ],
                 ),
               ),
 
-              const SizedBox(height: 32),
+              const SizedBox(height: 24),
 
               // ── Search & Filter Bar ──
               GlassCard(
@@ -258,12 +275,12 @@ class _StudentDirectoryViewState extends ConsumerState<StudentDirectoryView>
                           filled: true,
                           fillColor: Colors.white,
                           enabledBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(4),
+                            borderRadius: BorderRadius.circular(10),
                             borderSide:
                                 const BorderSide(color: AppTheme.divider),
                           ),
                           focusedBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(4),
+                            borderRadius: BorderRadius.circular(10),
                             borderSide:
                                 const BorderSide(color: AppTheme.primaryPurple),
                           ),
@@ -279,7 +296,7 @@ class _StudentDirectoryViewState extends ConsumerState<StudentDirectoryView>
                       width: 180,
                       child: DropdownButtonFormField<String>(
                         isExpanded: true,
-                        initialValue: selectedGrade,
+                        value: selectedGrade,
                         dropdownColor: Colors.white,
                         style: GoogleFonts.poppins(color: AppTheme.textPrimary),
                         decoration: InputDecoration(
@@ -289,12 +306,12 @@ class _StudentDirectoryViewState extends ConsumerState<StudentDirectoryView>
                           filled: true,
                           fillColor: Colors.white,
                           enabledBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(4),
+                            borderRadius: BorderRadius.circular(10),
                             borderSide:
                                 const BorderSide(color: AppTheme.divider),
                           ),
                           focusedBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(4),
+                            borderRadius: BorderRadius.circular(10),
                             borderSide:
                                 const BorderSide(color: AppTheme.primaryPurple),
                           ),
@@ -320,7 +337,7 @@ class _StudentDirectoryViewState extends ConsumerState<StudentDirectoryView>
                       width: 160,
                       child: DropdownButtonFormField<String>(
                         isExpanded: true,
-                        initialValue: ref.watch(studentStatusFilterProvider),
+                        value: ref.watch(studentStatusFilterProvider),
                         dropdownColor: Colors.white,
                         style: GoogleFonts.poppins(color: AppTheme.textPrimary),
                         decoration: InputDecoration(
@@ -330,12 +347,12 @@ class _StudentDirectoryViewState extends ConsumerState<StudentDirectoryView>
                           filled: true,
                           fillColor: Colors.white,
                           enabledBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(4),
+                            borderRadius: BorderRadius.circular(10),
                             borderSide:
                                 const BorderSide(color: AppTheme.divider),
                           ),
                           focusedBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(4),
+                            borderRadius: BorderRadius.circular(10),
                             borderSide:
                                 const BorderSide(color: AppTheme.primaryPurple),
                           ),
@@ -374,7 +391,7 @@ class _StudentDirectoryViewState extends ConsumerState<StudentDirectoryView>
                         padding: const EdgeInsets.symmetric(
                             horizontal: 16, vertical: 16),
                         shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(4)),
+                            borderRadius: BorderRadius.circular(10)),
                       ),
                     ),
                     const SizedBox(width: 12),
@@ -425,10 +442,11 @@ class _StudentDirectoryViewState extends ConsumerState<StudentDirectoryView>
                         padding: const EdgeInsets.symmetric(
                             horizontal: 16, vertical: 16),
                         shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(4)),
+                            borderRadius: BorderRadius.circular(10)),
                       ),
                     ),
 
+                    const SizedBox(width: 12),
 
                     OutlinedButton.icon(
                       onPressed: () {
@@ -449,229 +467,76 @@ class _StudentDirectoryViewState extends ConsumerState<StudentDirectoryView>
                         padding: const EdgeInsets.symmetric(
                             horizontal: 16, vertical: 16),
                         shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(4)),
+                            borderRadius: BorderRadius.circular(10)),
                       ),
                     ),
                   ],
                 ),
               ),
 
-              const SizedBox(height: 24),
+              const SizedBox(height: 20),
 
-              // ── Student Data Table ──
               Expanded(
-                child: GlassCard(
-                  padding: EdgeInsets.zero,
-                  borderRadius: 16.0,
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      Padding(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 24, vertical: 20),
-                        child: Text(
-                          'DIRECTORY RESULTS',
-                          style: GoogleFonts.poppins(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w600,
-                            letterSpacing: 1.2,
-                            color: AppTheme.textSecondary,
-                          ),
-                        ),
-                      ),
-                      const Divider(
-                          color: AppTheme.divider, height: 1, thickness: 1),
-                      Expanded(
-                        child: studentsAsync.when(
-                          data: (students) {
-                            if (students.isEmpty) {
-                              return Center(
-                                child: Column(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
-                                    const SizedBox(height: 40),
-                                    Container(
-                                      padding: const EdgeInsets.all(24),
-                                      decoration: const BoxDecoration(
-                                        color: AppTheme.primarySoft,
-                                        shape: BoxShape.circle,
-                                      ),
-                                      child: const Icon(
-                                        Icons.search_off_rounded,
-                                        size: 48,
-                                        color: AppTheme.primaryPurple,
-                                      ),
-                                    ),
-                                    const SizedBox(height: 24),
-                                    Text(
-                                      'No students found',
-                                      style: GoogleFonts.poppins(
-                                        color: AppTheme.textPrimary,
-                                        fontSize: 18,
-                                        fontWeight: FontWeight.w600,
-                                      ),
-                                    ),
-                                    const SizedBox(height: 8),
-                                    Text(
-                                      'Try adjusting your filters or search query.',
-                                      style: GoogleFonts.poppins(
-                                        color: AppTheme.textSecondary,
-                                        fontSize: 14,
-                                      ),
-                                    ),
-                                    const SizedBox(height: 40),
-                                  ],
-                                ),
-                              );
-                            }
-
-                            return SingleChildScrollView(
-                              child: SingleChildScrollView(
-                                scrollDirection: Axis.horizontal,
-                                child: ConstrainedBox(
-                                  constraints: BoxConstraints(
-                                    minWidth:
-                                        MediaQuery.of(context).size.width - 320,
-                                  ),
-                                  child: DataTable(
-                                    headingRowColor: WidgetStateProperty.all(
-                                        Colors.white.withValues(alpha: 0.02)),
-                                    dataRowMinHeight: 64,
-                                    dataRowMaxHeight: 64,
-                                    headingTextStyle: GoogleFonts.poppins(
-                                      fontWeight: FontWeight.w600,
-                                      fontSize: 11,
-                                      letterSpacing: 1.0,
-                                      color: AppTheme.textSecondary,
-                                    ),
-                                    dividerThickness: 1,
-                                    horizontalMargin: 24,
-                                    columns: const [
-                                      DataColumn(label: Text('ADMISSION NO')),
-                                      DataColumn(label: Text('STUDENT NAME')),
-                                      DataColumn(label: Text('GRADE & SEC')),
-                                      DataColumn(label: Text('PARENT PHONE')),
-                                      DataColumn(label: Text('BALANCE')),
-                                      DataColumn(label: Text('STATUS')),
-                                      DataColumn(label: Text('ACTIONS')),
-                                    ],
-                                    rows: students.map((student) {
-                                      return DataRow(
-                                        cells: [
-                                          DataCell(Text(
-                                            student.admissionNumber ?? '—',
-                                            style: GoogleFonts.poppins(
-                                                color: AppTheme.textPrimary,
-                                                fontWeight: FontWeight.w500),
-                                          )),
-                                          DataCell(Text(
-                                            '${student.firstName ?? student.name} ${student.lastName ?? ""}'
-                                                .trim(),
-                                            style: GoogleFonts.poppins(
-                                                color: AppTheme.textPrimary,
-                                                fontWeight: FontWeight.w600),
-                                          )),
-                                          DataCell(Text(
-                                            '${student.gradeLevel}${student.section != null ? " (${student.section})" : ""}',
-                                            style: GoogleFonts.poppins(
-                                                color: AppTheme.textPrimary),
-                                          )),
-                                          DataCell(Text(
-                                            student.guardianPhone ??
-                                                student.fatherPhone ??
-                                                student.motherPhone ??
-                                                '—',
-                                            style: GoogleFonts.poppins(
-                                                color: AppTheme.textPrimary),
-                                          )),
-                                          DataCell(Text(
-                                            '₹${student.currentBalance.toStringAsFixed(2)}',
-                                            style: GoogleFonts.poppins(
-                                              color: student.currentBalance > 0
-                                                  ? AppTheme.error
-                                                  : AppTheme.success,
-                                              fontWeight: FontWeight.w600,
-                                            ),
-                                          )),
-                                          DataCell(Text(
-                                            student.isActive
-                                                ? 'ACTIVE'
-                                                : 'INACTIVE',
-                                            style: GoogleFonts.poppins(
-                                              color: student.isActive
-                                                  ? AppTheme.success
-                                                  : AppTheme.error,
-                                              fontWeight: FontWeight.w600,
-                                              fontSize: 11,
-                                            ),
-                                          )),
-                                          DataCell(
-                                            Row(
-                                              children: [
-                                                TextButton(
-                                                  onPressed: () =>
-                                                      _showStudentProfileDialog(
-                                                          context, student),
-                                                  style: TextButton.styleFrom(
-                                                    foregroundColor:
-                                                        AppTheme.primaryPurple,
-                                                    padding: const EdgeInsets
-                                                        .symmetric(
-                                                        horizontal: 12),
-                                                  ),
-                                                  child: Text(
-                                                    'VIEW PROFILE',
-                                                    style: GoogleFonts.poppins(
-                                                      fontSize: 10,
-                                                      fontWeight:
-                                                          FontWeight.w600,
-                                                      letterSpacing: 0.5,
-                                                    ),
-                                                  ),
-                                                ),
-                                                const SizedBox(width: 8),
-                                                IconButton(
-                                                  icon: Icon(
-                                                    student.isActive
-                                                        ? Icons.block_rounded
-                                                        : Icons
-                                                            .check_circle_outline_rounded,
-                                                    size: 16,
-                                                    color: student.isActive
-                                                        ? AppTheme.error
-                                                        : AppTheme.success,
-                                                  ),
-                                                  tooltip: student.isActive
-                                                      ? 'Deactivate Student'
-                                                      : 'Reactivate Student',
-                                                  onPressed: () =>
-                                                      _toggleStudentStatus(
-                                                          student),
-                                                ),
-                                              ],
-                                            ),
-                                          ),
-                                        ],
-                                      );
-                                    }).toList(),
-                                  ),
-                                ),
+                child: studentsAsync.when(
+                  data: (students) {
+                    if (students.isEmpty) {
+                      return Center(
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            const SizedBox(height: 40),
+                            Container(
+                              padding: const EdgeInsets.all(24),
+                              decoration: const BoxDecoration(
+                                color: AppTheme.primarySoft,
+                                shape: BoxShape.circle,
                               ),
-                            );
-                          },
-                          loading: () => const Center(
-                            child: CircularProgressIndicator(
-                                color: AppTheme.primaryPurple, strokeWidth: 2),
-                          ),
-                          error: (err, stack) => Center(
-                            child: Text(
-                              'Error loading directory: $err',
-                              style: GoogleFonts.poppins(color: AppTheme.error),
+                              child: const Icon(
+                                Icons.search_off_rounded,
+                                size: 48,
+                                color: AppTheme.primaryPurple,
+                              ),
                             ),
-                          ),
+                            const SizedBox(height: 24),
+                            Text(
+                              'No students found',
+                              style: GoogleFonts.poppins(
+                                color: AppTheme.textPrimary,
+                                fontSize: 18,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                            Text(
+                              'Try adjusting your filters or search query.',
+                              style: GoogleFonts.poppins(
+                                color: AppTheme.textSecondary,
+                                fontSize: 14,
+                              ),
+                            ),
+                            const SizedBox(height: 40),
+                          ],
                         ),
-                      ),
-                    ],
+                      );
+                    }
+                    
+                    return Column(
+                      children: [
+                        _buildStatCards(students),
+                        const SizedBox(height: 20),
+                        Expanded(child: _buildStudentTable(context, students)),
+                      ],
+                    );
+                  },
+                  loading: () => const Center(
+                    child: CircularProgressIndicator(
+                        color: AppTheme.primaryPurple, strokeWidth: 2),
+                  ),
+                  error: (err, stack) => Center(
+                    child: Text(
+                      'Error loading directory: $err',
+                      style: GoogleFonts.poppins(color: AppTheme.error),
+                    ),
                   ),
                 ),
               ),
@@ -679,6 +544,258 @@ class _StudentDirectoryViewState extends ConsumerState<StudentDirectoryView>
           ),
         ),
       ],
+    );
+  }
+
+  Widget _buildStatCard(String label, String value, IconData icon, Color iconColor) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(14),
+        boxShadow: [
+          BoxShadow(color: Colors.black.withValues(alpha: 0.04), blurRadius: 8, offset: const Offset(0, 2)),
+        ],
+      ),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              color: iconColor.withValues(alpha: 0.1),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Icon(icon, color: iconColor, size: 20),
+          ),
+          const SizedBox(width: 12),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(value, style: GoogleFonts.poppins(fontSize: 22, fontWeight: FontWeight.w700, color: AppTheme.textPrimary)),
+              Text(label, style: GoogleFonts.poppins(fontSize: 11, color: AppTheme.textSecondary, fontWeight: FontWeight.w500)),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildStatCards(List<Student> students) {
+    final total = students.length;
+    final active = students.where((s) => s.isActive && !s.isAlumni).length;
+    final alumni = students.where((s) => s.isAlumni || !s.isActive).length;
+    final pending = students.where((s) => s.currentBalance > 0).length;
+
+    return Row(
+      children: [
+        Expanded(child: _buildStatCard('Total Students', total.toString(), Icons.school_rounded, const Color(0xFF5B4BC4))),
+        const SizedBox(width: 12),
+        Expanded(child: _buildStatCard('Active', active.toString(), Icons.check_circle_rounded, const Color(0xFF22C55E))),
+        const SizedBox(width: 12),
+        Expanded(child: _buildStatCard('Alumni / Inactive', alumni.toString(), Icons.history_edu_rounded, const Color(0xFFF59E0B))),
+        const SizedBox(width: 12),
+        Expanded(child: _buildStatCard('Pending Dues', pending.toString(), Icons.account_balance_wallet_rounded, const Color(0xFFEF4444))),
+      ],
+    );
+  }
+
+  String _getInitials(Student student) {
+    if (student.firstName != null && student.lastName != null && student.firstName!.isNotEmpty && student.lastName!.isNotEmpty) {
+      return '${student.firstName![0]}${student.lastName![0]}'.toUpperCase();
+    }
+    if (student.name.length >= 2) {
+      return student.name.substring(0, 2).toUpperCase();
+    }
+    if (student.name.isNotEmpty) {
+      return student.name[0].toUpperCase();
+    }
+    return 'S';
+  }
+
+  Color _avatarColor(String grade) {
+    final colors = [
+      const Color(0xFF5B4BC4), const Color(0xFF3B82F6), const Color(0xFF22C55E), const Color(0xFFF59E0B),
+      const Color(0xFFEF4444), const Color(0xFF8B5CF6), const Color(0xFF06B6D4), const Color(0xFFEC4899),
+      const Color(0xFF14B8A6), const Color(0xFF6366F1),
+    ];
+    final hash = grade.hashCode.abs();
+    return colors[hash % colors.length];
+  }
+
+  Widget _buildStudentTable(BuildContext context, List<Student> students) {
+    final currencyFormat = NumberFormat.currency(symbol: '₹', decimalDigits: 0);
+
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(color: Colors.black.withValues(alpha: 0.04), blurRadius: 8, offset: const Offset(0, 2)),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
+            child: Row(
+              children: [
+                Text(
+                  'DIRECTORY RESULTS',
+                  style: GoogleFonts.poppins(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    letterSpacing: 1.2,
+                    color: AppTheme.textSecondary,
+                  ),
+                ),
+                const Spacer(),
+                Text(
+                  'Showing ${students.length} of ${students.length} students',
+                  style: GoogleFonts.poppins(
+                    fontSize: 12,
+                    color: AppTheme.textSecondary,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const Divider(color: AppTheme.divider, height: 1, thickness: 1),
+          Expanded(
+            child: SingleChildScrollView(
+              child: SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: ConstrainedBox(
+                  constraints: BoxConstraints(
+                    minWidth: MediaQuery.of(context).size.width - 320,
+                  ),
+                  child: DataTable(
+                    headingRowColor: WidgetStateProperty.all(const Color(0xFFF8F6FF)),
+                    dataRowMinHeight: 68,
+                    dataRowMaxHeight: 68,
+                    headingTextStyle: GoogleFonts.poppins(
+                      fontWeight: FontWeight.w600,
+                      fontSize: 11,
+                      letterSpacing: 1.0,
+                      color: AppTheme.textSecondary,
+                    ),
+                    dividerThickness: 1,
+                    horizontalMargin: 24,
+                    columns: const [
+                      DataColumn(label: Text('STUDENT NAME')),
+                      DataColumn(label: Text('GRADE & SEC')),
+                      DataColumn(label: Text('PARENT PHONE')),
+                      DataColumn(label: Text('BALANCE')),
+                      DataColumn(label: Text('STATUS')),
+                      DataColumn(label: Text('ACTIONS')),
+                    ],
+                    rows: students.map((student) {
+                      final name = '${student.firstName ?? student.name} ${student.lastName ?? ""}'.trim();
+                      final gradeStr = '${student.gradeLevel}${student.section != null ? " (${student.section})" : ""}';
+                      final phone = student.guardianPhone ?? student.fatherPhone ?? student.motherPhone ?? '—';
+                      final isGreenBal = student.currentBalance == 0;
+                      
+                      return DataRow(
+                        color: WidgetStateProperty.resolveWith<Color?>((states) {
+                          if (states.contains(WidgetState.hovered)) return const Color(0xFFFCFAFF);
+                          return null;
+                        }),
+                        cells: [
+                          DataCell(
+                            Row(
+                              children: [
+                                CircleAvatar(
+                                  backgroundColor: _avatarColor(student.gradeLevel),
+                                  child: Text(_getInitials(student), style: GoogleFonts.poppins(color: Colors.white, fontWeight: FontWeight.w600)),
+                                ),
+                                const SizedBox(width: 12),
+                                Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    Text(name, style: GoogleFonts.poppins(color: AppTheme.textPrimary, fontWeight: FontWeight.w600)),
+                                    Text(student.admissionNumber ?? '—', style: GoogleFonts.poppins(color: AppTheme.textSecondary, fontSize: 11)),
+                                  ],
+                                ),
+                              ],
+                            ),
+                          ),
+                          DataCell(
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFF8F6FF),
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              child: Text(gradeStr, style: GoogleFonts.poppins(color: AppTheme.primaryPurple, fontSize: 12, fontWeight: FontWeight.w500)),
+                            ),
+                          ),
+                          DataCell(
+                            Row(
+                              children: [
+                                const Icon(Icons.phone_rounded, size: 14, color: AppTheme.textSecondary),
+                                const SizedBox(width: 4),
+                                Text(phone, style: GoogleFonts.poppins(color: AppTheme.textPrimary)),
+                              ],
+                            ),
+                          ),
+                          DataCell(
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                              decoration: BoxDecoration(
+                                color: isGreenBal ? AppTheme.success.withValues(alpha: 0.1) : AppTheme.error.withValues(alpha: 0.1),
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              child: Text(currencyFormat.format(student.currentBalance), style: GoogleFonts.poppins(color: isGreenBal ? AppTheme.success : AppTheme.error, fontSize: 12, fontWeight: FontWeight.w600)),
+                            ),
+                          ),
+                          DataCell(
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                              decoration: BoxDecoration(
+                                color: student.isActive ? AppTheme.success.withValues(alpha: 0.1) : const Color(0xFFF59E0B).withValues(alpha: 0.1),
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              child: Text(student.isActive ? 'Active' : 'Inactive/Alumni', style: GoogleFonts.poppins(color: student.isActive ? AppTheme.success : const Color(0xFFF59E0B), fontSize: 12, fontWeight: FontWeight.w600)),
+                            ),
+                          ),
+                          DataCell(
+                            Row(
+                              children: [
+                                OutlinedButton(
+                                  onPressed: () => _showStudentProfileDialog(context, student),
+                                  style: OutlinedButton.styleFrom(
+                                    foregroundColor: AppTheme.primaryPurple,
+                                    side: const BorderSide(color: AppTheme.primaryPurple),
+                                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                    minimumSize: Size.zero,
+                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                                  ),
+                                  child: Text('VIEW PROFILE', style: GoogleFonts.poppins(fontSize: 10, fontWeight: FontWeight.w600, letterSpacing: 0.5)),
+                                ),
+                                const SizedBox(width: 8),
+                                IconButton(
+                                  icon: Icon(
+                                    student.isActive ? Icons.block_rounded : Icons.check_circle_outline_rounded,
+                                    size: 18,
+                                    color: student.isActive ? AppTheme.error : AppTheme.success,
+                                  ),
+                                  tooltip: student.isActive ? 'Deactivate Student' : 'Reactivate Student',
+                                  onPressed: () => _toggleStudentStatus(student),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      );
+                    }).toList(),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -1267,7 +1384,7 @@ class _StudentDirectoryViewState extends ConsumerState<StudentDirectoryView>
                         const SizedBox(width: 12),
                         Expanded(
                           child: DropdownButtonFormField<String>(
-                            initialValue: selectedGender,
+                            value: selectedGender,
                             dropdownColor: Colors.white,
                             style: GoogleFonts.poppins(
                                 color: AppTheme.textPrimary),
@@ -1285,7 +1402,7 @@ class _StudentDirectoryViewState extends ConsumerState<StudentDirectoryView>
                         const SizedBox(width: 12),
                         Expanded(
                           child: DropdownButtonFormField<String>(
-                            initialValue: selectedBlood,
+                            value: selectedBlood,
                             dropdownColor: Colors.white,
                             style: GoogleFonts.poppins(
                                 color: AppTheme.textPrimary),
@@ -1351,7 +1468,7 @@ class _StudentDirectoryViewState extends ConsumerState<StudentDirectoryView>
                               children: [
                                 Expanded(
                                   child: DropdownButtonFormField<String>(
-                                    initialValue: currentClass?.id,
+                                    value: currentClass?.id,
                                     dropdownColor: Colors.white,
                                     style: GoogleFonts.poppins(color: AppTheme.textPrimary),
                                     decoration: _buildEditInputDecoration('Class / Grade'),
@@ -1375,7 +1492,7 @@ class _StudentDirectoryViewState extends ConsumerState<StudentDirectoryView>
                                           data: (secList) {
                                             final currentSec = secList.where((s) => s.id == student.sectionId || s.name == sectionController.text.trim()).firstOrNull;
                                             return DropdownButtonFormField<String>(
-                                              initialValue: currentSec?.id,
+                                              value: currentSec?.id,
                                               dropdownColor: Colors.white,
                                               style: GoogleFonts.poppins(color: AppTheme.textPrimary),
                                               decoration: _buildEditInputDecoration('Section'),
@@ -1890,14 +2007,23 @@ class _StudentDirectoryViewState extends ConsumerState<StudentDirectoryView>
   }
   Future<void> _generateStudentIdCard(BuildContext context, Student student) async {
     try {
-      final pdfFile = await ReportGenerator.generateStudentIdCard(student: student);
+      final pdfBytes = await ReportGenerator.buildStudentIdCardPdfBytes(student: student);
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Student ID Card PDF generated: ${pdfFile.path}', style: GoogleFonts.poppins(color: Colors.white, fontWeight: FontWeight.w600)),
-            backgroundColor: AppTheme.primaryPurple,
-          ),
+        final savedFile = await PdfPreviewDialog.show(
+          context: context,
+          title: 'Student ID Card — ${student.name}',
+          pdfBytes: pdfBytes,
+          defaultFileName: 'ID_Card_${student.admissionNumber ?? student.id.substring(0, 6)}.pdf',
+          defaultSubDirectory: 'ID_Cards',
         );
+        if (context.mounted && savedFile != null) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('ID Card saved to: ${savedFile.path}', style: GoogleFonts.poppins(color: Colors.white, fontWeight: FontWeight.w600)),
+              backgroundColor: AppTheme.primaryPurple,
+            ),
+          );
+        }
       }
     } catch (e, stackTrace) {
       AppLogger.instance.error('Failed to generate Student ID Card', e, stackTrace);
@@ -1970,7 +2096,7 @@ class _StudentDirectoryViewState extends ConsumerState<StudentDirectoryView>
                   tcDate: tcDate,
                 );
 
-                final pdfFile = await ReportGenerator.generateTransferCertificate(
+                final pdfBytes = await ReportGenerator.buildTransferCertificatePdfBytes(
                   student: student,
                   tcNumber: tcNum,
                   tcDate: tcDate,
@@ -1984,12 +2110,21 @@ class _StudentDirectoryViewState extends ConsumerState<StudentDirectoryView>
                 if (context.mounted) {
                   Navigator.of(context).pop(); // Close dialog
                   Navigator.of(context).pop(); // Close profile modal
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text('TC Issued for ${student.name}! Saved to: ${pdfFile.path}', style: GoogleFonts.poppins(color: Colors.white, fontWeight: FontWeight.w600)),
-                      backgroundColor: AppTheme.primaryPurple,
-                    ),
+                  final savedFile = await PdfPreviewDialog.show(
+                    context: context,
+                    title: 'Transfer Certificate — $tcNum',
+                    pdfBytes: pdfBytes,
+                    defaultFileName: 'TC_${student.admissionNumber ?? student.id.substring(0, 6)}.pdf',
+                    defaultSubDirectory: 'Certificates',
                   );
+                  if (context.mounted && savedFile != null) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text('TC Issued for ${student.name}! Saved to: ${savedFile.path}', style: GoogleFonts.poppins(color: Colors.white, fontWeight: FontWeight.w600)),
+                        backgroundColor: AppTheme.primaryPurple,
+                      ),
+                    );
+                  }
                 }
               } catch (e, stackTrace) {
                 AppLogger.instance.error('Failed to issue TC', e, stackTrace);
@@ -2037,7 +2172,7 @@ class _StudentDirectoryViewState extends ConsumerState<StudentDirectoryView>
               ),
               const SizedBox(height: 12),
               DropdownButtonFormField<String>(
-                initialValue: selectedType,
+                value: selectedType,
                 style: GoogleFonts.poppins(color: AppTheme.textPrimary),
                 decoration: const InputDecoration(labelText: 'Document Type'),
                 items: types.map((t) => DropdownMenuItem(value: t, child: Text(t))).toList(),
@@ -2092,54 +2227,56 @@ class _StudentDirectoryViewState extends ConsumerState<StudentDirectoryView>
   }
 
   Widget _buildStudentDocumentsCard(BuildContext context, Student student) {
-    final docsAsync = ref.watch(studentDocumentsProvider(student.id));
+    return Consumer(
+      builder: (context, ref, child) {
+        final docsAsync = ref.watch(studentDocumentsProvider(student.id));
 
-    return Container(
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppTheme.divider),
-        boxShadow: [
-          BoxShadow(color: Colors.black.withValues(alpha: 0.03), blurRadius: 10, offset: const Offset(0, 4))
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Row(
-                children: [
-                  const Icon(Icons.folder_shared_rounded, color: AppTheme.primaryPurple, size: 20),
-                  const SizedBox(width: 10),
-                  Text('Student Documents', style: GoogleFonts.poppins(fontSize: 14, fontWeight: FontWeight.w700, color: AppTheme.textPrimary)),
-                ],
-              ),
-              OutlinedButton.icon(
-                onPressed: () => _showDocumentUploadDialog(context, student),
-                icon: const Icon(Icons.upload_file_rounded, size: 14),
-                label: Text('UPLOAD DOC', style: GoogleFonts.poppins(fontSize: 10, fontWeight: FontWeight.bold)),
-                style: OutlinedButton.styleFrom(
-                  foregroundColor: AppTheme.primaryPurple,
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                ),
-              ),
+        return Container(
+          padding: const EdgeInsets.all(20),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: AppTheme.divider),
+            boxShadow: [
+              BoxShadow(color: Colors.black.withValues(alpha: 0.03), blurRadius: 10, offset: const Offset(0, 4))
             ],
           ),
-          const SizedBox(height: 12),
-          docsAsync.when(
-            data: (docs) {
-              if (docs.isEmpty) {
-                return Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 8.0),
-                  child: Text('No uploaded documents yet.', style: GoogleFonts.poppins(fontSize: 12, color: AppTheme.textHint, fontStyle: FontStyle.italic)),
-                );
-              }
-              return Column(
-                children: docs.map((doc) {
-                  return Padding(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Row(
+                    children: [
+                      const Icon(Icons.folder_shared_rounded, color: AppTheme.primaryPurple, size: 20),
+                      const SizedBox(width: 10),
+                      Text('Student Documents', style: GoogleFonts.poppins(fontSize: 14, fontWeight: FontWeight.w700, color: AppTheme.textPrimary)),
+                    ],
+                  ),
+                  OutlinedButton.icon(
+                    onPressed: () => _showDocumentUploadDialog(context, student),
+                    icon: const Icon(Icons.upload_file_rounded, size: 14),
+                    label: Text('UPLOAD DOC', style: GoogleFonts.poppins(fontSize: 10, fontWeight: FontWeight.bold)),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: AppTheme.primaryPurple,
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              docsAsync.when(
+                data: (docs) {
+                  if (docs.isEmpty) {
+                    return Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 8.0),
+                      child: Text('No uploaded documents yet.', style: GoogleFonts.poppins(fontSize: 12, color: AppTheme.textHint, fontStyle: FontStyle.italic)),
+                    );
+                  }
+                  return Column(
+                    children: docs.map((doc) {
+                      return Padding(
                     padding: const EdgeInsets.only(bottom: 8.0),
                     child: Row(
                       children: [
@@ -2174,6 +2311,8 @@ class _StudentDirectoryViewState extends ConsumerState<StudentDirectoryView>
           ),
         ],
       ),
+    );
+      },
     );
   }
 
@@ -2219,7 +2358,7 @@ class _StudentDirectoryViewState extends ConsumerState<StudentDirectoryView>
                       children: [
                         Expanded(
                           child: DropdownButtonFormField<String>(
-                            initialValue: fromGrade,
+                            value: fromGrade,
                             style: GoogleFonts.poppins(color: AppTheme.textPrimary),
                             decoration: const InputDecoration(labelText: 'From Grade (Current)'),
                             items: _grades.where((g) => g != 'All').map((g) => DropdownMenuItem(value: g, child: Text(g))).toList(),
@@ -2236,7 +2375,7 @@ class _StudentDirectoryViewState extends ConsumerState<StudentDirectoryView>
                         const SizedBox(width: 16),
                         Expanded(
                           child: DropdownButtonFormField<String>(
-                            initialValue: toGrade,
+                            value: toGrade,
                             style: GoogleFonts.poppins(color: AppTheme.textPrimary),
                             decoration: const InputDecoration(labelText: 'To Grade (Target)'),
                             items: [..._grades.where((g) => g != 'All'), 'Alumni / Graduated'].map((g) => DropdownMenuItem(value: g, child: Text(g))).toList(),
@@ -2377,12 +2516,20 @@ class _StudentDirectoryViewState extends ConsumerState<StudentDirectoryView>
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Row(
-                    children: [
-                      const Icon(Icons.discount_rounded, color: AppTheme.primaryPurple, size: 20),
-                      const SizedBox(width: 8),
-                      Text('Fee Discounts & Net Fee', style: GoogleFonts.poppins(fontWeight: FontWeight.bold, fontSize: 14, color: AppTheme.textPrimary)),
-                    ],
+                  Expanded(
+                    child: Row(
+                      children: [
+                        const Icon(Icons.discount_rounded, color: AppTheme.primaryPurple, size: 20),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            'Fee Discounts & Net Fee', 
+                            style: GoogleFonts.poppins(fontWeight: FontWeight.bold, fontSize: 14, color: AppTheme.textPrimary),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                   TextButton.icon(
                     onPressed: () => _showApplyDiscountModal(context, ref, student),
@@ -2521,7 +2668,7 @@ class _StudentDirectoryViewState extends ConsumerState<StudentDirectoryView>
               mainAxisSize: MainAxisSize.min,
               children: [
                 DropdownButtonFormField<String>(
-                  initialValue: selectedTypeId,
+                  value: selectedTypeId,
                   style: GoogleFonts.poppins(color: AppTheme.textPrimary),
                   decoration: const InputDecoration(labelText: 'Select Discount Type *'),
                   items: types.map((dt) {
@@ -2598,13 +2745,19 @@ class _StudentDirectoryViewState extends ConsumerState<StudentDirectoryView>
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Row(
-                    children: [
-                      const Icon(Icons.directions_bus_rounded, color: AppTheme.primaryPurple, size: 20),
-                      const SizedBox(width: 8),
-                      Text('Transport Facility Assignment',
-                          style: GoogleFonts.poppins(fontWeight: FontWeight.bold, fontSize: 14, color: AppTheme.textPrimary)),
-                    ],
+                  Expanded(
+                    child: Row(
+                      children: [
+                        const Icon(Icons.directions_bus_rounded, color: AppTheme.primaryPurple, size: 20),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text('Transport Facility Assignment',
+                              style: GoogleFonts.poppins(fontWeight: FontWeight.bold, fontSize: 14, color: AppTheme.textPrimary),
+                              overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                   TextButton.icon(
                     onPressed: () => _showAssignTransportModal(context, ref, student),
@@ -2781,6 +2934,7 @@ class _StudentDirectoryViewState extends ConsumerState<StudentDirectoryView>
                     ref.invalidate(studentTransportProvider(param));
                     ref.invalidate(studentFeeLedgerProvider(param));
                     ref.invalidate(studentNetFeeBreakdownProvider(studentClassYearParam));
+                    ref.invalidate(dashboardMetricsProvider);
 
                     if (context.mounted) {
                       Navigator.pop(context);

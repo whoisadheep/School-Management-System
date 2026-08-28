@@ -96,24 +96,21 @@ class _UpdateDialogState extends State<UpdateDialog> {
 
   Future<void> _launchUpdater(String installerPath) async {
     try {
-      final currentDir = Directory.current.path;
-      final updaterPath = '$currentDir\\Updater.exe';
-      final file = File(updaterPath);
+      final file = File(installerPath);
       
       if (!await file.exists()) {
-        throw Exception('Updater.exe not found in $currentDir');
+        throw Exception('Installer not found at $installerPath');
       }
-
-      final currentPid = pid.toString();
       
-      // Launch updater process asynchronously and detach
+      // Launch installer process asynchronously and detach
+      // /SILENT and /SP- are Inno Setup arguments for background install
       await Process.start(
-        updaterPath,
-        [installerPath, currentPid],
+        installerPath,
+        ['/SILENT', '/SP-'],
         mode: ProcessStartMode.detached,
       );
       
-      // Exit the current app so updater can overwrite files
+      // Exit the current app so installer can overwrite files
       exit(0);
     } catch (e, stack) {
       AppLogger.instance.error('Failed to launch updater', e, stack);
@@ -128,8 +125,8 @@ class _UpdateDialogState extends State<UpdateDialog> {
 
   @override
   Widget build(BuildContext context) {
-    return WillPopScope(
-      onWillPop: () async => !widget.updateInfo.isMandatory && !_isDownloading,
+    return PopScope(
+      canPop: !widget.updateInfo.isMandatory && !_isDownloading,
       child: Dialog(
         backgroundColor: AppTheme.bgSurface,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),

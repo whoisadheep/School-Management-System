@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:path/path.dart' as p;
 
@@ -19,17 +20,22 @@ class AppLogger {
   final int _maxLogSizeBytes = 500 * 1024; // 500 KB
 
   Future<void> initialize() async {
-    final docsDir = await getApplicationDocumentsDirectory();
-    final logDir = Directory(p.join(docsDir.path, 'SchoolManagementSystem', 'Logs'));
-    
-    if (!await logDir.exists()) {
-      await logDir.create(recursive: true);
-    }
-    
-    _logFile = File(p.join(logDir.path, 'app.log'));
-    
-    if (!await _logFile!.exists()) {
-      await _logFile!.create();
+    if (kIsWeb) return;
+    try {
+      final docsDir = await getApplicationDocumentsDirectory();
+      final logDir = Directory(p.join(docsDir.path, 'SchoolManagementSystem', 'Logs'));
+      
+      if (!await logDir.exists()) {
+        await logDir.create(recursive: true);
+      }
+      
+      _logFile = File(p.join(logDir.path, 'app.log'));
+      
+      if (!await _logFile!.exists()) {
+        await _logFile!.create();
+      }
+    } catch (e) {
+      debugPrint('Logger initialization error: $e');
     }
   }
 
@@ -38,7 +44,8 @@ class AppLogger {
   }
 
   Future<void> _writeLog(LogLevel level, String message, [Object? error, StackTrace? stackTrace]) async {
-    if (_logFile == null) return;
+    debugPrint('[$level] $message ${error != null ? "Error: $error" : ""}');
+    if (kIsWeb || _logFile == null) return;
 
     final timestamp = DateTime.now().toIso8601String();
     final levelStr = level.name.toUpperCase();

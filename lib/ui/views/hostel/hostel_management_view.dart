@@ -44,6 +44,16 @@ class _HostelManagementViewState extends ConsumerState<HostelManagementView> wit
   final _opReasonCtrl = TextEditingController();
   final _opExpectedReturnCtrl = TextEditingController();
 
+  String? _selectedAllocStudentId;
+  String? _selectedOpStudentId;
+
+  String? _selectedAllocGrade;
+  String? _selectedOpGrade;
+
+  final List<String> _grades = [
+    'Nursery', 'LKG', 'UKG', 'Grade 1', 'Grade 2', 'Grade 3', 'Grade 4',
+    'Grade 5', 'Grade 6', 'Grade 7', 'Grade 8', 'Grade 9', 'Grade 10', 'Grade 11', 'Grade 12'
+  ];
   @override
   void initState() {
     super.initState();
@@ -178,15 +188,20 @@ class _HostelManagementViewState extends ConsumerState<HostelManagementView> wit
                 onPressed: () async {
                   if (_blockNameCtrl.text.isEmpty || _blockTotalRoomsCtrl.text.isEmpty) return;
                   final db = ref.read(databaseServiceProvider);
-                  await db.createHostelBlock(HostelBlock(
-                    id: const Uuid().v4(),
-                    blockName: _blockNameCtrl.text,
-                    totalRooms: int.tryParse(_blockTotalRoomsCtrl.text) ?? 0,
-                    wardenStaffId: _wardenIdCtrl.text.isEmpty ? null : _wardenIdCtrl.text,
-                  ));
-                  ref.invalidate(hostelBlocksProvider);
-                  _blockNameCtrl.clear(); _blockTotalRoomsCtrl.clear(); _wardenIdCtrl.clear();
-                  _showSuccess('Block created');
+                  try {
+                    await db.createHostelBlock(HostelBlock(
+                      id: const Uuid().v4(),
+                      blockName: _blockNameCtrl.text,
+                      totalRooms: int.tryParse(_blockTotalRoomsCtrl.text) ?? 0,
+                      wardenStaffId: _wardenIdCtrl.text.isEmpty ? null : _wardenIdCtrl.text,
+                    ));
+                    ref.invalidate(hostelBlocksProvider);
+                    _blockNameCtrl.clear(); _blockTotalRoomsCtrl.clear(); _wardenIdCtrl.clear();
+                    _showSuccess('Block created');
+                  } catch (e) {
+                    if (!mounted) return;
+                    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e'), backgroundColor: AppTheme.error));
+                  }
                 },
                 child: const Text('Create Block'),
               ),
@@ -234,16 +249,21 @@ class _HostelManagementViewState extends ConsumerState<HostelManagementView> wit
                 onPressed: () async {
                   if (_selectedBlockId == null || _roomNumCtrl.text.isEmpty) return;
                   final db = ref.read(databaseServiceProvider);
-                  await db.createHostelRoom(HostelRoom(
-                    id: const Uuid().v4(),
-                    blockId: _selectedBlockId!,
-                    roomNumber: _roomNumCtrl.text,
-                    floor: int.tryParse(_roomFloorCtrl.text) ?? 1,
-                    capacity: int.tryParse(_roomCapCtrl.text) ?? 2,
-                  ));
-                  ref.invalidate(allHostelRoomsProvider);
-                  _roomNumCtrl.clear(); _roomFloorCtrl.clear(); _roomCapCtrl.clear();
-                  _showSuccess('Room created');
+                  try {
+                    await db.createHostelRoom(HostelRoom(
+                      id: const Uuid().v4(),
+                      blockId: _selectedBlockId!,
+                      roomNumber: _roomNumCtrl.text,
+                      floor: int.tryParse(_roomFloorCtrl.text) ?? 1,
+                      capacity: int.tryParse(_roomCapCtrl.text) ?? 2,
+                    ));
+                    ref.invalidate(allHostelRoomsProvider);
+                    _roomNumCtrl.clear(); _roomFloorCtrl.clear(); _roomCapCtrl.clear();
+                    _showSuccess('Room created');
+                  } catch (e) {
+                    if (!mounted) return;
+                    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e'), backgroundColor: AppTheme.error));
+                  }
                 },
                 child: const Text('Create Room'),
               ),
@@ -328,6 +348,7 @@ class _HostelManagementViewState extends ConsumerState<HostelManagementView> wit
     final allocationsAsync = ref.watch(hostelAllocationsProvider);
     final roomsAsync = ref.watch(allHostelRoomsProvider);
 
+
     return SingleChildScrollView(
       padding: const EdgeInsets.all(24),
       child: Row(
@@ -346,8 +367,32 @@ class _HostelManagementViewState extends ConsumerState<HostelManagementView> wit
                   children: [
                     Text('Allocate Room', style: GoogleFonts.poppins(fontSize: 16, fontWeight: FontWeight.w600)),
                     const SizedBox(height: 16),
-                    TextField(controller: _allocStudentIdCtrl, decoration: _inputDeco('Student ID')),
+                    DropdownButtonFormField<String>(
+                      decoration: _inputDeco('Select Grade'),
+                      value: _selectedAllocGrade,
+                      items: _grades.map((g) => DropdownMenuItem(value: g, child: Text(g))).toList(),
+                      onChanged: (v) {
+                        setState(() {
+                          _selectedAllocGrade = v;
+                          _selectedAllocStudentId = null;
+                        });
+                      },
+                    ),
                     const SizedBox(height: 12),
+                    if (_selectedAllocGrade != null)
+                      ref.watch(studentsByGradeProvider(_selectedAllocGrade!)).when(
+                        data: (students) => DropdownButtonFormField<String>(
+                          decoration: _inputDeco('Select Student'),
+                          value: _selectedAllocStudentId,
+                          items: students.map((s) => DropdownMenuItem(value: s.id, child: Text('${s.firstName ?? s.name} ${s.lastName ?? ""} (${s.admissionNumber ?? "N/A"})'))).toList(),
+                          onChanged: (v) => setState(() => _selectedAllocStudentId = v),
+                          isExpanded: true,
+                        ),
+                        loading: () => const CircularProgressIndicator(),
+                        error: (_, __) => const Text('Error loading students'),
+                      ),
+                    if (_selectedAllocGrade != null)
+                      const SizedBox(height: 12),
                     roomsAsync.when(
                       data: (rooms) => DropdownButtonFormField<String>(
                         decoration: _inputDeco('Select Room'),
@@ -373,21 +418,22 @@ class _HostelManagementViewState extends ConsumerState<HostelManagementView> wit
                       child: ElevatedButton(
                         style: ElevatedButton.styleFrom(backgroundColor: AppTheme.primaryPurple, foregroundColor: Colors.white),
                         onPressed: () async {
-                          if (_allocStudentIdCtrl.text.isEmpty || _allocRoomId == null || _allocFeeCtrl.text.isEmpty) return;
+                          if (_selectedAllocStudentId == null || _allocRoomId == null || _allocFeeCtrl.text.isEmpty) return;
                           try {
                             final db = ref.read(databaseServiceProvider);
                             await db.allocateStudent(
-                              _allocStudentIdCtrl.text,
+                              _selectedAllocStudentId!,
                               _allocRoomId!,
                               _allocYear,
                               double.parse(_allocFeeCtrl.text),
                             );
                             ref.invalidate(hostelAllocationsProvider);
                             ref.invalidate(allHostelRoomsProvider);
-                            _allocStudentIdCtrl.clear();
+                            setState(() => _selectedAllocStudentId = null);
                             _allocFeeCtrl.clear();
                             _showSuccess('Allocated successfully');
                           } catch (e) {
+                            if (!mounted) return;
                             _showError(e.toString());
                           }
                         },
@@ -416,19 +462,85 @@ class _HostelManagementViewState extends ConsumerState<HostelManagementView> wit
                     allocationsAsync.when(
                       data: (allocs) {
                         if (allocs.isEmpty) return const Text('No active allocations');
-                        return ListView.separated(
-                          shrinkWrap: true,
-                          physics: const NeverScrollableScrollPhysics(),
-                          itemCount: allocs.length,
-                          separatorBuilder: (_, __) => const Divider(),
-                          itemBuilder: (ctx, i) {
-                            final a = allocs[i];
-                            return ListTile(
-                              title: Text('Student ID: ${a.studentId}', style: GoogleFonts.poppins(fontWeight: FontWeight.w500)),
-                              subtitle: Text('Room ID: ${a.roomId} | Year: ${a.academicYear}'),
-                              trailing: Text(DateFormat('MMM dd, yyyy').format(DateTime.parse(a.allocatedDate))),
+                        final allStudentsAsync = ref.watch(allActiveStudentsProvider);
+                        return allStudentsAsync.when(
+                          data: (students) {
+                            return roomsAsync.when(
+                              data: (rooms) {
+                                final allocsByRoom = <String, List<HostelAllocation>>{};
+                                for (var a in allocs) {
+                                  allocsByRoom.putIfAbsent(a.roomId, () => []).add(a);
+                                }
+
+                                return ListView.builder(
+                                  shrinkWrap: true,
+                                  physics: const NeverScrollableScrollPhysics(),
+                                  itemCount: allocsByRoom.keys.length,
+                                  itemBuilder: (ctx, i) {
+                                    final roomId = allocsByRoom.keys.elementAt(i);
+                                    final roomAllocs = allocsByRoom[roomId]!;
+                                    final room = rooms.firstWhere((r) => r.id == roomId, orElse: () => HostelRoom(id: roomId, blockId: '', roomNumber: 'Unknown', capacity: 0, currentOccupancy: 0, floor: 0));
+                                    
+                                    return Card(
+                                      margin: const EdgeInsets.only(bottom: 16),
+                                      color: const Color(0xFFF9FAFB),
+                                      elevation: 0,
+                                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8), side: const BorderSide(color: Color(0xFFE5E7EB))),
+                                      child: Padding(
+                                        padding: const EdgeInsets.all(16),
+                                        child: Column(
+                                          crossAxisAlignment: CrossAxisAlignment.start,
+                                          children: [
+                                            Row(
+                                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                              children: [
+                                                Text('Room ${room.roomNumber}', style: GoogleFonts.poppins(fontWeight: FontWeight.w600, color: AppTheme.primaryPurple, fontSize: 15)),
+                                                Container(
+                                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                                  decoration: BoxDecoration(
+                                                    color: AppTheme.primaryPurple.withOpacity(0.1),
+                                                    borderRadius: BorderRadius.circular(12),
+                                                  ),
+                                                  child: Text('${roomAllocs.length}/${room.capacity} Occupied', style: GoogleFonts.poppins(fontSize: 12, color: AppTheme.primaryPurple, fontWeight: FontWeight.w500)),
+                                                ),
+                                              ],
+                                            ),
+                                            const SizedBox(height: 12),
+                                            ...roomAllocs.map((a) {
+                                              final student = students.firstWhere((s) => s.id == a.studentId, orElse: () => Student(id: a.studentId, name: 'Unknown Student', gradeLevel: 'N/A', createdAt: DateTime.now(), updatedAt: DateTime.now()));
+                                              final name = '${student.firstName ?? student.name} ${student.lastName ?? ""}'.trim();
+                                              return Padding(
+                                                padding: const EdgeInsets.only(bottom: 8),
+                                                child: Row(
+                                                  children: [
+                                                    const Icon(Icons.person_outline, size: 18, color: AppTheme.textSecondary),
+                                                    const SizedBox(width: 8),
+                                                    Expanded(
+                                                      child: Column(
+                                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                                        children: [
+                                                          Text(name, style: GoogleFonts.poppins(fontSize: 13, fontWeight: FontWeight.w500, color: AppTheme.textPrimary)),
+                                                          Text('ID: ${student.admissionNumber ?? "N/A"} | Year: ${a.academicYear}', style: GoogleFonts.poppins(fontSize: 11, color: AppTheme.textSecondary)),
+                                                        ],
+                                                      ),
+                                                    ),
+                                                  ],
+                                                ),
+                                              );
+                                            }).toList(),
+                                          ],
+                                        ),
+                                      ),
+                                    );
+                                  },
+                                );
+                              },
+                              loading: () => const CircularProgressIndicator(),
+                              error: (e, _) => Text('Error loading rooms: $e'),
                             );
                           },
+                          loading: () => const CircularProgressIndicator(),
+                          error: (e, _) => Text('Error loading students: $e'),
                         );
                       },
                       loading: () => const Center(child: CircularProgressIndicator()),
@@ -449,6 +561,7 @@ class _HostelManagementViewState extends ConsumerState<HostelManagementView> wit
     final blocksAsync = ref.watch(hostelBlocksProvider);
     final allocsAsync = ref.watch(hostelAllocationsProvider);
     final roomsAsync = ref.watch(allHostelRoomsProvider);
+    final allStudentsAsync = ref.watch(allActiveStudentsProvider);
 
     return SingleChildScrollView(
       padding: const EdgeInsets.all(24),
@@ -480,8 +593,8 @@ class _HostelManagementViewState extends ConsumerState<HostelManagementView> wit
               ),
               const SizedBox(height: 24),
               if (_attBlockId != null) ...[
-                Builder(
-                  builder: (ctx) {
+                allStudentsAsync.when(
+                  data: (students) {
                     if (allocsAsync.isLoading || roomsAsync.isLoading) return const CircularProgressIndicator();
                     if (allocsAsync.hasError || roomsAsync.hasError) return const Text('Error loading data');
                     
@@ -493,35 +606,91 @@ class _HostelManagementViewState extends ConsumerState<HostelManagementView> wit
 
                     if (allocsInBlock.isEmpty) return const Text('No students allocated in this block.');
 
+                    final allocsByRoom = <String, List<HostelAllocation>>{};
+                    for (var a in allocsInBlock) {
+                      allocsByRoom.putIfAbsent(a.roomId, () => []).add(a);
+                    }
+
                     return Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        ListView.builder(
-                          shrinkWrap: true,
-                          physics: const NeverScrollableScrollPhysics(),
-                          itemCount: allocsInBlock.length,
-                          itemBuilder: (ctx, i) {
-                            final a = allocsInBlock[i];
-                            final status = _attendanceMap[a.studentId] ?? 'Present';
-                            return ListTile(
-                              title: Text('Student ID: ${a.studentId}', style: GoogleFonts.poppins(fontWeight: FontWeight.w500)),
-                              subtitle: Text('Room: ${allRooms.firstWhere((r) => r.id == a.roomId).roomNumber}'),
-                              trailing: SegmentedButton<String>(
-                                segments: const [
-                                  ButtonSegment(value: 'Present', label: Text('Present')),
-                                  ButtonSegment(value: 'Absent', label: Text('Absent')),
+                        ...allocsByRoom.keys.map((roomId) {
+                          final roomAllocs = allocsByRoom[roomId]!;
+                          final room = allRooms.firstWhere((r) => r.id == roomId);
+                          
+                          return Card(
+                            margin: const EdgeInsets.only(bottom: 16),
+                            color: const Color(0xFFF9FAFB),
+                            elevation: 0,
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8), side: const BorderSide(color: Color(0xFFE5E7EB))),
+                            child: Padding(
+                              padding: const EdgeInsets.all(16),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text('Room ${room.roomNumber}', style: GoogleFonts.poppins(fontWeight: FontWeight.w600, color: AppTheme.primaryPurple, fontSize: 15)),
+                                  const SizedBox(height: 12),
+                                  ...roomAllocs.map((a) {
+                                    final student = students.firstWhere((s) => s.id == a.studentId, orElse: () => Student(id: a.studentId, name: 'Unknown Student', gradeLevel: 'N/A', createdAt: DateTime.now(), updatedAt: DateTime.now()));
+                                    final name = '${student.firstName ?? student.name} ${student.lastName ?? ""}'.trim();
+                                    final status = _attendanceMap[a.studentId] ?? 'Present';
+                                    
+                                    return Padding(
+                                      padding: const EdgeInsets.only(bottom: 8),
+                                      child: Row(
+                                        children: [
+                                          CircleAvatar(
+                                            radius: 16,
+                                            backgroundColor: AppTheme.primaryPurple.withValues(alpha: 0.1),
+                                            child: Text(name.isNotEmpty ? name[0] : '?', style: const TextStyle(color: AppTheme.primaryPurple, fontSize: 12, fontWeight: FontWeight.bold)),
+                                          ),
+                                          const SizedBox(width: 12),
+                                          Expanded(
+                                            child: Column(
+                                              crossAxisAlignment: CrossAxisAlignment.start,
+                                              children: [
+                                                Text(name, style: GoogleFonts.poppins(fontSize: 14, fontWeight: FontWeight.w500, color: AppTheme.textPrimary)),
+                                                Text('${student.gradeLevel} | ID: ${student.admissionNumber ?? "N/A"}', style: GoogleFonts.poppins(fontSize: 12, color: AppTheme.textSecondary)),
+                                              ],
+                                            ),
+                                          ),
+                                          SegmentedButton<String>(
+                                            segments: const [
+                                              ButtonSegment(value: 'Present', label: Text('Present', style: TextStyle(fontSize: 12))),
+                                              ButtonSegment(value: 'Absent', label: Text('Absent', style: TextStyle(fontSize: 12))),
+                                            ],
+                                            selected: {status},
+                                            onSelectionChanged: (s) {
+                                              setState(() => _attendanceMap[a.studentId] = s.first);
+                                            },
+                                            style: ButtonStyle(
+                                              visualDensity: VisualDensity.compact,
+                                              backgroundColor: WidgetStateProperty.resolveWith((states) {
+                                                if (states.contains(WidgetState.selected)) {
+                                                  return status == 'Present' ? Colors.green.withValues(alpha: 0.2) : Colors.red.withValues(alpha: 0.2);
+                                                }
+                                                return null;
+                                              }),
+                                              foregroundColor: WidgetStateProperty.resolveWith((states) {
+                                                if (states.contains(WidgetState.selected)) {
+                                                  return status == 'Present' ? Colors.green[800] : Colors.red[800];
+                                                }
+                                                return Colors.black87;
+                                              }),
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    );
+                                  }),
                                 ],
-                                selected: {status},
-                                onSelectionChanged: (s) {
-                                  setState(() => _attendanceMap[a.studentId] = s.first);
-                                },
                               ),
-                            );
-                          },
-                        ),
+                            ),
+                          );
+                        }),
                         const SizedBox(height: 16),
                         ElevatedButton(
-                          style: ElevatedButton.styleFrom(backgroundColor: AppTheme.primaryPurple, foregroundColor: Colors.white),
+                          style: ElevatedButton.styleFrom(backgroundColor: AppTheme.primaryPurple, foregroundColor: Colors.white, minimumSize: const Size(double.infinity, 48)),
                           onPressed: () async {
                             final date = DateTime.now().toIso8601String().substring(0, 10);
                             final list = allocsInBlock.map((a) => HostelAttendance(
@@ -533,6 +702,7 @@ class _HostelManagementViewState extends ConsumerState<HostelManagementView> wit
                             )).toList();
                             
                             await ref.read(databaseServiceProvider).markHostelAttendance(list);
+                            if (!mounted) return;
                             _showSuccess('Attendance marked successfully');
                           },
                           child: const Text('Submit Attendance'),
@@ -540,6 +710,8 @@ class _HostelManagementViewState extends ConsumerState<HostelManagementView> wit
                       ],
                     );
                   },
+                  loading: () => const Center(child: CircularProgressIndicator()),
+                  error: (e, _) => Text('Error loading students: $e'),
                 ),
               ],
             ],
@@ -552,6 +724,7 @@ class _HostelManagementViewState extends ConsumerState<HostelManagementView> wit
   // ====================== TAB 4: OUTPASS ======================
   Widget _buildOutpassTab() {
     final outpassesAsync = ref.watch(outpassesProvider);
+
     
     return SingleChildScrollView(
       padding: const EdgeInsets.all(24),
@@ -571,8 +744,32 @@ class _HostelManagementViewState extends ConsumerState<HostelManagementView> wit
                   children: [
                     Text('Request Outpass', style: GoogleFonts.poppins(fontSize: 16, fontWeight: FontWeight.w600)),
                     const SizedBox(height: 16),
-                    TextField(controller: _opStudentIdCtrl, decoration: _inputDeco('Student ID')),
+                    DropdownButtonFormField<String>(
+                      decoration: _inputDeco('Select Grade'),
+                      value: _selectedOpGrade,
+                      items: _grades.map((g) => DropdownMenuItem(value: g, child: Text(g))).toList(),
+                      onChanged: (v) {
+                        setState(() {
+                          _selectedOpGrade = v;
+                          _selectedOpStudentId = null;
+                        });
+                      },
+                    ),
                     const SizedBox(height: 12),
+                    if (_selectedOpGrade != null)
+                      ref.watch(studentsByGradeProvider(_selectedOpGrade!)).when(
+                        data: (students) => DropdownButtonFormField<String>(
+                          decoration: _inputDeco('Select Student'),
+                          value: _selectedOpStudentId,
+                          items: students.map((s) => DropdownMenuItem(value: s.id, child: Text('${s.firstName ?? s.name} ${s.lastName ?? ""} (${s.admissionNumber ?? "N/A"})'))).toList(),
+                          onChanged: (v) => setState(() => _selectedOpStudentId = v),
+                          isExpanded: true,
+                        ),
+                        loading: () => const CircularProgressIndicator(),
+                        error: (_, __) => const Text('Error loading students'),
+                      ),
+                    if (_selectedOpGrade != null)
+                      const SizedBox(height: 12),
                     TextField(controller: _opReasonCtrl, decoration: _inputDeco('Reason'), maxLines: 2),
                     const SizedBox(height: 12),
                     TextField(
@@ -585,19 +782,26 @@ class _HostelManagementViewState extends ConsumerState<HostelManagementView> wit
                       child: ElevatedButton(
                         style: ElevatedButton.styleFrom(backgroundColor: AppTheme.primaryPurple, foregroundColor: Colors.white),
                         onPressed: () async {
-                          if (_opStudentIdCtrl.text.isEmpty || _opReasonCtrl.text.isEmpty) return;
+                          if (_selectedOpStudentId == null || _opReasonCtrl.text.isEmpty) return;
                           final db = ref.read(databaseServiceProvider);
-                          await db.requestOutpass(Outpass(
-                            id: const Uuid().v4(),
-                            studentId: _opStudentIdCtrl.text,
-                            reason: _opReasonCtrl.text,
-                            outDate: DateTime.now().toIso8601String(),
-                            expectedReturnDate: _opExpectedReturnCtrl.text,
-                            status: 'Pending',
-                          ));
-                          ref.invalidate(outpassesProvider);
-                          _opStudentIdCtrl.clear(); _opReasonCtrl.clear(); _opExpectedReturnCtrl.clear();
-                          _showSuccess('Outpass requested');
+                          try {
+                            await db.requestOutpass(Outpass(
+                              id: const Uuid().v4(),
+                              studentId: _selectedOpStudentId!,
+                              reason: _opReasonCtrl.text,
+                              expectedReturnDate: _opExpectedReturnCtrl.text,
+                              status: 'Pending',
+                              outDate: DateTime.now().toIso8601String(),
+                            ));
+                            ref.invalidate(outpassesProvider);
+                            setState(() => _selectedOpStudentId = null);
+                            _opReasonCtrl.clear();
+                            _opExpectedReturnCtrl.clear();
+                            _showSuccess('Outpass requested');
+                          } catch (e) {
+                            if (!mounted) return;
+                            _showError(e.toString());
+                          }
                         },
                         child: const Text('Submit Request'),
                       ),

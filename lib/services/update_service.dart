@@ -30,7 +30,7 @@ class UpdateService {
   UpdateInfo? _lastUpdateInfo;
   static const Duration _cacheDuration = Duration(hours: 3);
   
-  static const String _updateJsonUrl = 'https://nirvah-sms.web.app/version.json';
+  static const String _updateJsonUrl = 'https://raw.githubusercontent.com/whoisadheep/School-Management-System/main/version.json';
 
   Future<UpdateInfo?> checkForUpdate({bool force = false}) async {
     if (!force && _lastCheckTime != null) {

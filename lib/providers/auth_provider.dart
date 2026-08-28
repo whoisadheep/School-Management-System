@@ -1,6 +1,5 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/models.dart';
-import '../models/admin_user.dart';
 import '../services/auth_service.dart';
 
 class AuthState {
@@ -48,34 +47,43 @@ class AuthNotifier extends StateNotifier<AuthState> {
   Future<bool> login(String username, String password) async {
     state = state.copyWith(isLoading: true, errorMessage: null);
 
-    final adminUser = await _authService.loginAdmin(username, password);
-    
-    if (adminUser != null) {
-      // Check if the user needs a mandatory password change
-      bool forceChange = adminUser.forcePasswordChange;
+    try {
+      final adminUser = await _authService.loginAdmin(username, password);
+      
+      if (adminUser != null) {
+        // Check if the user needs a mandatory password change
+        bool forceChange = adminUser.forcePasswordChange;
 
-      // Map to standard User for legacy RBAC compatibility throughout the app
-      final mappedUser = User(
-        id: adminUser.id,
-        username: adminUser.username,
-        fullName: adminUser.fullName,
-        role: adminUser.role == 'principal' ? UserRole.principal : UserRole.accountant,
-        pinHash: '',
-        createdAt: adminUser.createdAt,
-        updatedAt: adminUser.createdAt,
-      );
+        // Map to standard User for legacy RBAC compatibility throughout the app
+        final mappedUser = User(
+          id: adminUser.id,
+          username: adminUser.username,
+          fullName: adminUser.fullName,
+          role: adminUser.role == 'principal' ? UserRole.principal : UserRole.accountant,
+          pinHash: '',
+          createdAt: adminUser.createdAt,
+          updatedAt: adminUser.createdAt,
+        );
 
-      state = AuthState(
-        currentUser: mappedUser,
-        currentAdmin: adminUser,
-        isAuthenticated: true,
-        forcePasswordChange: forceChange,
-      );
-      return true;
-    } else {
+        state = AuthState(
+          currentUser: mappedUser,
+          currentAdmin: adminUser,
+          isAuthenticated: true,
+          forcePasswordChange: forceChange,
+          isLoading: false,
+        );
+        return true;
+      } else {
+        state = state.copyWith(
+          isLoading: false,
+          errorMessage: 'Invalid username or password.',
+        );
+        return false;
+      }
+    } catch (e) {
       state = state.copyWith(
         isLoading: false,
-        errorMessage: 'Invalid username or password.',
+        errorMessage: 'Login failed: $e',
       );
       return false;
     }
@@ -91,6 +99,17 @@ class AuthNotifier extends StateNotifier<AuthState> {
       return true;
     } catch (e) {
       state = state.copyWith(isLoading: false, errorMessage: 'Failed to change password: $e');
+      return false;
+    }
+  }
+
+  Future<bool> setSecurityQuestion(String question, String answer) async {
+    if (state.currentAdmin == null) return false;
+    
+    try {
+      await _authService.setSecurityQuestion(state.currentAdmin!.id, question, answer);
+      return true;
+    } catch (e) {
       return false;
     }
   }
