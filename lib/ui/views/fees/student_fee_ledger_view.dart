@@ -8,6 +8,7 @@ import '../../../providers/services_provider.dart';
 import '../../../providers/dashboard_provider.dart';
 import '../../../services/report_generator.dart';
 import '../../widgets/pdf_preview_dialog.dart';
+import '../../widgets/payment_receipt_dialog.dart';
 import '../../../services/settings_service.dart';
 import '../../../services/app_logger.dart';
 
@@ -971,22 +972,16 @@ class _StudentFeeLedgerViewState extends ConsumerState<StudentFeeLedgerView> wit
       ref.invalidate(dashboardMetricsProvider);
 
       if (mounted) {
-        final savedFile = await PdfPreviewDialog.show(
+        await PaymentReceiptDialog.show(
           context: context,
-          title: 'Payment Receipt — $receiptNumber',
-          pdfBytes: pdfBytes,
-          defaultFileName: 'Receipt_${paymentResult.transaction.id.substring(0, 8)}.pdf',
-          defaultSubDirectory: 'Receipts',
+          student: widget.student,
+          paidLedgers: [entry.copyWith(amountPaid: entry.amountPaid + amount)],
+          totalAmount: amount,
+          paymentMethod: method,
+          referenceNumber: ref_.isNotEmpty ? ref_ : null,
+          academicYear: _selectedAcademicYear,
+          receiptNumber: receiptNumber,
         );
-        if (mounted && savedFile != null) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('Payment of ${_currencyFormat.format(amount)} recorded! Receipt saved: ${savedFile.path}',
-                  style: GoogleFonts.poppins(color: Colors.white)),
-              backgroundColor: AppTheme.primaryPurple,
-            ),
-          );
-        }
       }
     } catch (e, stackTrace) {
       AppLogger.instance.error('Failed to record row payment', e, stackTrace);
@@ -1246,6 +1241,8 @@ class _StudentFeeLedgerViewState extends ConsumerState<StudentFeeLedgerView> wit
         referenceNumber: ref_.isNotEmpty ? ref_ : null,
       );
 
+      final receiptNumber = await dbService.getNextReceiptNumber();
+
       // Deselect all
       _selectedMonthsForPayment.clear();
 
@@ -1256,14 +1253,15 @@ class _StudentFeeLedgerViewState extends ConsumerState<StudentFeeLedgerView> wit
       ref.invalidate(dashboardMetricsProvider);
 
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              'Payment of ${_currencyFormat.format(totalAmount)} allocated across ${updatedEntries.length} fee entries.',
-              style: GoogleFonts.poppins(color: Colors.white),
-            ),
-            backgroundColor: AppTheme.success,
-          ),
+        await PaymentReceiptDialog.show(
+          context: context,
+          student: widget.student,
+          paidLedgers: updatedEntries,
+          totalAmount: totalAmount,
+          paymentMethod: method,
+          referenceNumber: ref_.isNotEmpty ? ref_ : null,
+          academicYear: _selectedAcademicYear,
+          receiptNumber: receiptNumber,
         );
       }
     } catch (e, stackTrace) {
@@ -1310,6 +1308,8 @@ class _StudentFeeLedgerViewState extends ConsumerState<StudentFeeLedgerView> wit
         referenceNumber: ref_.isNotEmpty ? ref_ : null,
       );
 
+      final receiptNumber = await dbService.getNextReceiptNumber();
+
       // Refresh providers
       ref.invalidate(studentFeeLedgerProvider(_param));
       ref.invalidate(studentLedgerSummaryProvider(_param));
@@ -1317,14 +1317,15 @@ class _StudentFeeLedgerViewState extends ConsumerState<StudentFeeLedgerView> wit
       ref.invalidate(dashboardMetricsProvider);
 
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              '${_currencyFormat.format(amount)} allocated across ${updatedEntries.length} fee entries.',
-              style: GoogleFonts.poppins(color: Colors.white),
-            ),
-            backgroundColor: AppTheme.primaryPurple,
-          ),
+        await PaymentReceiptDialog.show(
+          context: context,
+          student: widget.student,
+          paidLedgers: updatedEntries,
+          totalAmount: amount,
+          paymentMethod: method,
+          referenceNumber: ref_.isNotEmpty ? ref_ : null,
+          academicYear: _selectedAcademicYear,
+          receiptNumber: receiptNumber,
         );
       }
     } catch (e, stackTrace) {

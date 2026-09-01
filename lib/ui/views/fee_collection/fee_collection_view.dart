@@ -14,6 +14,7 @@ import '../../../providers/services_provider.dart';
 import '../../../services/bulk_invoice_service.dart';
 import '../../../services/report_generator.dart';
 import '../../widgets/pdf_preview_dialog.dart';
+import '../../widgets/payment_receipt_dialog.dart';
 import '../../../services/settings_service.dart';
 import '../../../services/app_logger.dart';
 import '../../layout/widgets/glass_card.dart';
@@ -1588,29 +1589,35 @@ class _StudentDetailPaneState extends ConsumerState<_StudentDetailPane> {
         throw Exception('Payment recording failed.');
       }
       
+      final receiptNumber = await dbService.getNextReceiptNumber();
+
       ref.invalidate(studentsListProvider);
       ref.invalidate(selectedStudentInvoicesProvider);
       ref.invalidate(dashboardMetricsProvider);
       ref.invalidate(studentFeeLedgerProvider);
       ref.invalidate(studentLedgerSummaryProvider);
 
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              'Payment of ${amount.toStringAsFixed(2)} allocated across ${updatedLedgers.length} fee item(s) in session $activeYear.',
-              style: GoogleFonts.poppins(color: Colors.white, fontWeight: FontWeight.w600),
-            ),
-            backgroundColor: AppTheme.success,
-          ),
-        );
-      }
+      final selectedMethodUsed = _selectedMethod;
+      final refNumUsed = _refController.text.trim();
 
       _amountController.clear();
       _refController.clear();
       setState(() {
         _selectedLedgerIds.clear();
       });
+
+      if (mounted) {
+        await PaymentReceiptDialog.show(
+          context: context,
+          student: widget.student,
+          paidLedgers: updatedLedgers,
+          totalAmount: amount,
+          paymentMethod: selectedMethodUsed,
+          referenceNumber: refNumUsed.isNotEmpty ? refNumUsed : null,
+          academicYear: activeYear,
+          receiptNumber: receiptNumber,
+        );
+      }
 
     } catch (e, stackTrace) {
       AppLogger.instance.error('Payment processing failed', e, stackTrace);

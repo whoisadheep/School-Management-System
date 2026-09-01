@@ -1,7 +1,7 @@
 {
-  "latest_version": "1.0.6",
-  "download_url": "https://github.com/whoisadheep/School-Management-System/releases/download/v1.0.6/Eduvia-Installer.exe",
+  "latest_version": "1.0.7",
+  "download_url": "https://github.com/whoisadheep/School-Management-System/releases/download/v1.0.7/Eduvia-Installer.exe",
   "sha256": "",
-  "changelog": "Dynamic Academic Session Sync across reports/exams/analytics, and From-To Month Range unified fee collection.",
+  "changelog": "Professional itemized receipt popup after every fee payment with School Name branding, PDF printing/saving, and instant WhatsApp receipt sharing.",
   "mandatory_update": false
 }
