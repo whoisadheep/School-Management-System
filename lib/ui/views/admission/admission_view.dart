@@ -17,16 +17,12 @@ class AdmissionView extends ConsumerStatefulWidget {
 }
 
 class _AdmissionViewState extends ConsumerState<AdmissionView> {
-  // Focus nodes for Step 1
+  // Focus nodes
   final _fnFirstName = FocusNode();
   final _fnLastName = FocusNode();
-
-  // Focus nodes for Step 2
   final _fnAadhaar = FocusNode();
   final _fnAdmissionNo = FocusNode();
   final _fnRollNo = FocusNode();
-
-  // Focus nodes for Step 3
   final _fnFatherName = FocusNode();
   final _fnFatherOcc = FocusNode();
   final _fnFatherPhone = FocusNode();
@@ -34,10 +30,65 @@ class _AdmissionViewState extends ConsumerState<AdmissionView> {
   final _fnMotherOcc = FocusNode();
   final _fnMotherPhone = FocusNode();
   final _fnPrimaryPhone = FocusNode();
-
-  // Focus nodes for Step 4
   final _fnResAddr = FocusNode();
   final _fnPermAddr = FocusNode();
+
+  // Controllers for smooth keyboard input
+  late final TextEditingController _ctrlFirstName;
+  late final TextEditingController _ctrlLastName;
+  late final TextEditingController _ctrlAadhaar;
+  late final TextEditingController _ctrlAdmissionNo;
+  late final TextEditingController _ctrlRollNo;
+  late final TextEditingController _ctrlFatherName;
+  late final TextEditingController _ctrlFatherOcc;
+  late final TextEditingController _ctrlFatherPhone;
+  late final TextEditingController _ctrlMotherName;
+  late final TextEditingController _ctrlMotherOcc;
+  late final TextEditingController _ctrlMotherPhone;
+  late final TextEditingController _ctrlPrimaryPhone;
+  late final TextEditingController _ctrlResAddr;
+  late final TextEditingController _ctrlPermAddr;
+
+  @override
+  void initState() {
+    super.initState();
+    final form = ref.read(admissionFormProvider);
+    _ctrlFirstName = TextEditingController(text: form.firstName);
+    _ctrlLastName = TextEditingController(text: form.lastName);
+    _ctrlAadhaar = TextEditingController(text: form.aadhaarNumber);
+    _ctrlAdmissionNo = TextEditingController(text: form.admissionNumber);
+    _ctrlRollNo = TextEditingController(text: form.rollNumber);
+    _ctrlFatherName = TextEditingController(text: form.fatherName);
+    _ctrlFatherOcc = TextEditingController(text: form.fatherOccupation);
+    _ctrlFatherPhone = TextEditingController(text: form.fatherPhone);
+    _ctrlMotherName = TextEditingController(text: form.motherName);
+    _ctrlMotherOcc = TextEditingController(text: form.motherOccupation);
+    _ctrlMotherPhone = TextEditingController(text: form.motherPhone);
+    _ctrlPrimaryPhone = TextEditingController(text: form.primaryContactNumber);
+    _ctrlResAddr = TextEditingController(text: form.residentialAddress);
+    _ctrlPermAddr = TextEditingController(text: form.permanentAddress);
+  }
+
+  void _syncControllers(AdmissionState next) {
+    if (_ctrlAdmissionNo.text != next.admissionNumber) {
+      _ctrlAdmissionNo.text = next.admissionNumber;
+    }
+    if (next.firstName.isEmpty && _ctrlFirstName.text.isNotEmpty) {
+      _ctrlFirstName.clear();
+      _ctrlLastName.clear();
+      _ctrlAadhaar.clear();
+      _ctrlRollNo.clear();
+      _ctrlFatherName.clear();
+      _ctrlFatherOcc.clear();
+      _ctrlFatherPhone.clear();
+      _ctrlMotherName.clear();
+      _ctrlMotherOcc.clear();
+      _ctrlMotherPhone.clear();
+      _ctrlPrimaryPhone.clear();
+      _ctrlResAddr.clear();
+      _ctrlPermAddr.clear();
+    }
+  }
 
   @override
   void dispose() {
@@ -55,11 +106,30 @@ class _AdmissionViewState extends ConsumerState<AdmissionView> {
     _fnPrimaryPhone.dispose();
     _fnResAddr.dispose();
     _fnPermAddr.dispose();
+
+    _ctrlFirstName.dispose();
+    _ctrlLastName.dispose();
+    _ctrlAadhaar.dispose();
+    _ctrlAdmissionNo.dispose();
+    _ctrlRollNo.dispose();
+    _ctrlFatherName.dispose();
+    _ctrlFatherOcc.dispose();
+    _ctrlFatherPhone.dispose();
+    _ctrlMotherName.dispose();
+    _ctrlMotherOcc.dispose();
+    _ctrlMotherPhone.dispose();
+    _ctrlPrimaryPhone.dispose();
+    _ctrlResAddr.dispose();
+    _ctrlPermAddr.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
+    ref.listen<AdmissionState>(admissionFormProvider, (prev, next) {
+      _syncControllers(next);
+    });
+
     final formState = ref.watch(admissionFormProvider);
     final formNotifier = ref.read(admissionFormProvider.notifier);
     final isReadOnly = ref.watch(licenseStateProvider).value?.status.isReadOnly ?? false;
@@ -348,7 +418,7 @@ class _AdmissionViewState extends ConsumerState<AdmissionView> {
                           child: _buildTextField(
                             label: 'First Name *',
                             focusNode: _fnFirstName,
-                            initialValue: state.firstName,
+                            controller: _ctrlFirstName,
                             onChanged: notifier.updateFirstName,
                           ),
                         ),
@@ -357,7 +427,7 @@ class _AdmissionViewState extends ConsumerState<AdmissionView> {
                           child: _buildTextField(
                             label: 'Last Name *',
                             focusNode: _fnLastName,
-                            initialValue: state.lastName,
+                            controller: _ctrlLastName,
                             onChanged: notifier.updateLastName,
                           ),
                         ),
@@ -464,12 +534,12 @@ class _AdmissionViewState extends ConsumerState<AdmissionView> {
                       child: _buildTextField(
                         label: 'Admission Number *',
                         focusNode: _fnAdmissionNo,
-                        initialValue: state.admissionNumber,
+                        controller: _ctrlAdmissionNo,
                         onChanged: notifier.updateAdmissionNumber,
                       ),
                     ),
                     IconButton(
-                      onPressed: notifier.regenerateAdmissionNumber,
+                      onPressed: () => notifier.regenerateAdmissionNumber(),
                       icon: const Icon(Icons.autorenew_rounded, color: Color(0xFF60A5FA)),
                       tooltip: 'Auto-generate Admission No.',
                     ),
@@ -487,7 +557,7 @@ class _AdmissionViewState extends ConsumerState<AdmissionView> {
                 child: _buildTextField(
                   label: 'Roll Number',
                   focusNode: _fnRollNo,
-                  initialValue: state.rollNumber,
+                  controller: _ctrlRollNo,
                   onChanged: notifier.updateRollNumber,
                 ),
               ),
@@ -505,7 +575,7 @@ class _AdmissionViewState extends ConsumerState<AdmissionView> {
                 child: _buildTextField(
                   label: 'Aadhaar Number (12 Digits)',
                   focusNode: _fnAadhaar,
-                  initialValue: state.aadhaarNumber,
+                  controller: _ctrlAadhaar,
                   onChanged: notifier.updateAadhaarNumber,
                 ),
               ),
@@ -551,7 +621,7 @@ class _AdmissionViewState extends ConsumerState<AdmissionView> {
                 child: _buildTextField(
                   label: "Father's Full Name *",
                   focusNode: _fnFatherName,
-                  initialValue: state.fatherName,
+                  controller: _ctrlFatherName,
                   onChanged: notifier.updateFatherName,
                 ),
               ),
@@ -560,7 +630,7 @@ class _AdmissionViewState extends ConsumerState<AdmissionView> {
                 child: _buildTextField(
                   label: "Father's Occupation",
                   focusNode: _fnFatherOcc,
-                  initialValue: state.fatherOccupation,
+                  controller: _ctrlFatherOcc,
                   onChanged: notifier.updateFatherOccupation,
                 ),
               ),
@@ -569,7 +639,7 @@ class _AdmissionViewState extends ConsumerState<AdmissionView> {
                 child: _buildTextField(
                   label: "Father's Phone",
                   focusNode: _fnFatherPhone,
-                  initialValue: state.fatherPhone,
+                  controller: _ctrlFatherPhone,
                   onChanged: notifier.updateFatherPhone,
                 ),
               ),
@@ -584,7 +654,7 @@ class _AdmissionViewState extends ConsumerState<AdmissionView> {
                 child: _buildTextField(
                   label: "Mother's Full Name",
                   focusNode: _fnMotherName,
-                  initialValue: state.motherName,
+                  controller: _ctrlMotherName,
                   onChanged: notifier.updateMotherName,
                 ),
               ),
@@ -593,7 +663,7 @@ class _AdmissionViewState extends ConsumerState<AdmissionView> {
                 child: _buildTextField(
                   label: "Mother's Occupation",
                   focusNode: _fnMotherOcc,
-                  initialValue: state.motherOccupation,
+                  controller: _ctrlMotherOcc,
                   onChanged: notifier.updateMotherOccupation,
                 ),
               ),
@@ -602,7 +672,7 @@ class _AdmissionViewState extends ConsumerState<AdmissionView> {
                 child: _buildTextField(
                   label: "Mother's Phone",
                   focusNode: _fnMotherPhone,
-                  initialValue: state.motherPhone,
+                  controller: _ctrlMotherPhone,
                   onChanged: notifier.updateMotherPhone,
                 ),
               ),
@@ -617,7 +687,7 @@ class _AdmissionViewState extends ConsumerState<AdmissionView> {
                 child: _buildTextField(
                   label: 'Primary Emergency Contact Number *',
                   focusNode: _fnPrimaryPhone,
-                  initialValue: state.primaryContactNumber,
+                  controller: _ctrlPrimaryPhone,
                   onChanged: notifier.updatePrimaryContactNumber,
                 ),
               ),
@@ -648,9 +718,14 @@ class _AdmissionViewState extends ConsumerState<AdmissionView> {
                     _buildTextField(
                       label: 'Residential Address *',
                       focusNode: _fnResAddr,
-                      initialValue: state.residentialAddress,
+                      controller: _ctrlResAddr,
                       maxLines: 2,
-                      onChanged: notifier.updateResidentialAddress,
+                      onChanged: (v) {
+                        notifier.updateResidentialAddress(v);
+                        if (state.sameAsResidential) {
+                          _ctrlPermAddr.text = v;
+                        }
+                      },
                     ),
 
                     const SizedBox(height: 12),
@@ -660,7 +735,13 @@ class _AdmissionViewState extends ConsumerState<AdmissionView> {
                         Checkbox(
                           value: state.sameAsResidential,
                           activeColor: AppTheme.primaryPurple,
-                          onChanged: (val) => notifier.toggleSameAsResidential(val ?? true),
+                          onChanged: (val) {
+                            final isSame = val ?? true;
+                            notifier.toggleSameAsResidential(isSame);
+                            if (isSame) {
+                              _ctrlPermAddr.text = _ctrlResAddr.text;
+                            }
+                          },
                         ),
                         const Text('Permanent Address is same as Residential Address', style: TextStyle(color: AppTheme.textPrimary, fontSize: 12.5)),
                       ],
@@ -671,7 +752,7 @@ class _AdmissionViewState extends ConsumerState<AdmissionView> {
                       _buildTextField(
                         label: 'Permanent Address *',
                         focusNode: _fnPermAddr,
-                        initialValue: state.permanentAddress,
+                        controller: _ctrlPermAddr,
                         maxLines: 2,
                         onChanged: notifier.updatePermanentAddress,
                       ),
@@ -790,7 +871,7 @@ class _AdmissionViewState extends ConsumerState<AdmissionView> {
   Widget _buildTextField({
     required String label,
     required FocusNode focusNode,
-    required String initialValue,
+    required TextEditingController controller,
     required ValueChanged<String> onChanged,
     int maxLines = 1,
   }) {
@@ -800,9 +881,8 @@ class _AdmissionViewState extends ConsumerState<AdmissionView> {
         Text(label, style: const TextStyle(color: Color(0xFF757575), fontSize: 11, fontWeight: FontWeight.bold)),
         const SizedBox(height: 6),
         TextFormField(
-          key: ValueKey('$label-$initialValue'),
+          controller: controller,
           focusNode: focusNode,
-          initialValue: initialValue,
           maxLines: maxLines,
           style: const TextStyle(color: AppTheme.textPrimary, fontSize: 13),
           onChanged: onChanged,
