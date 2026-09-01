@@ -2544,8 +2544,8 @@ class DatabaseService {
 
     // Query all admission numbers starting with this year prefix
     final results = await db.rawQuery(
-      "SELECT admission_number FROM students WHERE admission_number LIKE ? OR admission_number LIKE ?",
-      ['$yearStr-%', 'ADM-$yearStr-%'],
+      "SELECT admission_number FROM students WHERE admission_number LIKE ? OR admission_number LIKE ? OR admission_number LIKE ?",
+      ['$yearStr-%', 'ADM-$yearStr-%', '$yearStr/%'],
     );
 
     int maxSeq = 0;
@@ -2553,7 +2553,7 @@ class DatabaseService {
       final adm = row['admission_number'] as String?;
       if (adm == null || adm.trim().isEmpty) continue;
       
-      final clean = adm.replaceAll('ADM-', '').trim();
+      final clean = adm.replaceAll('ADM-', '').replaceAll('/', '-').trim();
       final parts = clean.split('-');
       if (parts.length >= 2) {
         final seq = int.tryParse(parts.last);
@@ -2561,13 +2561,6 @@ class DatabaseService {
           maxSeq = seq;
         }
       }
-    }
-
-    // Fallback if no matching pattern was parsed: use student count
-    if (maxSeq == 0) {
-      final countResult = await db.rawQuery('SELECT COUNT(*) as count FROM students');
-      final totalCount = (countResult.first['count'] as int? ?? 0);
-      maxSeq = totalCount;
     }
 
     final nextSeq = maxSeq + 1;
