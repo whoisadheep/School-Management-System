@@ -1813,6 +1813,32 @@ class DatabaseService {
   /// Returns the number of rows created. Skips any row that already exists (same student+feeHead+year).
   Future<int> generateLedgerForStudent(String studentId, String className, String academicYear) async {
     final db = await _db;
+
+    // Prevent generating dues for academic sessions prior to the student's admission date
+    final studentRows = await db.query(
+      'students',
+      columns: ['admission_date', 'created_at'],
+      where: 'id = ?',
+      whereArgs: [studentId],
+      limit: 1,
+    );
+    if (studentRows.isNotEmpty) {
+      final admDateStr = studentRows.first['admission_date'] as String? ?? studentRows.first['created_at'] as String?;
+      if (admDateStr != null && admDateStr.isNotEmpty) {
+        final admDate = DateTime.tryParse(admDateStr);
+        if (admDate != null) {
+          final yearParts = academicYear.split('-');
+          final sessionEndYear = yearParts.length > 1
+              ? int.tryParse(yearParts[1]) ?? (int.tryParse(yearParts[0]) ?? 0) + 1
+              : (int.tryParse(yearParts[0]) ?? 0) + 1;
+          // If the student was admitted after this session ended, skip generating dues for old sessions
+          if (admDate.year > sessionEndYear || (admDate.year == sessionEndYear && admDate.month > 5)) {
+            return 0;
+          }
+        }
+      }
+    }
+
     final netFees = await getStudentNetPayableFees(studentId, className, academicYear);
     final feeHeads = await getAllFeeHeads();
     final feeHeadMap = {for (var fh in feeHeads) fh.id: fh};
@@ -2501,6 +2527,52 @@ class DatabaseService {
     final count = ((result.first['count'] as int? ?? 0) + 1);
     final seqStr = count.toString().padLeft(4, '0');
     return 'RCT-$rctYear-$seqStr';
+  }
+
+  /// Generate next serial admission number in format YYYY-0001, YYYY-0002, etc.
+  Future<String> getNextAdmissionNumber([String? academicYear]) async {
+    final db = await _db;
+    
+    // Determine the 4-digit prefix year from academicYear (e.g. "2026-2027" -> "2026") or current year
+    String yearStr = DateTime.now().year.toString();
+    if (academicYear != null && academicYear.isNotEmpty) {
+      final parts = academicYear.split('-');
+      if (parts.isNotEmpty && parts[0].trim().length == 4) {
+        yearStr = parts[0].trim();
+      }
+    }
+
+    // Query all admission numbers starting with this year prefix
+    final results = await db.rawQuery(
+      "SELECT admission_number FROM students WHERE admission_number LIKE ? OR admission_number LIKE ?",
+      ['$yearStr-%', 'ADM-$yearStr-%'],
+    );
+
+    int maxSeq = 0;
+    for (final row in results) {
+      final adm = row['admission_number'] as String?;
+      if (adm == null || adm.trim().isEmpty) continue;
+      
+      final clean = adm.replaceAll('ADM-', '').trim();
+      final parts = clean.split('-');
+      if (parts.length >= 2) {
+        final seq = int.tryParse(parts.last);
+        if (seq != null && seq > maxSeq) {
+          maxSeq = seq;
+        }
+      }
+    }
+
+    // Fallback if no matching pattern was parsed: use student count
+    if (maxSeq == 0) {
+      final countResult = await db.rawQuery('SELECT COUNT(*) as count FROM students');
+      final totalCount = (countResult.first['count'] as int? ?? 0);
+      maxSeq = totalCount;
+    }
+
+    final nextSeq = maxSeq + 1;
+    final seqStr = nextSeq.toString().padLeft(4, '0');
+    return '$yearStr-$seqStr';
   }
 
   // ============================================================================
@@ -4494,6 +4566,20 @@ class DatabaseService {
   Future<int> createAcademicYear(AcademicYear year) async {
     final db = await _db;
     return await _insertLogged(db, 'academic_years', year.toMap(), conflictAlgorithm: ConflictAlgorithm.replace);
+  }
+
+  Future<AcademicYear?> getCurrentAcademicYear() async {
+    final db = await _db;
+    final results = await db.query(
+      'academic_years',
+      where: 'is_current = 1',
+      limit: 1,
+    );
+    if (results.isNotEmpty) {
+      return AcademicYear.fromMap(results.first);
+    }
+    final all = await getAllAcademicYears();
+    return all.isNotEmpty ? all.first : null;
   }
 
   Future<void> setCurrentAcademicYear(String yearId) async {

@@ -6,10 +6,7 @@ import '../../../core/theme/app_theme.dart';
 import '../../../models/models.dart';
 import '../../../providers/services_provider.dart';
 import '../../../providers/dashboard_provider.dart';
-import '../../../services/report_generator.dart';
-import '../../widgets/pdf_preview_dialog.dart';
 import '../../widgets/payment_receipt_dialog.dart';
-import '../../../services/settings_service.dart';
 import '../../../services/app_logger.dart';
 
 /// Student Fee Ledger View — shows all fee head obligations, due dates,
@@ -745,8 +742,8 @@ class _StudentFeeLedgerViewState extends ConsumerState<StudentFeeLedgerView> wit
           SnackBar(
             content: Text(
               count > 0
-                  ? '$count ledger entries generated successfully.'
-                  : 'All fee entries already exist — nothing new to generate.',
+                  ? '$count ledger entries generated successfully for session $_selectedAcademicYear.'
+                  : 'Cannot generate: Either fees already exist or student was admitted after session $_selectedAcademicYear.',
               style: GoogleFonts.poppins(color: Colors.white),
             ),
             backgroundColor: count > 0 ? AppTheme.primaryPurple : AppTheme.textSecondary,
@@ -940,30 +937,14 @@ class _StudentFeeLedgerViewState extends ConsumerState<StudentFeeLedgerView> wit
       );
       await dbService.insertInvoice(invoice);
 
-      final paymentResult = await paymentService.processPayment(
+      await paymentService.processPayment(
         invoiceId: invoice.id,
         amountPaid: amount,
         paymentMethod: method,
         referenceNumber: ref_.isNotEmpty ? ref_ : null,
       );
 
-      // Generate sequential RCT-{year}-{seq} PDF Receipt
       final receiptNumber = await dbService.getNextReceiptNumber();
-      final settingsService = SettingsService();
-      final schoolName = await settingsService.getSetting('school_name') ?? 'Eduvia';
-      final schoolAddress = await settingsService.getSetting('school_address') ?? '123 Education Boulevard, Academic District';
-      final schoolContact = await settingsService.getSetting('school_contact') ?? 'Phone: +1 800 555-0199 | Email: finance@school.edu';
-
-      final pdfBytes = await ReportGenerator.buildPaymentReceiptPdfBytes(
-        transaction: paymentResult.transaction,
-        invoice: invoice,
-        student: widget.student,
-        receiptNumber: receiptNumber,
-        feeHeadName: entry.feeHeadName ?? entry.feeHeadId,
-        schoolName: schoolName,
-        schoolAddress: schoolAddress,
-        schoolContact: schoolContact,
-      );
 
       // Refresh providers
       ref.invalidate(studentFeeLedgerProvider(_param));

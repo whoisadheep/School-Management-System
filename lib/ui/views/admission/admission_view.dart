@@ -800,6 +800,7 @@ class _AdmissionViewState extends ConsumerState<AdmissionView> {
         Text(label, style: const TextStyle(color: Color(0xFF757575), fontSize: 11, fontWeight: FontWeight.bold)),
         const SizedBox(height: 6),
         TextFormField(
+          key: ValueKey('$label-$initialValue'),
           focusNode: focusNode,
           initialValue: initialValue,
           maxLines: maxLines,

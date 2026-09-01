@@ -12,10 +12,7 @@ import '../../../providers/dashboard_provider.dart';
 import '../../../providers/license_provider.dart';
 import '../../../providers/services_provider.dart';
 import '../../../services/bulk_invoice_service.dart';
-import '../../../services/report_generator.dart';
-import '../../widgets/pdf_preview_dialog.dart';
 import '../../widgets/payment_receipt_dialog.dart';
-import '../../../services/settings_service.dart';
 import '../../../services/app_logger.dart';
 import '../../layout/widgets/glass_card.dart';
 import '../fees/student_fee_ledger_view.dart';
@@ -858,13 +855,21 @@ class _StudentDetailPaneState extends ConsumerState<_StudentDetailPane> {
                                 ElevatedButton.icon(
                                   onPressed: () async {
                                     final dbService = ref.read(databaseServiceProvider);
-                                    await dbService.generateLedgerForStudent(widget.student.id, widget.student.gradeLevel, activeYear);
+                                    final count = await dbService.generateLedgerForStudent(widget.student.id, widget.student.gradeLevel, activeYear);
                                     await dbService.recalculateOverdueLedgerEntries();
                                     ref.invalidate(studentFeeLedgerProvider);
                                     ref.invalidate(studentLedgerSummaryProvider);
                                     if (context.mounted) {
                                       ScaffoldMessenger.of(context).showSnackBar(
-                                        SnackBar(content: Text('Generated fee dues for $activeYear!'), backgroundColor: AppTheme.primaryPurple),
+                                        SnackBar(
+                                          content: Text(
+                                            count > 0
+                                                ? 'Generated $count fee dues for $activeYear!'
+                                                : 'Cannot generate dues: Student was admitted after session $activeYear or fees already exist.',
+                                            style: GoogleFonts.poppins(),
+                                          ),
+                                          backgroundColor: count > 0 ? AppTheme.primaryPurple : AppTheme.textSecondary,
+                                        ),
                                       );
                                     }
                                   },

@@ -1,4 +1,3 @@
-import 'dart:math';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/models.dart';
 import '../services/services.dart';
@@ -75,8 +74,7 @@ class AdmissionState {
 
   static String _generateDefaultAdmissionNumber() {
     final year = DateTime.now().year;
-    final random = Random().nextInt(8999) + 1000;
-    return 'ADM-$year-$random';
+    return '$year-0001';
   }
 
   String get fullName {
@@ -159,7 +157,16 @@ class AdmissionFormNotifier extends StateNotifier<AdmissionState> {
 
   AdmissionFormNotifier({DatabaseService? dbService, required this.ref})
       : _dbService = dbService ?? DatabaseService(),
-        super(AdmissionState());
+        super(AdmissionState()) {
+    initAdmissionNumber();
+  }
+
+  Future<void> initAdmissionNumber([String? academicYear]) async {
+    try {
+      final nextNum = await _dbService.getNextAdmissionNumber(academicYear);
+      state = state.copyWith(admissionNumber: nextNum, stepError: null);
+    } catch (_) {}
+  }
 
   void setStep(int step) {
     state = state.copyWith(currentStep: step, stepError: null);
@@ -214,11 +221,16 @@ class AdmissionFormNotifier extends StateNotifier<AdmissionState> {
   void updateTransportRouteId(String val) => state = state.copyWith(transportRouteId: val, stepError: null);
   void updateHostelId(String val) => state = state.copyWith(hostelId: val, stepError: null);
 
-  void regenerateAdmissionNumber() {
-    state = state.copyWith(
-      admissionNumber: AdmissionState._generateDefaultAdmissionNumber(),
-      stepError: null,
-    );
+  Future<void> regenerateAdmissionNumber([String? academicYear]) async {
+    try {
+      final nextNum = await _dbService.getNextAdmissionNumber(academicYear);
+      state = state.copyWith(admissionNumber: nextNum, stepError: null);
+    } catch (_) {
+      state = state.copyWith(
+        admissionNumber: AdmissionState._generateDefaultAdmissionNumber(),
+        stepError: null,
+      );
+    }
   }
 
   /// Step Validation Logic before advancing
@@ -331,11 +343,21 @@ class AdmissionFormNotifier extends StateNotifier<AdmissionState> {
 
       await _dbService.insertStudent(student);
 
+      // Auto-generate initial fee ledger for student's admission session
+      try {
+        final currentSession = await _dbService.getCurrentAcademicYear();
+        final sessionName = currentSession?.name ?? '${DateTime.now().year}-${DateTime.now().year + 1}';
+        await _dbService.generateLedgerForStudent(student.id, student.gradeLevel, sessionName);
+      } catch (_) {}
+
       ref.invalidate(studentsListProvider);
+      ref.invalidate(studentFeeLedgerProvider);
+      ref.invalidate(studentLedgerSummaryProvider);
       ref.invalidate(dashboardMetricsProvider);
 
-      // Reset draft state after successful admission
+      // Reset draft state after successful admission and fetch next sequential admission number
       resetForm();
+      await initAdmissionNumber();
       return true;
     } catch (e) {
       state = state.copyWith(isSubmitting: false, stepError: 'Admission Failed: ${e.toString()}');
@@ -345,6 +367,7 @@ class AdmissionFormNotifier extends StateNotifier<AdmissionState> {
 
   void resetForm() {
     state = AdmissionState();
+    initAdmissionNumber();
   }
 }
 

@@ -1,7 +1,7 @@
 {
-  "latest_version": "1.0.7",
-  "download_url": "https://github.com/whoisadheep/School-Management-System/releases/download/v1.0.7/Eduvia-Installer.exe",
+  "latest_version": "1.0.8",
+  "download_url": "https://github.com/whoisadheep/School-Management-System/releases/download/v1.0.8/Eduvia-Installer.exe",
   "sha256": "",
-  "changelog": "Professional itemized receipt popup after every fee payment with School Name branding, PDF printing/saving, and instant WhatsApp receipt sharing.",
+  "changelog": "Serial admission number generation (e.g. 2026-0001) and admission-linked session dues protection.",
   "mandatory_update": false
 }
