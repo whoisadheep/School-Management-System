@@ -30,6 +30,7 @@ class StudentFeeLedgerView extends ConsumerStatefulWidget {
 
 class _StudentFeeLedgerViewState extends ConsumerState<StudentFeeLedgerView> with SingleTickerProviderStateMixin {
   late TabController _tabController;
+  late String _selectedAcademicYear;
   bool _isProcessingPayment = false;
   final Set<String> _selectedMonthsForPayment = {};
   final _currencyFormat = NumberFormat.currency(locale: 'en_IN', symbol: '₹', decimalDigits: 2);
@@ -38,6 +39,7 @@ class _StudentFeeLedgerViewState extends ConsumerState<StudentFeeLedgerView> wit
   @override
   void initState() {
     super.initState();
+    _selectedAcademicYear = widget.academicYear;
     _tabController = TabController(length: 2, vsync: this);
   }
 
@@ -49,7 +51,7 @@ class _StudentFeeLedgerViewState extends ConsumerState<StudentFeeLedgerView> wit
 
   StudentYearParam get _param => StudentYearParam(
         studentId: widget.student.id,
-        academicYear: widget.academicYear,
+        academicYear: _selectedAcademicYear,
       );
 
   @override
@@ -129,7 +131,7 @@ class _StudentFeeLedgerViewState extends ConsumerState<StudentFeeLedgerView> wit
 
   Widget _buildMonthlyStatusTab() {
     return FutureBuilder<Map<String, dynamic>>(
-      future: ref.read(databaseServiceProvider).getMonthlyFeeStatus(widget.student.id, widget.academicYear),
+      future: ref.read(databaseServiceProvider).getMonthlyFeeStatus(widget.student.id, _selectedAcademicYear),
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
           return const Center(child: CircularProgressIndicator(strokeWidth: 2));
@@ -184,7 +186,7 @@ class _StudentFeeLedgerViewState extends ConsumerState<StudentFeeLedgerView> wit
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       Text(
-                        'Monthly Fee Status (AY ${widget.academicYear})',
+                        'Monthly Fee Status (AY $_selectedAcademicYear)',
                         style: GoogleFonts.poppins(fontSize: 14, fontWeight: FontWeight.bold, color: AppTheme.textPrimary),
                       ),
                       if (_selectedMonthsForPayment.isNotEmpty)
@@ -338,9 +340,40 @@ class _StudentFeeLedgerViewState extends ConsumerState<StudentFeeLedgerView> wit
                 style: GoogleFonts.poppins(
                     fontSize: 18, fontWeight: FontWeight.bold, color: AppTheme.textPrimary),
               ),
-              Text(
-                '${widget.student.gradeLevel} • AY ${widget.academicYear} • Roll #${widget.student.rollNumber ?? 'N/A'}',
-                style: GoogleFonts.poppins(fontSize: 12, color: AppTheme.textSecondary),
+              Row(
+                children: [
+                  Text(
+                    '${widget.student.gradeLevel} • Roll #${widget.student.rollNumber ?? 'N/A'} • ',
+                    style: GoogleFonts.poppins(fontSize: 12, color: AppTheme.textSecondary),
+                  ),
+                  Consumer(
+                    builder: (context, ref, _) {
+                      final yearsAsync = ref.watch(academicYearsProvider);
+                      final yearList = yearsAsync.value?.map((y) => y.name).toList() ?? ['2024-2025', '2025-2026'];
+                      if (!yearList.contains(_selectedAcademicYear) && yearList.isNotEmpty) {
+                        _selectedAcademicYear = yearList.first;
+                      }
+
+                      return DropdownButton<String>(
+                        value: yearList.contains(_selectedAcademicYear) ? _selectedAcademicYear : null,
+                        isDense: true,
+                        underline: const SizedBox(),
+                        style: GoogleFonts.poppins(fontSize: 12, fontWeight: FontWeight.bold, color: AppTheme.primaryPurple),
+                        items: yearList
+                            .map((y) => DropdownMenuItem(value: y, child: Text('Session $y')))
+                            .toList(),
+                        onChanged: (val) {
+                          if (val != null) {
+                            setState(() {
+                              _selectedAcademicYear = val;
+                              _selectedMonthsForPayment.clear();
+                            });
+                          }
+                        },
+                      );
+                    },
+                  ),
+                ],
               ),
             ],
           ),
@@ -696,7 +729,7 @@ class _StudentFeeLedgerViewState extends ConsumerState<StudentFeeLedgerView> wit
       final count = await dbService.generateLedgerForStudent(
         widget.student.id,
         widget.student.gradeLevel,
-        widget.academicYear,
+        _selectedAcademicYear,
       );
 
       // Recalculate overdue statuses
@@ -898,7 +931,7 @@ class _StudentFeeLedgerViewState extends ConsumerState<StudentFeeLedgerView> wit
       // Also create invoice + transaction for accounting
       final invoice = Invoice.create(
         studentId: widget.student.id,
-        academicYearId: widget.academicYear.startsWith('ay-') ? widget.academicYear : 'ay-${widget.academicYear}',
+        academicYearId: _selectedAcademicYear.startsWith('ay-') ? _selectedAcademicYear : 'ay-$_selectedAcademicYear',
         totalAmount: amount,
         dueDate: entry.dueDate,
         ledgerId: entry.id,
@@ -1207,7 +1240,7 @@ class _StudentFeeLedgerViewState extends ConsumerState<StudentFeeLedgerView> wit
 
       final updatedEntries = await dbService.recordMultiMonthPayment(
         studentId: widget.student.id,
-        academicYear: widget.academicYear,
+        academicYear: _selectedAcademicYear,
         ledgerIds: ledgersToPay.map((l) => l.id).toList(),
         paymentMethod: method,
         referenceNumber: ref_.isNotEmpty ? ref_ : null,
@@ -1271,7 +1304,7 @@ class _StudentFeeLedgerViewState extends ConsumerState<StudentFeeLedgerView> wit
       final dbService = ref.read(databaseServiceProvider);
       final updatedEntries = await dbService.recordLumpSumPayment(
         studentId: widget.student.id,
-        academicYear: widget.academicYear,
+        academicYear: _selectedAcademicYear,
         totalAmount: amount,
         paymentMethod: method,
         referenceNumber: ref_.isNotEmpty ? ref_ : null,

@@ -10,6 +10,20 @@ final databaseServiceProvider = Provider<DatabaseService>((ref) {
   return DatabaseService(currentAdminId: currentAdmin?.id);
 });
 
+/// All Academic Years Provider
+final academicYearsProvider = FutureProvider<List<AcademicYear>>((ref) async {
+  final dbService = ref.watch(databaseServiceProvider);
+  return await dbService.getAllAcademicYears();
+});
+
+/// Current Active Academic Year Provider
+final currentAcademicYearProvider = FutureProvider<AcademicYear?>((ref) async {
+  final dbService = ref.watch(databaseServiceProvider);
+  final years = await dbService.getAllAcademicYears();
+  if (years.isEmpty) return null;
+  return years.firstWhere((y) => y.isCurrent, orElse: () => years.first);
+});
+
 /// InvoiceService Provider
 final invoiceServiceProvider = Provider<InvoiceService>((ref) {
   final dbService = ref.watch(databaseServiceProvider);

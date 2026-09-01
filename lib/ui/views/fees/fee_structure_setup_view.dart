@@ -126,28 +126,37 @@ class _FeeStructureSetupViewState extends ConsumerState<FeeStructureSetupView> {
                 const SizedBox(width: 24),
                 Text('Academic Year:', style: GoogleFonts.poppins(fontWeight: FontWeight.bold, fontSize: 13, color: AppTheme.textPrimary)),
                 const SizedBox(width: 12),
-                Container(
-                  width: 160,
-                  padding: const EdgeInsets.symmetric(horizontal: 12),
-                  decoration: BoxDecoration(
-                    color: AppTheme.bgSurface,
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: AppTheme.divider),
-                  ),
-                  child: DropdownButtonHideUnderline(
-                    child: DropdownButton<String>(
-                      value: _selectedAcademicYear,
-                      isExpanded: true,
-                      style: GoogleFonts.poppins(fontSize: 13, fontWeight: FontWeight.w600, color: AppTheme.textPrimary),
-                      items: const [
-                        DropdownMenuItem(value: '2024-2025', child: Text('2024-2025')),
-                        DropdownMenuItem(value: '2025-2026', child: Text('2025-2026')),
-                      ],
-                      onChanged: (val) {
-                        if (val != null) setState(() => _selectedAcademicYear = val);
-                      },
-                    ),
-                  ),
+                Consumer(
+                  builder: (context, ref, _) {
+                    final yearsAsync = ref.watch(academicYearsProvider);
+                    final yearList = yearsAsync.value?.map((y) => y.name).toList() ?? ['2024-2025', '2025-2026'];
+                    if (!yearList.contains(_selectedAcademicYear) && yearList.isNotEmpty) {
+                      _selectedAcademicYear = yearList.first;
+                    }
+
+                    return Container(
+                      width: 170,
+                      padding: const EdgeInsets.symmetric(horizontal: 12),
+                      decoration: BoxDecoration(
+                        color: AppTheme.bgSurface,
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: AppTheme.divider),
+                      ),
+                      child: DropdownButtonHideUnderline(
+                        child: DropdownButton<String>(
+                          value: yearList.contains(_selectedAcademicYear) ? _selectedAcademicYear : null,
+                          isExpanded: true,
+                          style: GoogleFonts.poppins(fontSize: 13, fontWeight: FontWeight.w600, color: AppTheme.textPrimary),
+                          items: yearList
+                              .map((y) => DropdownMenuItem(value: y, child: Text(y)))
+                              .toList(),
+                          onChanged: (val) {
+                            if (val != null) setState(() => _selectedAcademicYear = val);
+                          },
+                        ),
+                      ),
+                    );
+                  },
                 ),
               ],
             ),

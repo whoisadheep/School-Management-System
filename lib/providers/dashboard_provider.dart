@@ -60,7 +60,11 @@ final dashboardMetricsProvider = FutureProvider<DashboardMetrics>((ref) async {
   try {
     final dbService = ref.watch(databaseServiceProvider);
     final now = DateTime.now();
-    const currentAcademicYear = '2024-2025';
+    final allYears = await dbService.getAllAcademicYears();
+    final currentYearObj = allYears.isNotEmpty
+        ? allYears.firstWhere((y) => y.isCurrent, orElse: () => allYears.first)
+        : null;
+    final currentAcademicYear = currentYearObj?.name ?? '2024-2025';
 
     // 1. Total Revenue (Income entries in ledger + transactions)
     final ledgerSummary = await dbService.getLedgerSummary();
@@ -209,10 +213,10 @@ final dashboardMetricsProvider = FutureProvider<DashboardMetrics>((ref) async {
         SELECT fh.name, COALESCE(SUM(sfl.amount_paid), 0.0) as collected
         FROM student_fee_ledger sfl
         JOIN fee_heads fh ON sfl.fee_head_id = fh.id
-        WHERE sfl.academic_year = '2024-2025'
+        WHERE sfl.academic_year = ?
         GROUP BY fh.name
         ORDER BY collected DESC
-      '''));
+      ''', [currentAcademicYear]));
       for (final row in feeHeadResult) {
         final name = row['name'] as String?;
         final collected = (row['collected'] as num?)?.toDouble() ?? 0.0;
@@ -226,8 +230,8 @@ final dashboardMetricsProvider = FutureProvider<DashboardMetrics>((ref) async {
     try {
       final rateResult = await dbService.rawDb.then((db) => db.rawQuery('''
         SELECT COALESCE(SUM(amount_due), 0) as total_due, COALESCE(SUM(amount_paid), 0) as total_paid
-        FROM student_fee_ledger WHERE academic_year = '2024-2025'
-      '''));
+        FROM student_fee_ledger WHERE academic_year = ?
+      ''', [currentAcademicYear]));
       if (rateResult.isNotEmpty) {
         final totalDue = (rateResult.first['total_due'] as num?)?.toDouble() ?? 0.0;
         final totalPaid = (rateResult.first['total_paid'] as num?)?.toDouble() ?? 0.0;

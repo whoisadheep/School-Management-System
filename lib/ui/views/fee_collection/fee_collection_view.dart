@@ -499,9 +499,10 @@ class _StudentDetailPaneState extends ConsumerState<_StudentDetailPane> {
   final _refController = TextEditingController();
   PaymentMethod _selectedMethod = PaymentMethod.cash;
   bool _isProcessing = false;
-  
-  String? _selectedFeeHeadId;
+  String? _selectedAcademicYear;
   final Set<String> _selectedLedgerIds = {};
+  String? _fromMonth;
+  String? _toMonth;
 
   @override
   void dispose() {
@@ -510,12 +511,69 @@ class _StudentDetailPaneState extends ConsumerState<_StudentDetailPane> {
     super.dispose();
   }
 
+  int _getMonthIndex(String? label) {
+    if (label == null) return -1;
+    final l = label.toLowerCase();
+    if (l.contains('apr')) return 0;
+    if (l.contains('may')) return 1;
+    if (l.contains('jun')) return 2;
+    if (l.contains('jul')) return 3;
+    if (l.contains('aug')) return 4;
+    if (l.contains('sep')) return 5;
+    if (l.contains('oct')) return 6;
+    if (l.contains('nov')) return 7;
+    if (l.contains('dec')) return 8;
+    if (l.contains('jan')) return 9;
+    if (l.contains('feb')) return 10;
+    if (l.contains('mar')) return 11;
+    return -1;
+  }
+
+  void _applyMonthRange(List<StudentFeeLedger> allUnpaid) {
+    if (_fromMonth == null || _toMonth == null) return;
+    final fromIdx = _getMonthIndex(_fromMonth);
+    final toIdx = _getMonthIndex(_toMonth);
+    if (fromIdx == -1 || toIdx == -1) return;
+
+    final minIdx = fromIdx <= toIdx ? fromIdx : toIdx;
+    final maxIdx = fromIdx <= toIdx ? toIdx : fromIdx;
+
+    final monthlyItems = allUnpaid.where((l) => _getMonthIndex(l.monthLabel) != -1).toList();
+    for (final item in monthlyItems) {
+      final idx = _getMonthIndex(item.monthLabel);
+      if (idx >= minIdx && idx <= maxIdx) {
+        _selectedLedgerIds.add(item.id);
+      } else {
+        _selectedLedgerIds.remove(item.id);
+      }
+    }
+
+    _recalculateTotal(allUnpaid);
+  }
+
+  void _recalculateTotal(List<StudentFeeLedger> allUnpaid) {
+    double total = 0.0;
+    for (var id in _selectedLedgerIds) {
+      final match = allUnpaid.where((l) => l.id == id);
+      if (match.isNotEmpty) total += match.first.remainingAmount;
+    }
+    _amountController.text = total.toStringAsFixed(2);
+  }
+
   @override
   Widget build(BuildContext context) {
     final invoicesAsync = ref.watch(selectedStudentInvoicesProvider);
     final currencyFormatter = NumberFormat.currency(symbol: '₹', decimalDigits: 2);
     final dateFormatter = DateFormat('dd MMM yyyy');
 
+    final yearsAsync = ref.watch(academicYearsProvider);
+    final yearList = yearsAsync.value?.map((y) => y.name).toList() ?? ['2024-2025', '2025-2026'];
+    if (_selectedAcademicYear == null || !_selectedAcademicYear!.contains('-')) {
+      final currentYear = ref.watch(currentAcademicYearProvider).value?.name;
+      _selectedAcademicYear = currentYear ?? (yearList.isNotEmpty ? yearList.first : '2024-2025');
+    }
+
+    final activeYear = _selectedAcademicYear!;
     final double enterAmount = double.tryParse(_amountController.text) ?? 0.0;
     final double realTimeBalancePreview = widget.student.currentBalance - enterAmount;
 
@@ -607,7 +665,7 @@ class _StudentDetailPaneState extends ConsumerState<_StudentDetailPane> {
                         style: GoogleFonts.poppins(
                           fontSize: 20,
                           fontWeight: FontWeight.w600,
-                          color: widget.student.currentBalance > 0 ? const Color(0xFFFFB3B3) : const Color(0xFFB3FFB3), // Soft pastel red/green for contrast on purple
+                          color: widget.student.currentBalance > 0 ? const Color(0xFFFFB3B3) : const Color(0xFFB3FFB3),
                         ),
                       ),
                     ],
@@ -619,21 +677,59 @@ class _StudentDetailPaneState extends ConsumerState<_StudentDetailPane> {
 
           const SizedBox(height: 16),
 
-          // ── Action Buttons ──
+          // ── Action Buttons & Session Selector ──
           Row(
             children: [
+              // Session Switcher
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: AppTheme.divider),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(Icons.calendar_month_rounded, size: 16, color: AppTheme.primaryPurple),
+                    const SizedBox(width: 6),
+                    DropdownButton<String>(
+                      value: yearList.contains(activeYear) ? activeYear : null,
+                      underline: const SizedBox(),
+                      isDense: true,
+                      style: GoogleFonts.poppins(fontSize: 12, fontWeight: FontWeight.w600, color: AppTheme.textPrimary),
+                      items: yearList
+                          .map((y) => DropdownMenuItem(value: y, child: Text('Session $y')))
+                          .toList(),
+                      onChanged: (val) {
+                        if (val != null) {
+                          setState(() {
+                            _selectedAcademicYear = val;
+                            _selectedLedgerIds.clear();
+                            _fromMonth = null;
+                            _toMonth = null;
+                            _amountController.text = '0.0';
+                          });
+                        }
+                      },
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 12),
+
               Expanded(
                 child: OutlinedButton.icon(
                   onPressed: () {
                     Navigator.of(context).push(
                       MaterialPageRoute(
-                        builder: (_) => StudentFeeLedgerView(student: widget.student),
+                        builder: (_) => StudentFeeLedgerView(student: widget.student, academicYear: activeYear),
                       ),
                     );
                   },
                   icon: const Icon(Icons.receipt_long_rounded, size: 16),
                   label: Text(
-                    'View Fee Ledger',
+                    'View Full Ledger',
                     style: GoogleFonts.poppins(fontSize: 12, fontWeight: FontWeight.w600),
                   ),
                   style: OutlinedButton.styleFrom(
@@ -646,7 +742,7 @@ class _StudentDetailPaneState extends ConsumerState<_StudentDetailPane> {
               ),
               
               if (widget.student.currentBalance > 0) ...[
-                const SizedBox(width: 16),
+                const SizedBox(width: 12),
                 Expanded(
                   child: ElevatedButton.icon(
                     onPressed: () async {
@@ -714,26 +810,75 @@ class _StudentDetailPaneState extends ConsumerState<_StudentDetailPane> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    const Icon(Icons.point_of_sale_rounded, color: AppTheme.primaryPurple, size: 20),
-                    const SizedBox(width: 10),
-                    Text(
-                      'PROCESS FEE PAYMENT',
-                      style: GoogleFonts.poppins(fontSize: 12, fontWeight: FontWeight.w600, letterSpacing: 1.2, color: AppTheme.textPrimary),
+                    Row(
+                      children: [
+                        const Icon(Icons.point_of_sale_rounded, color: AppTheme.primaryPurple, size: 20),
+                        const SizedBox(width: 10),
+                        Text(
+                          'UNIFIED FEE PAYMENT (SESSION $activeYear)',
+                          style: GoogleFonts.poppins(fontSize: 12, fontWeight: FontWeight.w600, letterSpacing: 1.2, color: AppTheme.textPrimary),
+                        ),
+                      ],
                     ),
                   ],
                 ),
-                const SizedBox(height: 24),
+                const SizedBox(height: 20),
 
-                // ── Fee Selection ──
+                // ── Fee Selection Across All Fee Heads ──
                 Consumer(
                   builder: (context, ref, child) {
-                    final ledgerAsync = ref.watch(studentFeeLedgerProvider(StudentYearParam(studentId: widget.student.id, academicYear: '2024-2025')));
+                    final ledgerAsync = ref.watch(studentFeeLedgerProvider(StudentYearParam(studentId: widget.student.id, academicYear: activeYear)));
                     
                     return ledgerAsync.when(
                       data: (ledgers) {
                         final unpaidLedgers = ledgers.where((l) => l.remainingAmount > 0).toList();
                         
+                        if (ledgers.isEmpty) {
+                          return Container(
+                            padding: const EdgeInsets.all(20),
+                            margin: const EdgeInsets.only(bottom: 24),
+                            decoration: BoxDecoration(
+                              color: AppTheme.primaryPurple.withValues(alpha: 0.05),
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(color: AppTheme.primaryPurple.withValues(alpha: 0.2)),
+                            ),
+                            child: Row(
+                              children: [
+                                const Icon(Icons.info_outline_rounded, color: AppTheme.primaryPurple),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: Text(
+                                    'No fee dues recorded for session $activeYear.',
+                                    style: GoogleFonts.poppins(color: AppTheme.textPrimary, fontWeight: FontWeight.w500, fontSize: 13),
+                                  ),
+                                ),
+                                ElevatedButton.icon(
+                                  onPressed: () async {
+                                    final dbService = ref.read(databaseServiceProvider);
+                                    await dbService.generateLedgerForStudent(widget.student.id, widget.student.gradeLevel, activeYear);
+                                    await dbService.recalculateOverdueLedgerEntries();
+                                    ref.invalidate(studentFeeLedgerProvider);
+                                    ref.invalidate(studentLedgerSummaryProvider);
+                                    if (context.mounted) {
+                                      ScaffoldMessenger.of(context).showSnackBar(
+                                        SnackBar(content: Text('Generated fee dues for $activeYear!'), backgroundColor: AppTheme.primaryPurple),
+                                      );
+                                    }
+                                  },
+                                  icon: const Icon(Icons.auto_fix_high_rounded, size: 14),
+                                  label: Text('Generate Dues', style: GoogleFonts.poppins(fontSize: 11, fontWeight: FontWeight.bold)),
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: AppTheme.primaryPurple,
+                                    foregroundColor: Colors.white,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          );
+                        }
+
                         if (unpaidLedgers.isEmpty) {
                           return Container(
                             padding: const EdgeInsets.all(16),
@@ -747,7 +892,7 @@ class _StudentDetailPaneState extends ConsumerState<_StudentDetailPane> {
                                 const Icon(Icons.check_circle, color: AppTheme.success),
                                 const SizedBox(width: 12),
                                 Text(
-                                  'All fees for this academic year are cleared.',
+                                  'All fees for academic session $activeYear are fully cleared!',
                                   style: GoogleFonts.poppins(color: AppTheme.success, fontWeight: FontWeight.w600),
                                 ),
                               ],
@@ -755,97 +900,358 @@ class _StudentDetailPaneState extends ConsumerState<_StudentDetailPane> {
                           );
                         }
 
-                        // Map fee heads
-                        final Map<String, String> feeHeadMap = {};
-                        for (var l in unpaidLedgers) {
-                          feeHeadMap[l.feeHeadId] = l.feeHeadName ?? l.feeHeadId;
+                        // Separate Monthly fees from Non-Monthly fees (Exam, Admission, Annual, etc.)
+                        final monthlyLedgers = unpaidLedgers.where((l) => _getMonthIndex(l.monthLabel) != -1).toList();
+                        monthlyLedgers.sort((a, b) => _getMonthIndex(a.monthLabel).compareTo(_getMonthIndex(b.monthLabel)));
+                        
+                        final nonMonthlyLedgers = unpaidLedgers.where((l) => _getMonthIndex(l.monthLabel) == -1).toList();
+
+                        // Unique month labels available
+                        final availableMonths = <String>[];
+                        for (final l in monthlyLedgers) {
+                          if (l.monthLabel != null && !availableMonths.contains(l.monthLabel!)) {
+                            availableMonths.add(l.monthLabel!);
+                          }
                         }
 
-                        final feeHeadsList = feeHeadMap.entries.toList();
-                        if (_selectedFeeHeadId != null && !feeHeadMap.containsKey(_selectedFeeHeadId)) {
-                          WidgetsBinding.instance.addPostFrameCallback((_) {
-                            if (mounted) setState(() => _selectedFeeHeadId = null);
-                          });
+                        // Default from/to months if not set
+                        if (_fromMonth == null && availableMonths.isNotEmpty) {
+                          _fromMonth = availableMonths.first;
+                        }
+                        if (_toMonth == null && availableMonths.isNotEmpty) {
+                          _toMonth = availableMonths.first;
                         }
 
-                        final availableMonthsForHead = _selectedFeeHeadId == null 
-                            ? <StudentFeeLedger>[] 
-                            : unpaidLedgers.where((l) => l.feeHeadId == _selectedFeeHeadId).toList();
+                        final double totalAllUnpaid = unpaidLedgers.fold(0.0, (sum, l) => sum + l.remainingAmount);
+                        final bool isAllSelected = unpaidLedgers.isNotEmpty && unpaidLedgers.every((l) => _selectedLedgerIds.contains(l.id));
 
                         return Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            // Fee Head Dropdown
-                            DropdownButtonFormField<String>(
-                              value: _selectedFeeHeadId,
-                              isExpanded: true,
-                              dropdownColor: Colors.white,
-                              style: GoogleFonts.poppins(color: AppTheme.textPrimary),
-                              decoration: _buildInputDecoration('Select Fee Head (Required)'),
-                              items: feeHeadsList.map((e) {
-                                return DropdownMenuItem(
-                                  value: e.key,
-                                  child: Text(e.value),
-                                );
-                              }).toList(),
-                              onChanged: (val) {
-                                if (val != null) {
-                                  setState(() {
-                                    _selectedFeeHeadId = val;
-                                    _selectedLedgerIds.clear();
-                                    _amountController.text = '0.0';
-                                  });
-                                }
-                              },
-                            ),
-                            
-                            if (_selectedFeeHeadId != null && availableMonthsForHead.isNotEmpty) ...[
+                            // ── FROM - TO MONTH RANGE SELECTOR BOX ──
+                            if (availableMonths.isNotEmpty) ...[
+                              Container(
+                                padding: const EdgeInsets.all(16),
+                                decoration: BoxDecoration(
+                                  color: AppTheme.primaryPurple.withValues(alpha: 0.04),
+                                  borderRadius: BorderRadius.circular(10),
+                                  border: Border.all(color: AppTheme.primaryPurple.withValues(alpha: 0.2)),
+                                ),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Row(
+                                      children: [
+                                        const Icon(Icons.date_range_rounded, color: AppTheme.primaryPurple, size: 18),
+                                        const SizedBox(width: 8),
+                                        Text(
+                                          'SELECT MONTH RANGE (TUITION / MONTHLY FEES):',
+                                          style: GoogleFonts.poppins(fontSize: 11, fontWeight: FontWeight.bold, letterSpacing: 0.5, color: AppTheme.primaryPurple),
+                                        ),
+                                      ],
+                                    ),
+                                    const SizedBox(height: 12),
+                                    Wrap(
+                                      crossAxisAlignment: WrapCrossAlignment.center,
+                                      spacing: 12,
+                                      runSpacing: 12,
+                                      children: [
+                                        // FROM MONTH
+                                        Container(
+                                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                                          decoration: BoxDecoration(
+                                            color: Colors.white,
+                                            borderRadius: BorderRadius.circular(8),
+                                            border: Border.all(color: AppTheme.divider),
+                                          ),
+                                          child: Row(
+                                            mainAxisSize: MainAxisSize.min,
+                                            children: [
+                                              Text('From: ', style: GoogleFonts.poppins(fontSize: 12, fontWeight: FontWeight.w600, color: AppTheme.textSecondary)),
+                                              DropdownButton<String>(
+                                                value: availableMonths.contains(_fromMonth) ? _fromMonth : (availableMonths.isNotEmpty ? availableMonths.first : null),
+                                                underline: const SizedBox(),
+                                                isDense: true,
+                                                style: GoogleFonts.poppins(fontSize: 12, fontWeight: FontWeight.bold, color: AppTheme.textPrimary),
+                                                items: availableMonths
+                                                    .map((m) => DropdownMenuItem(value: m, child: Text(m)))
+                                                    .toList(),
+                                                onChanged: (val) {
+                                                  if (val != null) {
+                                                    setState(() {
+                                                      _fromMonth = val;
+                                                      _applyMonthRange(unpaidLedgers);
+                                                    });
+                                                  }
+                                                },
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+
+                                        const Icon(Icons.arrow_forward_rounded, size: 16, color: AppTheme.primaryPurple),
+
+                                        // TO MONTH
+                                        Container(
+                                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                                          decoration: BoxDecoration(
+                                            color: Colors.white,
+                                            borderRadius: BorderRadius.circular(8),
+                                            border: Border.all(color: AppTheme.divider),
+                                          ),
+                                          child: Row(
+                                            mainAxisSize: MainAxisSize.min,
+                                            children: [
+                                              Text('To: ', style: GoogleFonts.poppins(fontSize: 12, fontWeight: FontWeight.w600, color: AppTheme.textSecondary)),
+                                              DropdownButton<String>(
+                                                value: availableMonths.contains(_toMonth) ? _toMonth : (availableMonths.isNotEmpty ? availableMonths.last : null),
+                                                underline: const SizedBox(),
+                                                isDense: true,
+                                                style: GoogleFonts.poppins(fontSize: 12, fontWeight: FontWeight.bold, color: AppTheme.textPrimary),
+                                                items: availableMonths
+                                                    .map((m) => DropdownMenuItem(value: m, child: Text(m)))
+                                                    .toList(),
+                                                onChanged: (val) {
+                                                  if (val != null) {
+                                                    setState(() {
+                                                      _toMonth = val;
+                                                      _applyMonthRange(unpaidLedgers);
+                                                    });
+                                                  }
+                                                },
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+
+                                        // Quick Presets
+                                        OutlinedButton(
+                                          onPressed: () {
+                                            setState(() {
+                                              _fromMonth = availableMonths.first;
+                                              _toMonth = availableMonths.length >= 3 ? availableMonths[2] : availableMonths.last;
+                                              _applyMonthRange(unpaidLedgers);
+                                            });
+                                          },
+                                          style: OutlinedButton.styleFrom(
+                                            foregroundColor: AppTheme.primaryPurple,
+                                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                                            side: BorderSide(color: AppTheme.primaryPurple.withValues(alpha: 0.3)),
+                                          ),
+                                          child: Text('Next 3 Months', style: GoogleFonts.poppins(fontSize: 11, fontWeight: FontWeight.w600)),
+                                        ),
+
+                                        OutlinedButton(
+                                          onPressed: () {
+                                            setState(() {
+                                              _fromMonth = availableMonths.first;
+                                              _toMonth = availableMonths.length >= 6 ? availableMonths[5] : availableMonths.last;
+                                              _applyMonthRange(unpaidLedgers);
+                                            });
+                                          },
+                                          style: OutlinedButton.styleFrom(
+                                            foregroundColor: AppTheme.primaryPurple,
+                                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                                            side: BorderSide(color: AppTheme.primaryPurple.withValues(alpha: 0.3)),
+                                          ),
+                                          child: Text('6 Months (Half-Year)', style: GoogleFonts.poppins(fontSize: 11, fontWeight: FontWeight.w600)),
+                                        ),
+
+                                        ElevatedButton(
+                                          onPressed: () {
+                                            setState(() {
+                                              _fromMonth = availableMonths.first;
+                                              _toMonth = availableMonths.last;
+                                              _applyMonthRange(unpaidLedgers);
+                                            });
+                                          },
+                                          style: ElevatedButton.styleFrom(
+                                            backgroundColor: AppTheme.primaryPurple,
+                                            foregroundColor: Colors.white,
+                                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                          ),
+                                          child: Text('All Months (${availableMonths.length})', style: GoogleFonts.poppins(fontSize: 11, fontWeight: FontWeight.bold)),
+                                        ),
+                                      ],
+                                    ),
+                                  ],
+                                ),
+                              ),
                               const SizedBox(height: 16),
+                            ],
+
+                            // ── NON-MONTHLY / OTHER FEES (Exam Fee, Annual Charges, etc.) ──
+                            if (nonMonthlyLedgers.isNotEmpty) ...[
                               Text(
-                                'Select Months/Items to Pay',
-                                style: GoogleFonts.poppins(fontSize: 12, fontWeight: FontWeight.w600, color: AppTheme.textSecondary),
+                                'ADDITIONAL / OTHER FEES:',
+                                style: GoogleFonts.poppins(fontSize: 11, fontWeight: FontWeight.bold, letterSpacing: 0.5, color: AppTheme.textSecondary),
                               ),
                               const SizedBox(height: 8),
                               Wrap(
-                                spacing: 8,
-                                runSpacing: 8,
-                                children: availableMonthsForHead.map((ledgerItem) {
-                                  final isSelected = _selectedLedgerIds.contains(ledgerItem.id);
+                                spacing: 10,
+                                runSpacing: 10,
+                                children: nonMonthlyLedgers.map((l) {
+                                  final isSelected = _selectedLedgerIds.contains(l.id);
+                                  final name = l.feeHeadName ?? l.feeHeadId;
+                                  final amt = currencyFormatter.format(l.remainingAmount);
+
                                   return FilterChip(
                                     selected: isSelected,
                                     label: Text(
-                                      ledgerItem.monthLabel ?? 'Unknown',
+                                      '$name: $amt',
                                       style: GoogleFonts.poppins(
-                                        fontSize: 12,
-                                        fontWeight: isSelected ? FontWeight.w600 : FontWeight.w400,
+                                        fontSize: 11,
+                                        fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
                                         color: isSelected ? Colors.white : AppTheme.textPrimary,
                                       ),
                                     ),
-                                    backgroundColor: AppTheme.primaryPurple.withValues(alpha: 0.05),
+                                    backgroundColor: Colors.white,
                                     selectedColor: AppTheme.primaryPurple,
                                     checkmarkColor: Colors.white,
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(8),
+                                      side: BorderSide(color: isSelected ? AppTheme.primaryPurple : AppTheme.divider),
+                                    ),
                                     onSelected: (selected) {
                                       setState(() {
                                         if (selected) {
-                                          _selectedLedgerIds.add(ledgerItem.id);
+                                          _selectedLedgerIds.add(l.id);
                                         } else {
-                                          _selectedLedgerIds.remove(ledgerItem.id);
+                                          _selectedLedgerIds.remove(l.id);
                                         }
-                                        
-                                        // Auto-calculate amount
-                                        double total = 0.0;
-                                        for (var id in _selectedLedgerIds) {
-                                          final l = availableMonthsForHead.firstWhere((e) => e.id == id);
-                                          total += l.remainingAmount;
-                                        }
-                                        _amountController.text = total.toStringAsFixed(2);
+                                        _recalculateTotal(unpaidLedgers);
                                       });
                                     },
                                   );
                                 }).toList(),
                               ),
+                              const SizedBox(height: 16),
                             ],
-                            const SizedBox(height: 24),
+
+                            // ── QUICK ACTION TOOLBAR (SELECT ALL DUES / DESELECT) ──
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                              decoration: BoxDecoration(
+                                color: AppTheme.bgSurface,
+                                borderRadius: BorderRadius.circular(8),
+                                border: Border.all(color: AppTheme.divider),
+                              ),
+                              child: Row(
+                                children: [
+                                  const Icon(Icons.receipt_long_rounded, color: AppTheme.primaryPurple, size: 18),
+                                  const SizedBox(width: 8),
+                                  Expanded(
+                                    child: Text(
+                                      _selectedLedgerIds.isEmpty
+                                          ? 'No fees selected yet. Select a month range or fee items above.'
+                                          : 'Selected ${_selectedLedgerIds.length} item(s) • Total: ${currencyFormatter.format(enterAmount)}',
+                                      style: GoogleFonts.poppins(
+                                        fontSize: 12,
+                                        fontWeight: _selectedLedgerIds.isEmpty ? FontWeight.w500 : FontWeight.bold,
+                                        color: _selectedLedgerIds.isEmpty ? AppTheme.textSecondary : AppTheme.primaryPurple,
+                                      ),
+                                    ),
+                                  ),
+                                  TextButton.icon(
+                                    onPressed: () {
+                                      setState(() {
+                                        if (isAllSelected) {
+                                          _selectedLedgerIds.clear();
+                                          _fromMonth = null;
+                                          _toMonth = null;
+                                        } else {
+                                          _selectedLedgerIds.addAll(unpaidLedgers.map((l) => l.id));
+                                          if (availableMonths.isNotEmpty) {
+                                            _fromMonth = availableMonths.first;
+                                            _toMonth = availableMonths.last;
+                                          }
+                                        }
+                                        _recalculateTotal(unpaidLedgers);
+                                      });
+                                    },
+                                    icon: Icon(isAllSelected ? Icons.deselect_rounded : Icons.select_all_rounded, size: 14),
+                                    label: Text(
+                                      isAllSelected ? 'Clear All' : 'Select Everything (${currencyFormatter.format(totalAllUnpaid)})',
+                                      style: GoogleFonts.poppins(fontSize: 11, fontWeight: FontWeight.bold),
+                                    ),
+                                    style: TextButton.styleFrom(
+                                      foregroundColor: AppTheme.primaryPurple,
+                                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(height: 16),
+
+                            // ── ITEMIZED LIVE SUMMARY CARD ──
+                            if (_selectedLedgerIds.isNotEmpty) ...[
+                              Container(
+                                padding: const EdgeInsets.all(16),
+                                decoration: BoxDecoration(
+                                  color: Colors.white,
+                                  borderRadius: BorderRadius.circular(10),
+                                  border: Border.all(color: AppTheme.primaryPurple.withValues(alpha: 0.25)),
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: Colors.black.withValues(alpha: 0.02),
+                                      blurRadius: 4,
+                                      offset: const Offset(0, 2),
+                                    ),
+                                  ],
+                                ),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Row(
+                                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                      children: [
+                                        Text('FEE COLLECTION BREAKDOWN', style: GoogleFonts.poppins(fontSize: 11, fontWeight: FontWeight.bold, color: AppTheme.primaryPurple, letterSpacing: 0.5)),
+                                        Text('${_selectedLedgerIds.length} item(s) included', style: GoogleFonts.poppins(fontSize: 11, fontWeight: FontWeight.w600, color: AppTheme.textSecondary)),
+                                      ],
+                                    ),
+                                    const SizedBox(height: 10),
+                                    const Divider(height: 1, color: AppTheme.divider),
+                                    const SizedBox(height: 8),
+                                    ...unpaidLedgers.where((l) => _selectedLedgerIds.contains(l.id)).map((item) {
+                                      final title = item.monthLabel ?? item.feeHeadName ?? 'Fee Item';
+                                      final sub = item.feeHeadName != null && item.monthLabel != null ? item.feeHeadName : null;
+                                      return Padding(
+                                        padding: const EdgeInsets.symmetric(vertical: 4),
+                                        child: Row(
+                                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                          children: [
+                                            Row(
+                                              children: [
+                                                const Icon(Icons.check_circle_rounded, size: 14, color: AppTheme.success),
+                                                const SizedBox(width: 8),
+                                                Text(title, style: GoogleFonts.poppins(fontSize: 12, fontWeight: FontWeight.w600, color: AppTheme.textPrimary)),
+                                                if (sub != null) ...[
+                                                  const SizedBox(width: 6),
+                                                  Text('• $sub', style: GoogleFonts.poppins(fontSize: 11, color: AppTheme.textSecondary)),
+                                                ],
+                                              ],
+                                            ),
+                                            Text(currencyFormatter.format(item.remainingAmount), style: GoogleFonts.poppins(fontSize: 12, fontWeight: FontWeight.w600, color: AppTheme.textPrimary)),
+                                          ],
+                                        ),
+                                      );
+                                    }),
+                                    const SizedBox(height: 10),
+                                    const Divider(height: 1, color: AppTheme.divider),
+                                    const SizedBox(height: 10),
+                                    Row(
+                                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                      children: [
+                                        Text('SUM TOTAL:', style: GoogleFonts.poppins(fontSize: 13, fontWeight: FontWeight.bold, color: AppTheme.textPrimary)),
+                                        Text(currencyFormatter.format(enterAmount), style: GoogleFonts.poppins(fontSize: 16, fontWeight: FontWeight.bold, color: AppTheme.primaryPurple)),
+                                      ],
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              const SizedBox(height: 20),
+                            ],
                           ],
                         );
                       },
@@ -877,7 +1283,7 @@ class _StudentDetailPaneState extends ConsumerState<_StudentDetailPane> {
                             keyboardType: const TextInputType.numberWithOptions(decimal: true),
                             onChanged: (_) => setState(() {}),
                             style: GoogleFonts.poppins(color: AppTheme.textPrimary, fontWeight: FontWeight.w600),
-                            decoration: _buildInputDecoration('Payment Amount (₹)', prefix: '₹ ').copyWith(
+                            decoration: _buildInputDecoration('Total Payment Amount (₹)', prefix: '₹ ').copyWith(
                               fillColor: AppTheme.primarySoft.withValues(alpha: 0.1),
                             ),
                           ),
@@ -970,7 +1376,7 @@ class _StudentDetailPaneState extends ConsumerState<_StudentDetailPane> {
                               ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
                               : Icon(isReadOnly ? Icons.lock_rounded : Icons.check_circle_rounded, size: 16),
                           label: Text(
-                            isReadOnly ? 'SOFT-LOCK ACTIVE (READ-ONLY)' : 'CONFIRM PAYMENT & GENERATE RECEIPT',
+                            isReadOnly ? 'SOFT-LOCK ACTIVE (READ-ONLY)' : 'CONFIRM PAYMENT & GENERATE RECEIPT (${currencyFormatter.format(enterAmount)})',
                             style: GoogleFonts.poppins(fontWeight: FontWeight.w700, letterSpacing: 1.0, fontSize: 11),
                           ),
                           style: ElevatedButton.styleFrom(
@@ -1154,10 +1560,10 @@ class _StudentDetailPaneState extends ConsumerState<_StudentDetailPane> {
     final amount = double.tryParse(_amountController.text) ?? 0.0;
     if (amount <= 0) return;
     
-    if (_selectedFeeHeadId == null || _selectedLedgerIds.isEmpty) {
+    if (_selectedLedgerIds.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Please select a Fee Head and at least one month.', style: GoogleFonts.poppins()),
+          content: Text('Please select at least one fee item/month to pay.', style: GoogleFonts.poppins()),
           backgroundColor: AppTheme.error,
         ),
       );
@@ -1168,11 +1574,11 @@ class _StudentDetailPaneState extends ConsumerState<_StudentDetailPane> {
 
     try {
       final dbService = ref.read(databaseServiceProvider);
+      final activeYear = _selectedAcademicYear ?? '2024-2025';
       
-      // We need to use recordMultiMonthPayment from dbService
       final updatedLedgers = await dbService.recordMultiMonthPayment(
         studentId: widget.student.id,
-        academicYear: '2024-2025',
+        academicYear: activeYear,
         ledgerIds: _selectedLedgerIds.toList(),
         paymentMethod: _selectedMethod,
         referenceNumber: _refController.text.isNotEmpty ? _refController.text : null,
@@ -1192,7 +1598,7 @@ class _StudentDetailPaneState extends ConsumerState<_StudentDetailPane> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
-              'Payment of ${amount.toStringAsFixed(2)} allocated across ${updatedLedgers.length} fee entries.',
+              'Payment of ${amount.toStringAsFixed(2)} allocated across ${updatedLedgers.length} fee item(s) in session $activeYear.',
               style: GoogleFonts.poppins(color: Colors.white, fontWeight: FontWeight.w600),
             ),
             backgroundColor: AppTheme.success,
@@ -1203,7 +1609,6 @@ class _StudentDetailPaneState extends ConsumerState<_StudentDetailPane> {
       _amountController.clear();
       _refController.clear();
       setState(() {
-        _selectedFeeHeadId = null;
         _selectedLedgerIds.clear();
       });
 

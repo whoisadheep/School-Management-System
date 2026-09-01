@@ -125,6 +125,41 @@ class _ExamManagementViewState extends ConsumerState<ExamManagementView> with Si
               ),
             ],
           ),
+          Row(
+            children: [
+              Consumer(
+                builder: (context, ref, _) {
+                  final yearsAsync = ref.watch(academicYearsProvider);
+                  final yearList = yearsAsync.value?.map((y) => y.name).toList() ?? ['2024-2025', '2025-2026'];
+                  if (!yearList.contains(_selectedAcademicYear) && yearList.isNotEmpty) {
+                    _selectedAcademicYear = yearList.first;
+                  }
+
+                  return Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12),
+                    decoration: BoxDecoration(
+                      color: AppTheme.bgSurface,
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: AppTheme.divider),
+                    ),
+                    child: DropdownButton<String>(
+                      value: yearList.contains(_selectedAcademicYear) ? _selectedAcademicYear : null,
+                      underline: const SizedBox(),
+                      style: GoogleFonts.poppins(fontSize: 13, color: AppTheme.textPrimary, fontWeight: FontWeight.w600),
+                      items: yearList
+                          .map((y) => DropdownMenuItem(value: y, child: Text('Session $y')))
+                          .toList(),
+                      onChanged: (val) {
+                        if (val != null) {
+                          setState(() => _selectedAcademicYear = val);
+                        }
+                      },
+                    ),
+                  );
+                },
+              ),
+            ],
+          ),
         ],
       ),
     );
