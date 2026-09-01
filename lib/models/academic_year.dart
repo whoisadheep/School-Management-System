@@ -41,13 +41,19 @@ class AcademicYear {
     return AcademicYear(
       id: map['id'] as String,
       name: map['name'] as String,
-      startDate: DateTime.parse(map['start_date'] as String),
-      endDate: DateTime.parse(map['end_date'] as String),
+      startDate: map['start_date'] != null
+          ? DateTime.tryParse(map['start_date'] as String) ?? DateTime(2024, 6, 1)
+          : DateTime(2024, 6, 1),
+      endDate: map['end_date'] != null
+          ? DateTime.tryParse(map['end_date'] as String) ?? DateTime(2025, 4, 30)
+          : DateTime(2025, 4, 30),
       isCurrent: (map['is_current'] as int?) == 1,
-      createdAt: DateTime.parse(map['created_at'] as String),
+      createdAt: map['created_at'] != null
+          ? DateTime.tryParse(map['created_at'] as String) ?? DateTime.now()
+          : DateTime.now(),
       updatedAt: map['updated_at'] != null
-          ? DateTime.parse(map['updated_at'] as String)
-          : DateTime.parse(map['created_at'] as String),
+          ? DateTime.tryParse(map['updated_at'] as String) ?? DateTime.now()
+          : DateTime.now(),
     );
   }
 

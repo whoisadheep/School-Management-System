@@ -4390,22 +4390,27 @@ class DatabaseService {
   }) async {
     if (currentAdminId == null) return;
     
-    final db = executor ?? await rawDb;
-    await db.rawInsert(
-      'INSERT INTO audit_logs (id, admin_user_id, action_type, module, entity_type, entity_id, description, old_value, new_value, timestamp) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-      [
-        const Uuid().v4(),
-        currentAdminId,
-        actionType,
-        module,
-        entityType,
-        entityId,
-        description,
-        oldValue,
-        newValue,
-        DateTime.now().toIso8601String(),
-      ]
-    );
+    try {
+      final db = executor ?? await rawDb;
+      await db.rawInsert(
+        'INSERT INTO audit_logs (id, admin_user_id, action_type, module, entity_type, entity_id, description, old_value, new_value, timestamp) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+        [
+          const Uuid().v4(),
+          currentAdminId,
+          actionType,
+          module,
+          entityType,
+          entityId,
+          description,
+          oldValue,
+          newValue,
+          DateTime.now().toIso8601String(),
+        ]
+      );
+    } catch (e) {
+      // Audit log error must never fail the primary database operation
+      print('Audit log write error (suppressed): $e');
+    }
   }
 
   Future<int> _insertLogged(DatabaseExecutor executor, String table, Map<String, Object?> values, {ConflictAlgorithm? conflictAlgorithm, String? nullColumnHack}) async {
@@ -4484,5 +4489,18 @@ class DatabaseService {
     final db = await _db;
     final results = await db.query('academic_years', orderBy: 'name DESC');
     return results.map((m) => AcademicYear.fromMap(m)).toList();
+  }
+
+  Future<int> createAcademicYear(AcademicYear year) async {
+    final db = await _db;
+    return await _insertLogged(db, 'academic_years', year.toMap(), conflictAlgorithm: ConflictAlgorithm.replace);
+  }
+
+  Future<void> setCurrentAcademicYear(String yearId) async {
+    final db = await _db;
+    await db.transaction((txn) async {
+      await txn.update('academic_years', {'is_current': 0});
+      await txn.update('academic_years', {'is_current': 1}, where: 'id = ?', whereArgs: [yearId]);
+    });
   }
 }

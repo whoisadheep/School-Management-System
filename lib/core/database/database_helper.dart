@@ -2178,6 +2178,34 @@ class DatabaseHelper {
   /// Runs on EVERY database open to guarantee all tables, columns, and seed rows exist.
   Future<void> ensureSchemaIntegrity(Database db) async {
     try {
+      // 0. Essential Core Tables
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS academic_years (
+          id          TEXT PRIMARY KEY,
+          name        TEXT NOT NULL UNIQUE,
+          start_date  TEXT NOT NULL,
+          end_date    TEXT NOT NULL,
+          is_current  INTEGER NOT NULL DEFAULT 0,
+          created_at  TEXT NOT NULL DEFAULT (datetime('now')),
+          updated_at  TEXT NOT NULL DEFAULT (datetime('now'))
+        )
+      ''');
+
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS audit_logs (
+          id TEXT PRIMARY KEY,
+          admin_user_id TEXT,
+          action_type TEXT,
+          module TEXT,
+          entity_type TEXT,
+          entity_id TEXT,
+          description TEXT,
+          old_value TEXT,
+          new_value TEXT,
+          timestamp TEXT
+        )
+      ''');
+
       // 1. Classes & Sections
       await db.execute('''
         CREATE TABLE IF NOT EXISTS classes (
@@ -2262,10 +2290,14 @@ class DatabaseHelper {
         'mother_name TEXT',
         'mother_occupation TEXT',
         'mother_phone TEXT',
+        'guardian_phone TEXT',
         'residential_address TEXT',
         'permanent_address TEXT',
         'transport_route_id TEXT',
-        'hostel_id TEXT'
+        'hostel_id TEXT',
+        'is_alumni INTEGER NOT NULL DEFAULT 0',
+        'tc_number TEXT',
+        'tc_date TEXT'
       ];
       for (final col in studentCols) {
         try {

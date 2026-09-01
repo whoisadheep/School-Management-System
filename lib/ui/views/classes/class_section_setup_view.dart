@@ -19,6 +19,209 @@ class _ClassSectionSetupViewState extends ConsumerState<ClassSectionSetupView> {
 
   final Map<String, bool> _expandedClasses = {};
 
+  void _showManageSessionsDialog(BuildContext context) {
+    if (!PermissionHelper.requireAdminRole(context, ref, RiskyAction.updateRecord)) return;
+    
+    showDialog(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) {
+          final dbService = ref.read(databaseServiceProvider);
+          return AlertDialog(
+            backgroundColor: Colors.white,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+            title: Row(
+              children: [
+                const Icon(Icons.calendar_month_rounded, color: AppTheme.primaryPurple),
+                const SizedBox(width: 10),
+                Text('Academic Sessions / Years', style: GoogleFonts.poppins(fontWeight: FontWeight.bold, fontSize: 16)),
+              ],
+            ),
+            content: SizedBox(
+              width: 500,
+              child: FutureBuilder<List<AcademicYear>>(
+                future: dbService.getAllAcademicYears(),
+                builder: (context, snapshot) {
+                  if (!snapshot.hasData) {
+                    return const SizedBox(height: 150, child: Center(child: CircularProgressIndicator()));
+                  }
+                  final years = snapshot.data!;
+                  return Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Manage academic sessions for student enrolments, promotions, and class rollover.',
+                        style: GoogleFonts.poppins(fontSize: 12, color: AppTheme.textSecondary),
+                      ),
+                      const SizedBox(height: 16),
+                      ConstrainedBox(
+                        constraints: const BoxConstraints(maxHeight: 220),
+                        child: ListView.separated(
+                          shrinkWrap: true,
+                          itemCount: years.length,
+                          separatorBuilder: (_, __) => const Divider(height: 1),
+                          itemBuilder: (context, i) {
+                            final y = years[i];
+                            return ListTile(
+                              dense: true,
+                              contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                              leading: Icon(
+                                y.isCurrent ? Icons.check_circle_rounded : Icons.calendar_today_rounded,
+                                color: y.isCurrent ? AppTheme.success : AppTheme.textSecondary,
+                                size: 20,
+                              ),
+                              title: Text(y.name, style: GoogleFonts.poppins(fontWeight: FontWeight.w600, fontSize: 13)),
+                              subtitle: Text(
+                                '${y.startDate.toIso8601String().split('T')[0]} to ${y.endDate.toIso8601String().split('T')[0]}',
+                                style: GoogleFonts.poppins(fontSize: 11, color: AppTheme.textSecondary),
+                              ),
+                              trailing: y.isCurrent
+                                  ? Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                      decoration: BoxDecoration(
+                                        color: AppTheme.success.withValues(alpha: 0.1),
+                                        borderRadius: BorderRadius.circular(12),
+                                      ),
+                                      child: Text('Current Active', style: GoogleFonts.poppins(fontSize: 11, fontWeight: FontWeight.bold, color: AppTheme.success)),
+                                    )
+                                  : TextButton(
+                                      onPressed: () async {
+                                        await dbService.setCurrentAcademicYear(y.id);
+                                        setDialogState(() {});
+                                        ref.invalidate(classListProvider);
+                                        if (context.mounted) {
+                                          ScaffoldMessenger.of(context).showSnackBar(
+                                            SnackBar(content: Text('Set ${y.name} as current active session!'), backgroundColor: AppTheme.primaryPurple),
+                                          );
+                                        }
+                                      },
+                                      child: const Text('Set as Current', style: TextStyle(fontSize: 11)),
+                                    ),
+                            );
+                          },
+                        ),
+                      ),
+                      const SizedBox(height: 20),
+                      const Divider(),
+                      const SizedBox(height: 10),
+                      Text('Add New Session', style: GoogleFonts.poppins(fontWeight: FontWeight.bold, fontSize: 13)),
+                      const SizedBox(height: 8),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: ElevatedButton.icon(
+                              onPressed: () {
+                                _showCreateSessionDialog(context, () {
+                                  setDialogState(() {});
+                                  ref.invalidate(classListProvider);
+                                });
+                              },
+                              icon: const Icon(Icons.add_rounded, size: 16),
+                              label: Text('Create New Session', style: GoogleFonts.poppins(fontSize: 12, fontWeight: FontWeight.bold)),
+                              style: ElevatedButton.styleFrom(backgroundColor: AppTheme.primaryPurple, foregroundColor: Colors.white),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  );
+                },
+              ),
+            ),
+            actions: [
+              TextButton(onPressed: () => Navigator.pop(context), child: const Text('Close')),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
+  void _showCreateSessionDialog(BuildContext context, VoidCallback onCreated) {
+    final nameCtrl = TextEditingController(text: '2025-2026');
+    final startCtrl = TextEditingController(text: '2025-06-01');
+    final endCtrl = TextEditingController(text: '2026-04-30');
+    bool isCurrent = false;
+
+    showDialog(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setCreateState) => AlertDialog(
+          backgroundColor: Colors.white,
+          title: Text('Create Academic Session', style: GoogleFonts.poppins(fontWeight: FontWeight.bold, fontSize: 15)),
+          content: SizedBox(
+            width: 380,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(
+                  controller: nameCtrl,
+                  decoration: const InputDecoration(labelText: 'Session Name (e.g. 2025-2026) *'),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: startCtrl,
+                  decoration: const InputDecoration(labelText: 'Start Date (YYYY-MM-DD) *'),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: endCtrl,
+                  decoration: const InputDecoration(labelText: 'End Date (YYYY-MM-DD) *'),
+                ),
+                const SizedBox(height: 12),
+                SwitchListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: Text('Set as Current Active Session', style: GoogleFonts.poppins(fontSize: 12)),
+                  value: isCurrent,
+                  onChanged: (v) => setCreateState(() => isCurrent = v),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+            ElevatedButton(
+              onPressed: () async {
+                final nm = nameCtrl.text.trim();
+                if (nm.isEmpty) return;
+
+                final startDate = DateTime.tryParse(startCtrl.text.trim()) ?? DateTime(2025, 6, 1);
+                final endDate = DateTime.tryParse(endCtrl.text.trim()) ?? DateTime(2026, 4, 30);
+                final dbService = ref.read(databaseServiceProvider);
+
+                final ay = AcademicYear(
+                  id: 'ay-$nm',
+                  name: nm,
+                  startDate: startDate,
+                  endDate: endDate,
+                  isCurrent: isCurrent,
+                  createdAt: DateTime.now(),
+                  updatedAt: DateTime.now(),
+                );
+
+                await dbService.createAcademicYear(ay);
+                if (isCurrent) {
+                  await dbService.setCurrentAcademicYear(ay.id);
+                }
+
+                if (context.mounted) {
+                  Navigator.pop(context);
+                  onCreated();
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text('Session $nm created successfully!'), backgroundColor: AppTheme.primaryPurple),
+                  );
+                }
+              },
+              style: ElevatedButton.styleFrom(backgroundColor: AppTheme.primaryPurple, foregroundColor: Colors.white),
+              child: const Text('Save Session'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   void _showRolloverDialog(BuildContext context) {
     if (!PermissionHelper.requireAdminRole(context, ref, RiskyAction.updateRecord)) return;
     
@@ -26,6 +229,8 @@ class _ClassSectionSetupViewState extends ConsumerState<ClassSectionSetupView> {
     List<AcademicYear> years = [];
     String? sourceYear;
     String? targetYear;
+    bool isCustomTarget = false;
+    final customTargetController = TextEditingController(text: '2025-2026');
     
     showDialog(
       context: context,
@@ -37,7 +242,10 @@ class _ClassSectionSetupViewState extends ConsumerState<ClassSectionSetupView> {
                 years = list;
                 if (list.isNotEmpty) {
                   sourceYear = list.firstWhere((y) => y.isCurrent, orElse: () => list.first).name;
-                  targetYear = list.first.name;
+                  targetYear = list.length > 1 ? list[1].name : '__new__';
+                  if (targetYear == '__new__') isCustomTarget = true;
+                } else {
+                  isCustomTarget = true;
                 }
                 isLoading = false;
               });
@@ -46,6 +254,7 @@ class _ClassSectionSetupViewState extends ConsumerState<ClassSectionSetupView> {
           
           return AlertDialog(
             backgroundColor: Colors.white,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
             title: Row(
               children: [
                 const Icon(Icons.auto_awesome_motion_rounded, color: AppTheme.primaryPurple),
@@ -54,9 +263,9 @@ class _ClassSectionSetupViewState extends ConsumerState<ClassSectionSetupView> {
               ],
             ),
             content: isLoading 
-              ? const SizedBox(width: 400, height: 100, child: Center(child: CircularProgressIndicator()))
+              ? const SizedBox(width: 420, height: 120, child: Center(child: CircularProgressIndicator()))
               : SizedBox(
-                  width: 400,
+                  width: 420,
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -70,12 +279,50 @@ class _ClassSectionSetupViewState extends ConsumerState<ClassSectionSetupView> {
                         onChanged: (v) => setDialogState(() => sourceYear = v),
                       ),
                       const SizedBox(height: 16),
-                      DropdownButtonFormField<String>(
-                        value: targetYear,
-                        decoration: const InputDecoration(labelText: 'Target Academic Year'),
-                        items: years.map((y) => DropdownMenuItem(value: y.name, child: Text(y.name))).toList(),
-                        onChanged: (v) => setDialogState(() => targetYear = v),
-                      ),
+                      if (!isCustomTarget) ...[
+                        DropdownButtonFormField<String>(
+                          value: targetYear,
+                          decoration: const InputDecoration(labelText: 'Target Academic Year'),
+                          items: [
+                            ...years.map((y) => DropdownMenuItem(value: y.name, child: Text(y.name))),
+                            const DropdownMenuItem(value: '__new__', child: Text('➕ Create New Session...', style: TextStyle(color: AppTheme.primaryPurple, fontWeight: FontWeight.bold))),
+                          ],
+                          onChanged: (v) {
+                            if (v == '__new__') {
+                              setDialogState(() {
+                                isCustomTarget = true;
+                                targetYear = customTargetController.text.trim();
+                              });
+                            } else {
+                              setDialogState(() => targetYear = v);
+                            }
+                          },
+                        ),
+                      ] else ...[
+                        Row(
+                          children: [
+                            Expanded(
+                              child: TextField(
+                                controller: customTargetController,
+                                decoration: const InputDecoration(
+                                  labelText: 'New Target Academic Year (e.g. 2025-2026) *',
+                                  hintText: '2025-2026',
+                                ),
+                                onChanged: (v) => setDialogState(() => targetYear = v.trim()),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            IconButton(
+                              tooltip: 'Select existing year',
+                              icon: const Icon(Icons.list_rounded, color: AppTheme.primaryPurple),
+                              onPressed: () => setDialogState(() {
+                                isCustomTarget = false;
+                                targetYear = years.isNotEmpty ? years.first.name : null;
+                              }),
+                            ),
+                          ],
+                        ),
+                      ],
                     ],
                   ),
                 ),
@@ -85,15 +332,33 @@ class _ClassSectionSetupViewState extends ConsumerState<ClassSectionSetupView> {
                 child: const Text('Cancel'),
               ),
               ElevatedButton(
-                onPressed: isLoading || sourceYear == null || targetYear == null || sourceYear == targetYear
+                onPressed: isLoading || sourceYear == null || (isCustomTarget ? customTargetController.text.trim().isEmpty : targetYear == null) || sourceYear == (isCustomTarget ? customTargetController.text.trim() : targetYear)
                   ? null
                   : () async {
+                      final effectiveTarget = isCustomTarget ? customTargetController.text.trim() : targetYear!;
                       try {
-                        await ref.read(databaseServiceProvider).cloneClassesToAcademicYear(sourceYear!, targetYear!);
+                        final dbService = ref.read(databaseServiceProvider);
+                        
+                        // Ensure academic year exists in database
+                        final parts = effectiveTarget.split('-');
+                        final startY = parts.isNotEmpty ? int.tryParse(parts[0]) ?? 2025 : 2025;
+                        final endY = parts.length > 1 ? int.tryParse(parts[1]) ?? 2026 : 2026;
+                        final ay = AcademicYear(
+                          id: 'ay-$effectiveTarget',
+                          name: effectiveTarget,
+                          startDate: DateTime(startY, 6, 1),
+                          endDate: DateTime(endY, 4, 30),
+                          isCurrent: false,
+                          createdAt: DateTime.now(),
+                          updatedAt: DateTime.now(),
+                        );
+                        await dbService.createAcademicYear(ay);
+
+                        await dbService.cloneClassesToAcademicYear(sourceYear!, effectiveTarget);
                         ref.invalidate(classListProvider);
                         if (context.mounted) {
                           Navigator.pop(context);
-                          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Successfully cloned classes!'), backgroundColor: AppTheme.primaryPurple));
+                          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Successfully cloned classes to $effectiveTarget!'), backgroundColor: AppTheme.primaryPurple));
                         }
                       } catch (e) {
                         if (context.mounted) {
@@ -147,16 +412,27 @@ class _ClassSectionSetupViewState extends ConsumerState<ClassSectionSetupView> {
                 Row(
                   children: [
                     OutlinedButton.icon(
+                      onPressed: () => _showManageSessionsDialog(context),
+                      icon: const Icon(Icons.calendar_month_rounded, size: 18),
+                      label: Text('Manage Sessions', style: GoogleFonts.poppins(fontWeight: FontWeight.bold, fontSize: 13)),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: AppTheme.primaryPurple,
+                        side: const BorderSide(color: AppTheme.primaryPurple),
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    OutlinedButton.icon(
                       onPressed: () => _showRolloverDialog(context),
                       icon: const Icon(Icons.auto_awesome_motion_rounded, size: 18),
                       label: Text('Clone to New Session', style: GoogleFonts.poppins(fontWeight: FontWeight.bold, fontSize: 13)),
                       style: OutlinedButton.styleFrom(
                         foregroundColor: AppTheme.primaryPurple,
                         side: const BorderSide(color: AppTheme.primaryPurple),
-                        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                       ),
                     ),
-                    const SizedBox(width: 12),
+                    const SizedBox(width: 10),
                     ElevatedButton.icon(
                       onPressed: () => _showAddEditClassDialog(context),
                       icon: const Icon(Icons.add_rounded, size: 18),
@@ -164,7 +440,7 @@ class _ClassSectionSetupViewState extends ConsumerState<ClassSectionSetupView> {
                       style: ElevatedButton.styleFrom(
                         backgroundColor: AppTheme.primaryPurple,
                         foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
                       ),
                     ),
                   ],
@@ -598,42 +874,68 @@ class _ClassSectionSetupViewState extends ConsumerState<ClassSectionSetupView> {
               final cap = int.tryParse(capacityController.text.trim()) ?? 40;
               if (nm.isEmpty) return;
 
-              final dbService = ref.read(databaseServiceProvider);
-              if (classModel == null) {
-                final classId = 'cls-${nm.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '')}-${const Uuid().v4().substring(0, 4)}';
-                final newClass = ClassModel(
-                  id: classId,
-                  name: nm,
-                  academicYear: yr,
-                  capacity: cap,
-                  createdAt: DateTime.now(),
-                );
-                await dbService.createClass(newClass);
-                // Automatically seed Section A
-                final sec = Section(
-                  id: 'sec-${classId.replaceFirst('cls-', '')}-a',
-                  classId: classId,
-                  name: 'A',
-                  capacity: cap,
-                );
-                await dbService.createSection(sec);
-              } else {
-                final updatedClass = classModel.copyWith(
-                  name: nm,
-                  academicYear: yr,
-                  capacity: cap,
-                );
-                if (!PermissionHelper.requireAdminRole(context, ref, RiskyAction.updateRecord)) return;
-                await dbService.updateClass(updatedClass);
-              }
+              try {
+                final dbService = ref.read(databaseServiceProvider);
+                
+                // Ensure academic year exists in academic_years table
+                if (yr.isNotEmpty) {
+                  final parts = yr.split('-');
+                  final startY = parts.isNotEmpty ? int.tryParse(parts[0]) ?? 2024 : 2024;
+                  final endY = parts.length > 1 ? int.tryParse(parts[1]) ?? 2025 : 2025;
+                  final ay = AcademicYear(
+                    id: 'ay-$yr',
+                    name: yr,
+                    startDate: DateTime(startY, 6, 1),
+                    endDate: DateTime(endY, 4, 30),
+                    isCurrent: false,
+                    createdAt: DateTime.now(),
+                    updatedAt: DateTime.now(),
+                  );
+                  await dbService.createAcademicYear(ay);
+                }
 
-              ref.invalidate(classListProvider);
+                if (classModel == null) {
+                  final classId = 'cls-${nm.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '')}-${const Uuid().v4().substring(0, 4)}';
+                  final newClass = ClassModel(
+                    id: classId,
+                    name: nm,
+                    academicYear: yr,
+                    capacity: cap,
+                    createdAt: DateTime.now(),
+                  );
+                  await dbService.createClass(newClass);
+                  // Automatically seed Section A
+                  final sec = Section(
+                    id: 'sec-${classId.replaceFirst('cls-', '')}-a',
+                    classId: classId,
+                    name: 'A',
+                    capacity: cap,
+                  );
+                  await dbService.createSection(sec);
+                } else {
+                  final updatedClass = classModel.copyWith(
+                    name: nm,
+                    academicYear: yr,
+                    capacity: cap,
+                  );
+                  if (!PermissionHelper.requireAdminRole(context, ref, RiskyAction.updateRecord)) return;
+                  await dbService.updateClass(updatedClass);
+                }
 
-              if (context.mounted) {
-                Navigator.pop(context);
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text('Class $nm saved successfully!'), backgroundColor: AppTheme.primaryPurple),
-                );
+                ref.invalidate(classListProvider);
+
+                if (context.mounted) {
+                  Navigator.pop(context);
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text('Class $nm saved successfully!'), backgroundColor: AppTheme.primaryPurple),
+                  );
+                }
+              } catch (e) {
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text('Failed to save class: $e'), backgroundColor: AppTheme.error),
+                  );
+                }
               }
             },
             style: ElevatedButton.styleFrom(backgroundColor: AppTheme.primaryPurple, foregroundColor: Colors.white),
@@ -681,29 +983,37 @@ class _ClassSectionSetupViewState extends ConsumerState<ClassSectionSetupView> {
               final cap = int.tryParse(capacityController.text.trim()) ?? 40;
               if (nm.isEmpty) return;
 
-              final dbService = ref.read(databaseServiceProvider);
-              if (section == null) {
-                final secId = 'sec-${classModel.id.replaceFirst('cls-', '')}-${nm.toLowerCase()}';
-                final newSec = Section(
-                  id: secId,
-                  classId: classModel.id,
-                  name: nm,
-                  capacity: cap,
-                );
-                await dbService.createSection(newSec);
-              } else {
-                final updatedSec = section.copyWith(name: nm, capacity: cap);
-                if (!PermissionHelper.requireAdminRole(context, ref, RiskyAction.updateRecord)) return;
-                await dbService.updateSection(updatedSec);
-              }
+              try {
+                final dbService = ref.read(databaseServiceProvider);
+                if (section == null) {
+                  final secId = 'sec-${classModel.id.replaceFirst('cls-', '')}-${nm.toLowerCase()}';
+                  final newSec = Section(
+                    id: secId,
+                    classId: classModel.id,
+                    name: nm,
+                    capacity: cap,
+                  );
+                  await dbService.createSection(newSec);
+                } else {
+                  final updatedSec = section.copyWith(name: nm, capacity: cap);
+                  if (!PermissionHelper.requireAdminRole(context, ref, RiskyAction.updateRecord)) return;
+                  await dbService.updateSection(updatedSec);
+                }
 
-              ref.invalidate(sectionsForClassProvider(classModel.id));
+                ref.invalidate(sectionsForClassProvider(classModel.id));
 
-              if (context.mounted) {
-                Navigator.pop(context);
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text('Section $nm saved!'), backgroundColor: AppTheme.primaryPurple),
-                );
+                if (context.mounted) {
+                  Navigator.pop(context);
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text('Section $nm saved!'), backgroundColor: AppTheme.primaryPurple),
+                  );
+                }
+              } catch (e) {
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text('Failed to save section: $e'), backgroundColor: AppTheme.error),
+                  );
+                }
               }
             },
             style: ElevatedButton.styleFrom(backgroundColor: AppTheme.primaryPurple, foregroundColor: Colors.white),

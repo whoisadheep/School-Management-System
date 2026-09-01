@@ -184,8 +184,12 @@ class Student {
       isAlumni: (map['is_alumni'] as int?) == 1,
       tcNumber: map['tc_number'] as String?,
       tcDate: map['tc_date'] as String?,
-      createdAt: DateTime.parse(map['created_at'] as String),
-      updatedAt: DateTime.parse(map['updated_at'] as String),
+      createdAt: map['created_at'] != null
+          ? DateTime.tryParse(map['created_at'] as String) ?? DateTime.now()
+          : DateTime.now(),
+      updatedAt: map['updated_at'] != null
+          ? DateTime.tryParse(map['updated_at'] as String) ?? DateTime.now()
+          : DateTime.now(),
     );
   }
 
