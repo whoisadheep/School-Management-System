@@ -55,11 +55,16 @@ class AuthNotifier extends StateNotifier<AuthState> {
         bool forceChange = adminUser.forcePasswordChange;
 
         // Map to standard User for legacy RBAC compatibility throughout the app
+        final roleStr = adminUser.role.toLowerCase();
+        final isAdministrator = roleStr == 'admin' || roleStr == 'principal' || adminUser.username.toLowerCase() == 'admin';
+        
         final mappedUser = User(
           id: adminUser.id,
           username: adminUser.username,
           fullName: adminUser.fullName,
-          role: adminUser.role == 'admin' ? UserRole.admin : UserRole.accountant,
+          role: isAdministrator ? UserRole.admin : UserRole.accountant,
+          canViewFinance: isAdministrator,
+          canViewAllStudents: true,
           pinHash: '',
           createdAt: adminUser.createdAt,
           updatedAt: adminUser.createdAt,

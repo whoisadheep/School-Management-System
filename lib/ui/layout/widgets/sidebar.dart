@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:flutter_svg/flutter_svg.dart';
 import '../../../models/models.dart';
 import '../../../providers/auth_provider.dart';
 import '../../../providers/navigation_provider.dart';
@@ -16,7 +15,12 @@ class DesktopSidebar extends ConsumerWidget {
     final selectedTab = ref.watch(selectedTabProvider);
     final authState = ref.watch(authProvider);
     final user = authState.currentUser;
-    final canViewFinance = user?.role == UserRole.admin || (user?.canViewFinance ?? false);
+    final admin = authState.currentAdmin;
+    final adminRole = admin?.role.toLowerCase();
+    final isAdmin = user?.role == UserRole.admin ||
+        adminRole == 'admin' ||
+        adminRole == 'principal' ||
+        admin?.username.toLowerCase() == 'admin';
     final hostelFlagAsync = ref.watch(featureFlagProvider('hostel_management'));
     final isHostelEnabled = hostelFlagAsync.valueOrNull ?? false;
 
@@ -98,7 +102,7 @@ class DesktopSidebar extends ConsumerWidget {
                 _buildNavItem(ref, NavigationTab.inventory, Icons.inventory_2_rounded, selectedTab),
                 const SizedBox(height: 8),
                 _buildNavItem(ref, NavigationTab.settings, Icons.settings_rounded, selectedTab),
-                if (user?.role == UserRole.admin) ...[
+                if (isAdmin) ...[
                   const SizedBox(height: 8),
                   _buildNavItem(ref, NavigationTab.manageUsers, Icons.manage_accounts_rounded, selectedTab),
                   const SizedBox(height: 8),

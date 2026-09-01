@@ -30,7 +30,9 @@ class _AdminUsersViewState extends ConsumerState<AdminUsersView> {
   @override
   Widget build(BuildContext context) {
     final authState = ref.watch(authProvider);
-    if (authState.currentAdmin?.role != 'admin') {
+    final adminRole = authState.currentAdmin?.role.toLowerCase();
+    final isAdmin = adminRole == 'admin' || adminRole == 'principal' || authState.currentAdmin?.username.toLowerCase() == 'admin';
+    if (!isAdmin) {
       return Center(
         child: Text(
           'Access Denied: Admin access required',

@@ -29,10 +29,11 @@ class PermissionHelper {
   /// Returns true if permitted.
   static bool requireAdminRole(BuildContext context, WidgetRef ref, RiskyAction action) {
     final authState = ref.read(authProvider);
-    final role = authState.currentAdmin?.role;
+    final role = authState.currentAdmin?.role.toLowerCase();
+    final username = authState.currentAdmin?.username.toLowerCase();
 
-    // We allow if the role is specifically 'principal'
-    if (role == 'admin') {
+    // Full access for Admin and Principal accounts
+    if (role == 'admin' || role == 'principal' || username == 'admin') {
       return true;
     }
 

@@ -215,7 +215,12 @@ class _MainLayoutState extends ConsumerState<MainLayout> {
 
   Widget _getTabWidget(NavigationTab tab, AuthState authState) {
     final currentUser = authState.currentUser;
-    final isAdmin = currentUser?.role == UserRole.admin;
+    final currentAdmin = authState.currentAdmin;
+    final adminRole = currentAdmin?.role.toLowerCase();
+    final isAdmin = currentUser?.role == UserRole.admin ||
+        adminRole == 'admin' ||
+        adminRole == 'principal' ||
+        currentAdmin?.username.toLowerCase() == 'admin';
     final canViewFinance = isAdmin || (currentUser?.canViewFinance ?? false);
 
     if (!canViewFinance && (tab == NavigationTab.dashboard || tab == NavigationTab.feeCollection || tab == NavigationTab.expenses || tab == NavigationTab.feeStructure || tab == NavigationTab.feeReports || tab == NavigationTab.inventory)) {
