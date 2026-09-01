@@ -144,14 +144,15 @@ class DatabaseSeeder {
     ];
 
     final random = Random();
-    int count = 1000 + random.nextInt(9000);
+    int count = 1;
 
     for (final data in sampleData) {
       final String fn = data['first']!;
       final String ln = data['last']!;
       final String fullName = '$fn $ln';
-      final String admNo = 'ADM-2026-$count';
-      final String rollNo = '${count % 50 + 1}';
+      final String seqStr = count.toString().padLeft(4, '0');
+      final String admNo = '2026-$seqStr';
+      final String rollNo = '$count';
       count++;
 
       final student = Student.create(

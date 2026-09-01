@@ -2557,10 +2557,16 @@ class DatabaseService {
       final parts = clean.split('-');
       if (parts.length >= 2) {
         final seq = int.tryParse(parts.last);
-        if (seq != null && seq > maxSeq) {
+        // Only accept reasonable incremental sequence numbers (< 5000) so random test numbers (like 8645) don't hijack sequence
+        if (seq != null && seq > maxSeq && seq < 5000) {
           maxSeq = seq;
         }
       }
+    }
+
+    // Fallback: If existing records were arbitrary high random numbers (e.g. 8645), use total students count
+    if (maxSeq == 0 && results.isNotEmpty) {
+      maxSeq = results.length;
     }
 
     final nextSeq = maxSeq + 1;
