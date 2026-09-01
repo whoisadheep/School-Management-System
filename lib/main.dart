@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:school_management_system/app.dart';
 import 'package:school_management_system/core/database/database_helper.dart';
 import 'package:school_management_system/services/app_logger.dart';
+import 'package:school_management_system/services/crash_reporting_service.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'dart:io' show Platform;
 
@@ -19,8 +20,9 @@ void main() {
         debugPrint('Notice: .env load fallback: $e');
       }
 
-      // 2. Initialize logging system
+      // 2. Initialize telemetry & logging systems
       try {
+        await CrashReportingService.instance.initialize();
         await AppLogger.instance.initialize();
         AppLogger.instance.info('Application starting...');
       } catch (e) {

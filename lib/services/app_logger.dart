@@ -2,6 +2,7 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:path/path.dart' as p;
+import 'crash_reporting_service.dart';
 
 enum LogLevel { debug, info, warning, error }
 
@@ -45,6 +46,11 @@ class AppLogger {
 
   Future<void> _writeLog(LogLevel level, String message, [Object? error, StackTrace? stackTrace]) async {
     debugPrint('[$level] $message ${error != null ? "Error: $error" : ""}');
+    
+    if (level == LogLevel.error) {
+      CrashReportingService.instance.reportError(message, error, stackTrace);
+    }
+
     if (kIsWeb || _logFile == null) return;
 
     final timestamp = DateTime.now().toIso8601String();

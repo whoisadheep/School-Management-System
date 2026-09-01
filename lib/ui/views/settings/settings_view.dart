@@ -1044,6 +1044,60 @@ class _SettingsViewState extends ConsumerState<SettingsView>
 
         const SizedBox(height: 24),
 
+        const SizedBox(height: 24),
+
+        _buildCard(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _buildSectionLabel('AUTOMATED CRASH & ERROR TELEMETRY'),
+              const SizedBox(height: 12),
+              Text(
+                'When unhandled database or application errors occur on any client machine, Eduvia can automatically transmit anonymized stack traces and error diagnostics to your Discord or server webhook so you can resolve issues immediately.',
+                style: GoogleFonts.poppins(fontSize: 12, color: AppTheme.textSecondary, height: 1.4),
+              ),
+              const SizedBox(height: 16),
+              Row(
+                children: [
+                  OutlinedButton.icon(
+                    onPressed: () async {
+                      try {
+                        AppLogger.instance.error(
+                          'Test Telemetry Alert: Everything is operating properly!',
+                          Exception('Manual Diagnostics Test'),
+                          StackTrace.current,
+                        );
+                        if (context.mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text('Test diagnostic alert dispatched! Check your webhook.'),
+                              backgroundColor: AppTheme.primaryPurple,
+                            ),
+                          );
+                        }
+                      } catch (e) {
+                        if (context.mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(content: Text('Error: $e'), backgroundColor: AppTheme.error),
+                          );
+                        }
+                      }
+                    },
+                    icon: const Icon(Icons.send_rounded, size: 16),
+                    label: Text('Send Test Telemetry Alert', style: GoogleFonts.poppins(fontWeight: FontWeight.w600, fontSize: 12)),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: AppTheme.primaryPurple,
+                      side: const BorderSide(color: AppTheme.primaryPurple),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+
+        const SizedBox(height: 24),
+
         _buildCard(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
