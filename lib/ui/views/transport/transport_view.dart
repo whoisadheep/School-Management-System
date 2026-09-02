@@ -23,10 +23,13 @@ class _TransportViewState extends ConsumerState<TransportView> with SingleTicker
 
   String? _selectedManifestRouteId;
 
+  String _allocationSearchQuery = '';
+  String _allocationClassFilter = 'All Classes';
+
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 3, vsync: this);
+    _tabController = TabController(length: 4, vsync: this);
   }
 
   @override
@@ -60,6 +63,7 @@ class _TransportViewState extends ConsumerState<TransportView> with SingleTicker
               tabs: const [
                 Tab(text: 'Fleet Overview & Vehicles'),
                 Tab(text: 'Routes & Ordered Stops'),
+                Tab(text: 'Student Allocations & Fees'),
                 Tab(text: 'Driver Route Manifest'),
               ],
             ),
@@ -72,6 +76,7 @@ class _TransportViewState extends ConsumerState<TransportView> with SingleTicker
               children: [
                 _buildFleetOverviewTab(),
                 _buildRoutesAndStopsTab(),
+                _buildStudentAllocationsTab(),
                 _buildRouteManifestTab(),
               ],
             ),
@@ -473,10 +478,10 @@ class _TransportViewState extends ConsumerState<TransportView> with SingleTicker
                                         ),
                                         const SizedBox(width: 6),
                                         Text(stop.stopName, style: GoogleFonts.poppins(fontSize: 12, fontWeight: FontWeight.w500)),
-                                        if (stop.pickupTime != null || stop.dropTime != null)
+                                        if (stop.fee > 0)
                                           Text(
-                                            ' (${stop.pickupTime ?? "-"} / ${stop.dropTime ?? "-"})',
-                                            style: GoogleFonts.poppins(fontSize: 10, color: AppTheme.textHint),
+                                            ' (₹${stop.fee.toStringAsFixed(0)}/mo)',
+                                            style: GoogleFonts.poppins(fontSize: 10, color: AppTheme.success, fontWeight: FontWeight.w600),
                                           ),
                                       ],
                                     ),
@@ -498,7 +503,683 @@ class _TransportViewState extends ConsumerState<TransportView> with SingleTicker
   }
 
   // ============================================================================
-  // TAB 3: ROUTE MANIFEST / DRIVER SHEET
+  // TAB 3: STUDENT ALLOCATIONS & TRANSPORT FEES
+  // ============================================================================
+
+  Widget _buildStudentAllocationsTab() {
+    final currentYear = ref.watch(currentAcademicYearProvider).value?.name;
+    final academicYear = currentYear ?? '2024-2025';
+    final transportsAsync = ref.watch(allStudentTransportsProvider(academicYear));
+
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(24),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Header & Action
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Student Transport Allocations & Fees',
+                    style: GoogleFonts.poppins(fontSize: 16, fontWeight: FontWeight.bold, color: AppTheme.textPrimary),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    'Assign students to routes and stops. Monthly fees are derived automatically from the stop configuration.',
+                    style: GoogleFonts.poppins(fontSize: 12, color: AppTheme.textSecondary),
+                  ),
+                ],
+              ),
+              ElevatedButton.icon(
+                onPressed: () => _showAssignStudentTransportDialog(context),
+                icon: const Icon(Icons.person_add_alt_1_rounded, size: 18),
+                label: Text('Assign Student', style: GoogleFonts.poppins(fontSize: 12, fontWeight: FontWeight.w600)),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppTheme.primaryPurple,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 20),
+
+          // Overview Stats
+          transportsAsync.when(
+            data: (transports) {
+              final totalAssigned = transports.length;
+              final double totalMonthlyFee = transports.fold(0.0, (sum, st) => sum + st.monthlyFee);
+
+              return Row(
+                children: [
+                  _statCard('Total Students on Transport', '$totalAssigned', Icons.directions_bus_rounded, AppTheme.primaryPurple),
+                  const SizedBox(width: 16),
+                  _statCard('Monthly Transport Revenue', _currencyFormat.format(totalMonthlyFee), Icons.payments_rounded, AppTheme.success),
+                  const SizedBox(width: 16),
+                  _statCard('Average Fee per Student', totalAssigned > 0 ? _currencyFormat.format(totalMonthlyFee / totalAssigned) : '₹0', Icons.analytics_rounded, AppTheme.info),
+                ],
+              );
+            },
+            loading: () => const SizedBox.shrink(),
+            error: (_, __) => const SizedBox.shrink(),
+          ),
+          const SizedBox(height: 20),
+
+          // Search & Class Filter Row
+          Row(
+            children: [
+              Expanded(
+                flex: 3,
+                child: TextField(
+                  decoration: InputDecoration(
+                    hintText: 'Search assigned student by name, roll number, or stop...',
+                    hintStyle: GoogleFonts.poppins(fontSize: 12, color: AppTheme.textHint),
+                    prefixIcon: const Icon(Icons.search_rounded, size: 20, color: AppTheme.textSecondary),
+                    filled: true,
+                    fillColor: Colors.white,
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: const BorderSide(color: AppTheme.divider)),
+                    enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: const BorderSide(color: AppTheme.divider)),
+                  ),
+                  onChanged: (val) => setState(() => _allocationSearchQuery = val.trim().toLowerCase()),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                flex: 1,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: AppTheme.divider),
+                  ),
+                  child: DropdownButtonHideUnderline(
+                    child: DropdownButton<String>(
+                      value: _allocationClassFilter,
+                      isExpanded: true,
+                      style: GoogleFonts.poppins(fontSize: 12, color: AppTheme.textPrimary, fontWeight: FontWeight.w600),
+                      items: [
+                        'All Classes',
+                        'Nursery', 'LKG', 'UKG',
+                        'Grade 1', 'Grade 2', 'Grade 3', 'Grade 4', 'Grade 5',
+                        'Grade 6', 'Grade 7', 'Grade 8', 'Grade 9', 'Grade 10',
+                        'Grade 11', 'Grade 12',
+                      ].map((c) => DropdownMenuItem(value: c, child: Text(c))).toList(),
+                      onChanged: (val) {
+                        if (val != null) setState(() => _allocationClassFilter = val);
+                      },
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+
+          // Allocations Table
+          transportsAsync.when(
+            data: (transports) {
+              final filtered = transports.where((st) {
+                if (_allocationClassFilter != 'All Classes' && st.gradeLevel != _allocationClassFilter) {
+                  return false;
+                }
+                if (_allocationSearchQuery.isEmpty) return true;
+                final name = (st.studentName ?? '').toLowerCase();
+                final roll = (st.rollNumber ?? '').toLowerCase();
+                final grade = (st.gradeLevel ?? '').toLowerCase();
+                final route = (st.routeName ?? '').toLowerCase();
+                final stop = (st.stopName ?? '').toLowerCase();
+                return name.contains(_allocationSearchQuery) ||
+                    roll.contains(_allocationSearchQuery) ||
+                    grade.contains(_allocationSearchQuery) ||
+                    route.contains(_allocationSearchQuery) ||
+                    stop.contains(_allocationSearchQuery);
+              }).toList();
+
+              if (filtered.isEmpty) {
+                return _buildEmptyCard('No transport allocations found. Click "Assign Student" to assign a student to a route and stop.');
+              }
+
+              return Container(
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: AppTheme.divider),
+                ),
+                child: Column(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                      decoration: const BoxDecoration(
+                        color: AppTheme.bgSurface,
+                        borderRadius: BorderRadius.only(topLeft: Radius.circular(12), topRight: Radius.circular(12)),
+                      ),
+                      child: Row(
+                        children: [
+                          _th('Student Name', flex: 4),
+                          _th('Roll No', flex: 2),
+                          _th('Class & Sec', flex: 2),
+                          _th('Assigned Route', flex: 3),
+                          _th('Assigned Stop', flex: 3),
+                          _th('Monthly Fee', flex: 3),
+                          _th('Actions', flex: 2),
+                        ],
+                      ),
+                    ),
+                    const Divider(height: 1, color: AppTheme.divider),
+                    ListView.separated(
+                      shrinkWrap: true,
+                      physics: const NeverScrollableScrollPhysics(),
+                      itemCount: filtered.length,
+                      separatorBuilder: (_, __) => const Divider(height: 1, color: AppTheme.divider),
+                      itemBuilder: (context, index) {
+                        final st = filtered[index];
+
+                        return Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                          child: Row(
+                            children: [
+                              Expanded(
+                                flex: 4,
+                                child: Text(st.studentName ?? 'Student', style: GoogleFonts.poppins(fontWeight: FontWeight.bold, fontSize: 13)),
+                              ),
+                              Expanded(
+                                flex: 2,
+                                child: Text(st.rollNumber ?? 'N/A', style: GoogleFonts.poppins(fontSize: 12, color: AppTheme.textSecondary)),
+                              ),
+                              Expanded(
+                                flex: 2,
+                                child: Text('${st.gradeLevel ?? "-"} ${st.section ?? ""}', style: GoogleFonts.poppins(fontSize: 12)),
+                              ),
+                              Expanded(
+                                flex: 3,
+                                child: Text(st.routeName ?? 'Unassigned Route', style: GoogleFonts.poppins(fontSize: 12, fontWeight: FontWeight.w500)),
+                              ),
+                              Expanded(
+                                flex: 3,
+                                child: Text(st.stopName ?? 'N/A', style: GoogleFonts.poppins(fontSize: 12)),
+                              ),
+                              Expanded(
+                                flex: 3,
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                  decoration: BoxDecoration(
+                                    color: AppTheme.success.withValues(alpha: 0.1),
+                                    borderRadius: BorderRadius.circular(6),
+                                  ),
+                                  child: Text(
+                                    '${_currencyFormat.format(st.monthlyFee)}/mo',
+                                    style: GoogleFonts.poppins(fontSize: 12, fontWeight: FontWeight.bold, color: AppTheme.success),
+                                  ),
+                                ),
+                              ),
+                              Expanded(
+                                flex: 2,
+                                child: Row(
+                                  children: [
+                                    IconButton(
+                                      icon: const Icon(Icons.edit_outlined, size: 18),
+                                      tooltip: 'Change Route / Stop',
+                                      onPressed: () => _showAssignStudentTransportDialog(context, existing: st),
+                                    ),
+                                    IconButton(
+                                      icon: const Icon(Icons.person_remove_rounded, size: 18, color: AppTheme.error),
+                                      tooltip: 'Remove Transport',
+                                      onPressed: () => _confirmRemoveTransport(context, st),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                        );
+                      },
+                    ),
+                  ],
+                ),
+              );
+            },
+            loading: () => const Center(child: CircularProgressIndicator(strokeWidth: 2)),
+            error: (e, _) => Text('Error loading student transport: $e', style: GoogleFonts.poppins(color: AppTheme.error)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showAssignStudentTransportDialog(BuildContext context, {StudentTransport? existing}) {
+    final currentYear = ref.watch(currentAcademicYearProvider).value?.name;
+    final academicYear = existing?.academicYear ?? currentYear ?? '2024-2025';
+    String? selectedStudentId = existing?.studentId;
+    Student? selectedStudentObj;
+    String filterClass = 'All Classes';
+    String? selectedRouteId = existing?.routeId;
+    String? selectedStopId = existing?.stopId;
+    double currentStopFee = existing?.monthlyFee ?? 0;
+    List<RouteStop> availableStops = [];
+
+    showDialog(
+      context: context,
+      builder: (ctx) => Consumer(
+        builder: (ctx, ref, _) {
+          final studentsAsync = ref.watch(studentsListProvider);
+          final routesAsync = ref.watch(routesListProvider);
+
+          return StatefulBuilder(
+            builder: (ctx, setDialogState) {
+              return AlertDialog(
+                backgroundColor: Colors.white,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                title: Row(
+                  children: [
+                    const Icon(Icons.directions_bus_rounded, color: AppTheme.primaryPurple, size: 22),
+                    const SizedBox(width: 10),
+                    Text(
+                      existing != null ? 'Edit Transport Assignment' : 'Assign Student to Transport',
+                      style: GoogleFonts.poppins(fontSize: 16, fontWeight: FontWeight.bold),
+                    ),
+                  ],
+                ),
+                content: SizedBox(
+                  width: 520,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // Select Student
+                      Text('Select Student *', style: GoogleFonts.poppins(fontSize: 11, fontWeight: FontWeight.w600)),
+                      const SizedBox(height: 6),
+                      studentsAsync.when(
+                        data: (students) {
+                          if (existing != null) {
+                            return Container(
+                              width: double.infinity,
+                              padding: const EdgeInsets.all(12),
+                              decoration: BoxDecoration(
+                                color: AppTheme.bgSurface,
+                                borderRadius: BorderRadius.circular(8),
+                                border: Border.all(color: AppTheme.divider),
+                              ),
+                              child: Row(
+                                children: [
+                                  CircleAvatar(
+                                    radius: 16,
+                                    backgroundColor: AppTheme.primaryPurple,
+                                    child: Text(
+                                      existing.studentName?.isNotEmpty == true ? existing.studentName![0].toUpperCase() : 'S',
+                                      style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 10),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Text(existing.studentName ?? "Student", style: GoogleFonts.poppins(fontSize: 13, fontWeight: FontWeight.bold)),
+                                        Text('Class: ${existing.gradeLevel ?? "-"} ${existing.section ?? ""} • Roll: ${existing.rollNumber ?? "N/A"}',
+                                            style: GoogleFonts.poppins(fontSize: 11, color: AppTheme.textSecondary)),
+                                      ],
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            );
+                          }
+
+                          // If already chosen in this dialog:
+                          if (selectedStudentObj != null) {
+                            return Container(
+                              width: double.infinity,
+                              padding: const EdgeInsets.all(12),
+                              decoration: BoxDecoration(
+                                color: AppTheme.primaryPurple.withValues(alpha: 0.05),
+                                borderRadius: BorderRadius.circular(8),
+                                border: Border.all(color: AppTheme.primaryPurple.withValues(alpha: 0.2)),
+                              ),
+                              child: Row(
+                                children: [
+                                  CircleAvatar(
+                                    radius: 16,
+                                    backgroundColor: AppTheme.primaryPurple,
+                                    child: Text(
+                                      selectedStudentObj!.name.isNotEmpty ? selectedStudentObj!.name[0].toUpperCase() : 'S',
+                                      style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 10),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Text(selectedStudentObj!.name, style: GoogleFonts.poppins(fontSize: 13, fontWeight: FontWeight.bold, color: AppTheme.textPrimary)),
+                                        Text(
+                                          'Class: ${selectedStudentObj!.gradeLevel} ${selectedStudentObj!.section ?? ""} • Roll: ${selectedStudentObj!.rollNumber ?? "N/A"} • ID: ${selectedStudentObj!.id.substring(0, 8)}',
+                                          style: GoogleFonts.poppins(fontSize: 11, color: AppTheme.textSecondary),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                  TextButton.icon(
+                                    onPressed: () {
+                                      setDialogState(() {
+                                        selectedStudentObj = null;
+                                        selectedStudentId = null;
+                                      });
+                                    },
+                                    icon: const Icon(Icons.swap_horiz_rounded, size: 16),
+                                    label: const Text('Change'),
+                                  ),
+                                ],
+                              ),
+                            );
+                          }
+
+                          // Search + Class filter when picking student
+                          final availableClasses = ['All Classes', ...{for (var s in students) s.gradeLevel}];
+
+                          return Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                children: [
+                                  // Class Filter Dropdown
+                                  SizedBox(
+                                    width: 140,
+                                    child: DropdownButtonFormField<String>(
+                                      value: availableClasses.contains(filterClass) ? filterClass : 'All Classes',
+                                      isDense: true,
+                                      decoration: InputDecoration(
+                                        labelText: 'Class',
+                                        labelStyle: GoogleFonts.poppins(fontSize: 11),
+                                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                                        contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+                                      ),
+                                      items: availableClasses.map((c) => DropdownMenuItem(value: c, child: Text(c, style: GoogleFonts.poppins(fontSize: 12)))).toList(),
+                                      onChanged: (val) {
+                                        if (val != null) setDialogState(() => filterClass = val);
+                                      },
+                                    ),
+                                  ),
+                                  const SizedBox(width: 10),
+                                  // Search Field with Autocomplete
+                                  Expanded(
+                                    child: Autocomplete<Student>(
+                                      displayStringForOption: (s) => '${s.name} (${s.gradeLevel} - ${s.rollNumber ?? "N/A"})',
+                                      optionsBuilder: (textEditingValue) {
+                                        final q = textEditingValue.text.toLowerCase().trim();
+                                        Iterable<Student> pool = students;
+                                        if (filterClass != 'All Classes') {
+                                          pool = pool.where((s) => s.gradeLevel == filterClass);
+                                        }
+                                        if (q.isEmpty) {
+                                          return pool.take(12);
+                                        }
+                                        return pool.where((s) {
+                                          return s.name.toLowerCase().contains(q) ||
+                                              (s.rollNumber != null && s.rollNumber!.toLowerCase().contains(q)) ||
+                                              s.id.toLowerCase().contains(q);
+                                        }).take(15);
+                                      },
+                                      onSelected: (student) {
+                                        setDialogState(() {
+                                          selectedStudentObj = student;
+                                          selectedStudentId = student.id;
+                                        });
+                                      },
+                                      fieldViewBuilder: (context, textController, focusNode, onFieldSubmitted) {
+                                        return TextField(
+                                          controller: textController,
+                                          focusNode: focusNode,
+                                          decoration: InputDecoration(
+                                            hintText: 'Type Name, Roll, or ID...',
+                                            hintStyle: GoogleFonts.poppins(fontSize: 12, color: AppTheme.textHint),
+                                            prefixIcon: const Icon(Icons.search_rounded, size: 18, color: AppTheme.primaryPurple),
+                                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                                            contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                                          ),
+                                        );
+                                      },
+                                      optionsViewBuilder: (context, onSelected, options) {
+                                        return Align(
+                                          alignment: Alignment.topLeft,
+                                          child: Material(
+                                            elevation: 6,
+                                            borderRadius: BorderRadius.circular(8),
+                                            child: ConstrainedBox(
+                                              constraints: const BoxConstraints(maxHeight: 220, maxWidth: 350),
+                                              child: ListView.builder(
+                                                padding: EdgeInsets.zero,
+                                                shrinkWrap: true,
+                                                itemCount: options.length,
+                                                itemBuilder: (context, i) {
+                                                  final s = options.elementAt(i);
+                                                  return ListTile(
+                                                    dense: true,
+                                                    leading: CircleAvatar(
+                                                      radius: 12,
+                                                      backgroundColor: AppTheme.primaryPurple,
+                                                      child: Text(s.name.isNotEmpty ? s.name[0].toUpperCase() : 'S',
+                                                          style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold)),
+                                                    ),
+                                                    title: Text(s.name, style: GoogleFonts.poppins(fontSize: 12, fontWeight: FontWeight.bold)),
+                                                    subtitle: Text('${s.gradeLevel} ${s.section ?? ""} • Roll: ${s.rollNumber ?? "N/A"}',
+                                                        style: GoogleFonts.poppins(fontSize: 10.5, color: AppTheme.textSecondary)),
+                                                    onTap: () => onSelected(s),
+                                                  );
+                                                },
+                                              ),
+                                            ),
+                                          ),
+                                        );
+                                      },
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 4),
+                              Text('Quickly find any student among thousands by class filter or typing.',
+                                  style: GoogleFonts.poppins(fontSize: 10, color: AppTheme.textHint)),
+                            ],
+                          );
+                        },
+                        loading: () => const LinearProgressIndicator(),
+                        error: (e, _) => Text('Error loading students: $e'),
+                      ),
+                      const SizedBox(height: 12),
+
+                      // Select Route
+                      Text('Select Route *', style: GoogleFonts.poppins(fontSize: 11, fontWeight: FontWeight.w600)),
+                      const SizedBox(height: 4),
+                      routesAsync.when(
+                        data: (routes) {
+                          return DropdownButtonFormField<String>(
+                            value: selectedRouteId,
+                            isExpanded: true,
+                            decoration: InputDecoration(
+                              border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                              contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                            ),
+                            hint: Text('Choose Route', style: GoogleFonts.poppins(fontSize: 12)),
+                            items: routes.map((r) {
+                              return DropdownMenuItem(
+                                value: r.id,
+                                child: Text('${r.routeName} (${r.vehicleNumber ?? "Unassigned Vehicle"})',
+                                    style: GoogleFonts.poppins(fontSize: 12), overflow: TextOverflow.ellipsis),
+                              );
+                            }).toList(),
+                            onChanged: (routeId) async {
+                              if (routeId != null) {
+                                final dbService = ref.read(databaseServiceProvider);
+                                final stops = await dbService.getStopsForRoute(routeId);
+                                setDialogState(() {
+                                  selectedRouteId = routeId;
+                                  availableStops = stops;
+                                  selectedStopId = stops.isNotEmpty ? stops.first.id : null;
+                                  currentStopFee = stops.isNotEmpty ? stops.first.fee : 0;
+                                });
+                              }
+                            },
+                          );
+                        },
+                        loading: () => const LinearProgressIndicator(),
+                        error: (e, _) => Text('Error loading routes: $e'),
+                      ),
+                      const SizedBox(height: 12),
+
+                      // Select Stop
+                      Text('Select Stop *', style: GoogleFonts.poppins(fontSize: 11, fontWeight: FontWeight.w600)),
+                      const SizedBox(height: 4),
+                      DropdownButtonFormField<String>(
+                        value: selectedStopId,
+                        isExpanded: true,
+                        decoration: InputDecoration(
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                          contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                        ),
+                        hint: Text(availableStops.isEmpty ? 'Select a route first to load stops' : 'Choose Stop',
+                            style: GoogleFonts.poppins(fontSize: 12)),
+                        items: availableStops.map((s) {
+                          return DropdownMenuItem(
+                            value: s.id,
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Text('${s.stopOrder}. ${s.stopName}', style: GoogleFonts.poppins(fontSize: 12)),
+                                Text('₹${s.fee.toStringAsFixed(0)}/mo',
+                                    style: GoogleFonts.poppins(fontSize: 11, fontWeight: FontWeight.bold, color: AppTheme.success)),
+                              ],
+                            ),
+                          );
+                        }).toList(),
+                        onChanged: (stopId) {
+                          if (stopId != null) {
+                            final match = availableStops.where((s) => s.id == stopId);
+                            setDialogState(() {
+                              selectedStopId = stopId;
+                              if (match.isNotEmpty) currentStopFee = match.first.fee;
+                            });
+                          }
+                        },
+                      ),
+                      const SizedBox(height: 16),
+
+                      // Fee Info Card
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: AppTheme.primaryPurple.withValues(alpha: 0.05),
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: AppTheme.primaryPurple.withValues(alpha: 0.2)),
+                        ),
+                        child: Row(
+                          children: [
+                            const Icon(Icons.info_outline_rounded, color: AppTheme.primaryPurple, size: 20),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    'Monthly Transport Fee: ${_currencyFormat.format(currentStopFee)}',
+                                    style: GoogleFonts.poppins(fontWeight: FontWeight.bold, fontSize: 13, color: AppTheme.primaryPurple),
+                                  ),
+                                  Text(
+                                    'Fee is auto-configured from this stop and applies only to this student in Fee Collection.',
+                                    style: GoogleFonts.poppins(fontSize: 10.5, color: AppTheme.textSecondary),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                actions: [
+                  TextButton(onPressed: () => Navigator.of(ctx).pop(), child: const Text('Cancel')),
+                  ElevatedButton(
+                    onPressed: () async {
+                      if (selectedStudentId == null || selectedRouteId == null || selectedStopId == null) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text('Please select a student, route, and stop.'), backgroundColor: AppTheme.warning),
+                        );
+                        return;
+                      }
+
+                      final dbService = ref.read(databaseServiceProvider);
+                      await dbService.assignStudentToRoute(
+                        studentId: selectedStudentId!,
+                        routeId: selectedRouteId!,
+                        stopId: selectedStopId!,
+                        academicYear: academicYear,
+                      );
+
+                      ref.invalidate(allStudentTransportsProvider(academicYear));
+                      ref.invalidate(fleetOverviewProvider);
+                      ref.invalidate(routesListProvider);
+
+                      if (ctx.mounted) {
+                        Navigator.of(ctx).pop();
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text('Transport assigned! Monthly fee ${_currencyFormat.format(currentStopFee)} synced.'),
+                            backgroundColor: AppTheme.primaryPurple,
+                          ),
+                        );
+                      }
+                    },
+                    style: ElevatedButton.styleFrom(backgroundColor: AppTheme.primaryPurple, foregroundColor: Colors.white),
+                    child: Text(existing != null ? 'Update Assignment' : 'Save Assignment', style: GoogleFonts.poppins(fontWeight: FontWeight.bold)),
+                  ),
+                ],
+              );
+            },
+          );
+        },
+      ),
+    );
+  }
+
+  void _confirmRemoveTransport(BuildContext context, StudentTransport st) {
+    final academicYear = st.academicYear;
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text('Remove Transport Assignment?', style: GoogleFonts.poppins(fontWeight: FontWeight.bold)),
+        content: Text('Are you sure you want to unassign ${st.studentName ?? "this student"} from transport? Unpaid transport dues will be removed from their ledger.', style: GoogleFonts.poppins()),
+        actions: [
+          TextButton(onPressed: () => Navigator.of(ctx).pop(), child: const Text('Cancel')),
+          ElevatedButton(
+            onPressed: () async {
+              final dbService = ref.read(databaseServiceProvider);
+              await dbService.removeStudentTransport(st.studentId, academicYear);
+              ref.invalidate(allStudentTransportsProvider(academicYear));
+              ref.invalidate(fleetOverviewProvider);
+              if (ctx.mounted) {
+                Navigator.of(ctx).pop();
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Transport removed successfully.'), backgroundColor: AppTheme.primaryPurple),
+                );
+              }
+            },
+            style: ElevatedButton.styleFrom(backgroundColor: AppTheme.error, foregroundColor: Colors.white),
+            child: const Text('Remove'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ============================================================================
+  // TAB 4: ROUTE MANIFEST / DRIVER SHEET
   // ============================================================================
 
   Widget _buildRouteManifestTab() {
@@ -664,20 +1345,12 @@ class _TransportViewState extends ConsumerState<TransportView> with SingleTicker
                                             const SizedBox(width: 10),
                                             Text(stop.stopName, style: GoogleFonts.poppins(fontSize: 14, fontWeight: FontWeight.bold, color: AppTheme.textPrimary)),
                                             const Spacer(),
-                                            if (stop.pickupTime != null)
+                                            if (stop.fee > 0)
                                               Chip(
-                                                avatar: const Icon(Icons.wb_sunny_outlined, size: 14, color: AppTheme.primaryPurple),
-                                                label: Text('Pickup: ${stop.pickupTime}', style: GoogleFonts.poppins(fontSize: 11)),
-                                                backgroundColor: AppTheme.bgSurface,
+                                                avatar: const Icon(Icons.currency_rupee_rounded, size: 14, color: AppTheme.success),
+                                                label: Text('₹${stop.fee.toStringAsFixed(0)}/mo', style: GoogleFonts.poppins(fontSize: 11, fontWeight: FontWeight.w600)),
+                                                backgroundColor: AppTheme.successLight,
                                               ),
-                                            if (stop.dropTime != null) ...[
-                                              const SizedBox(width: 8),
-                                              Chip(
-                                                avatar: const Icon(Icons.nights_stay_outlined, size: 14, color: AppTheme.info),
-                                                label: Text('Drop: ${stop.dropTime}', style: GoogleFonts.poppins(fontSize: 11)),
-                                                backgroundColor: AppTheme.bgSurface,
-                                              ),
-                                            ],
                                           ],
                                         ),
                                         const SizedBox(height: 12),
@@ -750,6 +1423,8 @@ class _TransportViewState extends ConsumerState<TransportView> with SingleTicker
     String? selectedDriverId = vehicle?.driverStaffId;
     DateTime? insuranceExp = vehicle?.insuranceExpiry;
     DateTime? fitnessExp = vehicle?.fitnessExpiry;
+
+    ref.invalidate(driversListProvider);
 
     showDialog(
       context: context,
@@ -834,13 +1509,34 @@ class _TransportViewState extends ConsumerState<TransportView> with SingleTicker
                       ),
                       const SizedBox(height: 12),
 
-                      // Staff Driver Dropdown (Role = 'driver')
-                      Text('Assigned Driver (Staff with Driver role)', style: GoogleFonts.poppins(fontSize: 11, fontWeight: FontWeight.w600)),
+                      // Staff Driver Dropdown (Role = 'driver' or Designation = 'Driver')
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text('Assigned Driver (Staff with Driver role)', style: GoogleFonts.poppins(fontSize: 11, fontWeight: FontWeight.w600)),
+                          InkWell(
+                            onTap: () => ref.invalidate(driversListProvider),
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                              child: Row(
+                                children: [
+                                  const Icon(Icons.refresh_rounded, size: 14, color: AppTheme.primaryPurple),
+                                  const SizedBox(width: 4),
+                                  Text('Refresh', style: GoogleFonts.poppins(fontSize: 11, color: AppTheme.primaryPurple, fontWeight: FontWeight.w600)),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
                       const SizedBox(height: 4),
                       driversAsync.when(
                         data: (drivers) {
+                          final hasMatch = selectedDriverId == null || drivers.any((d) => d.id == selectedDriverId);
+                          final safeValue = hasMatch ? selectedDriverId : null;
+
                           return DropdownButtonFormField<String?>(
-                            value: selectedDriverId,
+                            value: safeValue,
                             decoration: InputDecoration(
                               border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
                               contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
@@ -1116,7 +1812,7 @@ class _TransportViewState extends ConsumerState<TransportView> with SingleTicker
                         endPoint: endController.text.trim(),
                       );
                       if (!PermissionHelper.requireAdminRole(context, ref, RiskyAction.updateRecord)) return;
-                      await dbService.updateRoute(updated);
+                      await dbService.updateRouteDetails(updated);
                     } else {
                       final newRoute = Route.create(
                         routeName: nameController.text.trim(),
@@ -1167,8 +1863,7 @@ class _TransportViewState extends ConsumerState<TransportView> with SingleTicker
   void _showManageStopsDialog(BuildContext context, Route route) {
     final List<RouteStop> localStops = List.from(route.stops);
     final stopNameController = TextEditingController();
-    final pickupTimeController = TextEditingController(text: '07:30 AM');
-    final dropTimeController = TextEditingController(text: '03:30 PM');
+    final stopFeeController = TextEditingController(text: '0');
 
     showDialog(
       context: context,
@@ -1202,22 +1897,14 @@ class _TransportViewState extends ConsumerState<TransportView> with SingleTicker
                     children: [
                       Text('Add New Stop', style: GoogleFonts.poppins(fontSize: 11, fontWeight: FontWeight.bold, color: AppTheme.primaryPurple)),
                       const SizedBox(height: 8),
-                      TextField(
-                        controller: stopNameController,
-                        decoration: InputDecoration(
-                          hintText: 'Stop Name / Landmark (e.g. Central Market)',
-                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(6)),
-                          contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                        ),
-                      ),
-                      const SizedBox(height: 8),
                       Row(
                         children: [
                           Expanded(
+                            flex: 3,
                             child: TextField(
-                              controller: pickupTimeController,
+                              controller: stopNameController,
                               decoration: InputDecoration(
-                                labelText: 'Pickup Time',
+                                hintText: 'Stop Name / Landmark (e.g. Central Market)',
                                 border: OutlineInputBorder(borderRadius: BorderRadius.circular(6)),
                                 contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
                               ),
@@ -1225,10 +1912,13 @@ class _TransportViewState extends ConsumerState<TransportView> with SingleTicker
                           ),
                           const SizedBox(width: 8),
                           Expanded(
+                            flex: 2,
                             child: TextField(
-                              controller: dropTimeController,
+                              controller: stopFeeController,
+                              keyboardType: const TextInputType.numberWithOptions(decimal: true),
                               decoration: InputDecoration(
-                                labelText: 'Drop Time',
+                                labelText: 'Monthly Fee (₹)',
+                                prefixText: '₹ ',
                                 border: OutlineInputBorder(borderRadius: BorderRadius.circular(6)),
                                 contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
                               ),
@@ -1243,10 +1933,10 @@ class _TransportViewState extends ConsumerState<TransportView> with SingleTicker
                                   routeId: route.id,
                                   stopName: stopNameController.text.trim(),
                                   stopOrder: localStops.length + 1,
-                                  pickupTime: pickupTimeController.text.trim(),
-                                  dropTime: dropTimeController.text.trim(),
+                                  fee: double.tryParse(stopFeeController.text) ?? 0,
                                 ));
                                 stopNameController.clear();
+                                stopFeeController.text = '0';
                               });
                             },
                             style: ElevatedButton.styleFrom(backgroundColor: AppTheme.primaryPurple, foregroundColor: Colors.white),
@@ -1285,7 +1975,7 @@ class _TransportViewState extends ConsumerState<TransportView> with SingleTicker
                                   child: Text('${i + 1}', style: GoogleFonts.poppins(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold)),
                                 ),
                                 title: Text(localStops[i].stopName, style: GoogleFonts.poppins(fontWeight: FontWeight.w600, fontSize: 12)),
-                                subtitle: Text('Pickup: ${localStops[i].pickupTime ?? "-"}  |  Drop: ${localStops[i].dropTime ?? "-"}',
+                                subtitle: Text('Fee: ₹${localStops[i].fee.toStringAsFixed(0)}/mo',
                                     style: GoogleFonts.poppins(fontSize: 10, color: AppTheme.textSecondary)),
                                 trailing: Row(
                                   mainAxisSize: MainAxisSize.min,

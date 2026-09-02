@@ -947,13 +947,19 @@ class _FeeReportsViewState extends ConsumerState<FeeReportsView> with SingleTick
                           borderRadius: BorderRadius.circular(8),
                           border: Border.all(color: AppTheme.divider),
                         ),
-                        child: DropdownButton<String>(
-                          value: _selectedClass,
-                          underline: const SizedBox(),
-                          style: GoogleFonts.poppins(fontSize: 13, color: AppTheme.textPrimary),
-                          items: classes.map((c) => DropdownMenuItem(value: c.name, child: Text(c.name))).toList(),
-                          onChanged: (val) {
-                            if (val != null) setState(() => _selectedClass = val);
+                        child: Builder(
+                          builder: (context) {
+                            final uniqueClassNames = classes.map((c) => c.name).toSet().toList();
+                            final safeVal = uniqueClassNames.contains(_selectedClass) ? _selectedClass : (uniqueClassNames.isNotEmpty ? uniqueClassNames.first : null);
+                            return DropdownButton<String>(
+                              value: safeVal,
+                              underline: const SizedBox(),
+                              style: GoogleFonts.poppins(fontSize: 13, color: AppTheme.textPrimary),
+                              items: uniqueClassNames.map((name) => DropdownMenuItem(value: name, child: Text(name))).toList(),
+                              onChanged: (val) {
+                                if (val != null) setState(() => _selectedClass = val);
+                              },
+                            );
                           },
                         ),
                       );

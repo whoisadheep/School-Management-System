@@ -94,10 +94,11 @@ class _FeeStructureSetupViewState extends ConsumerState<FeeStructureSetupView> {
                 const SizedBox(width: 12),
                 classesAsync.when(
                   data: (classes) {
-                    final classNames = classes.map((c) => c.name).toList();
+                    final classNames = classes.map((c) => c.name).toSet().toList();
                     if (classNames.isEmpty) classNames.add('Grade 10');
-                    if (!classNames.contains(_selectedClass)) {
-                      _selectedClass = classNames.first;
+                    final safeClass = classNames.contains(_selectedClass) ? _selectedClass : classNames.first;
+                    if (_selectedClass != safeClass) {
+                      _selectedClass = safeClass;
                     }
                     return Container(
                       width: 220,
@@ -109,7 +110,7 @@ class _FeeStructureSetupViewState extends ConsumerState<FeeStructureSetupView> {
                       ),
                       child: DropdownButtonHideUnderline(
                         child: DropdownButton<String>(
-                          value: _selectedClass,
+                          value: safeClass,
                           isExpanded: true,
                           style: GoogleFonts.poppins(fontSize: 13, fontWeight: FontWeight.w600, color: AppTheme.textPrimary),
                           items: classNames.map((c) => DropdownMenuItem(value: c, child: Text(c))).toList(),
@@ -129,9 +130,10 @@ class _FeeStructureSetupViewState extends ConsumerState<FeeStructureSetupView> {
                 Consumer(
                   builder: (context, ref, _) {
                     final yearsAsync = ref.watch(academicYearsProvider);
-                    final yearList = yearsAsync.value?.map((y) => y.name).toList() ?? ['2024-2025', '2025-2026'];
-                    if (!yearList.contains(_selectedAcademicYear) && yearList.isNotEmpty) {
-                      _selectedAcademicYear = yearList.first;
+                    final yearList = yearsAsync.value?.map((y) => y.name).toSet().toList() ?? ['2024-2025', '2025-2026'];
+                    final safeYear = yearList.contains(_selectedAcademicYear) ? _selectedAcademicYear : (yearList.isNotEmpty ? yearList.first : null);
+                    if (_selectedAcademicYear != safeYear && safeYear != null) {
+                      _selectedAcademicYear = safeYear;
                     }
 
                     return Container(
@@ -144,7 +146,7 @@ class _FeeStructureSetupViewState extends ConsumerState<FeeStructureSetupView> {
                       ),
                       child: DropdownButtonHideUnderline(
                         child: DropdownButton<String>(
-                          value: yearList.contains(_selectedAcademicYear) ? _selectedAcademicYear : null,
+                          value: safeYear,
                           isExpanded: true,
                           style: GoogleFonts.poppins(fontSize: 13, fontWeight: FontWeight.w600, color: AppTheme.textPrimary),
                           items: yearList

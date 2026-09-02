@@ -1513,10 +1513,12 @@ class DatabaseService {
   // FEE HEADS & FEE STRUCTURE CONFIGURATION (PHASE 1)
   // ============================================================================
 
-  /// Get all fee heads
-  Future<List<FeeHead>> getAllFeeHeads() async {
+  /// Get all fee heads (excludes internal transport fee head by default so it cannot be added to general class fee structures)
+  Future<List<FeeHead>> getAllFeeHeads({bool includeTransport = false}) async {
     final db = await _db;
-    final results = await db.query('fee_heads', orderBy: 'name ASC');
+    final results = includeTransport
+        ? await db.query('fee_heads', orderBy: 'name ASC')
+        : await db.query('fee_heads', where: "id != 'fh-transport' AND name != 'Transport Fee'", orderBy: 'name ASC');
     return results.map((m) => FeeHead.fromMap(m)).toList();
   }
 
@@ -2035,6 +2037,7 @@ class DatabaseService {
     required String academicYear,
     required List<String> ledgerIds,
     required PaymentMethod paymentMethod,
+    double? paidAmount,
     String? referenceNumber,
   }) async {
     final db = await _db;
@@ -2042,7 +2045,7 @@ class DatabaseService {
     final ayId = academicYear.startsWith('ay-') ? academicYear : 'ay-$academicYear';
 
     await db.transaction((txn) async {
-      // Get the specific open ledger entries
+      // Get the specific open ledger entries ordered by due date (oldest first)
       final placeholders = List.filled(ledgerIds.length, '?').join(',');
       final openRows = await txn.rawQuery('''
         SELECT sfl.*, fh.name as fee_head_name, fh.frequency as frequency
@@ -2050,18 +2053,25 @@ class DatabaseService {
         LEFT JOIN fee_heads fh ON sfl.fee_head_id = fh.id
         WHERE sfl.id IN ($placeholders)
           AND sfl.status IN ('pending', 'partial', 'overdue')
+        ORDER BY sfl.due_date ASC, sfl.created_at ASC
       ''', ledgerIds);
 
       final nowIso = DateTime.now().toIso8601String();
+      double availableToSpend = paidAmount ?? double.infinity;
 
       for (final row in openRows) {
-        final entry = StudentFeeLedger.fromMap(row);
-        final allocate = entry.amountDue - entry.amountPaid;
-        
-        if (allocate <= 0.01) continue;
+        if (availableToSpend <= 0.01) break;
 
-        final newPaid = entry.amountDue;
-        final newStatus = LedgerStatus.paid;
+        final entry = StudentFeeLedger.fromMap(row);
+        final needed = entry.amountDue - entry.amountPaid;
+        if (needed <= 0.01) continue;
+
+        final allocate = availableToSpend >= needed ? needed : availableToSpend;
+        availableToSpend -= allocate;
+
+        final newPaid = entry.amountPaid + allocate;
+        final isFullyPaid = (entry.amountDue - newPaid).abs() <= 0.01;
+        final newStatus = isFullyPaid ? LedgerStatus.paid : LedgerStatus.partial;
 
         await txn.rawUpdate('''
           UPDATE student_fee_ledger
@@ -2069,8 +2079,6 @@ class DatabaseService {
           WHERE id = ?
         ''', [newPaid, newStatus.name, nowIso, entry.id]);
 
-        final ayId = academicYear.startsWith('ay-') ? academicYear : 'ay-$academicYear';
-        
         // Create a matching invoice linked to this ledger entry
         final invoiceId = const Uuid().v4();
         await _insertLogged(txn, 'invoices', {
@@ -2082,7 +2090,7 @@ class DatabaseService {
           'penalty_amount': 0.0,
           'due_date': entry.dueDate.toIso8601String(),
           'status': 'paid',
-          'notes': 'Multi-month payment: ${entry.feeHeadName ?? entry.feeHeadId}',
+          'notes': 'Fee payment: ${entry.feeHeadName ?? entry.feeHeadId}${entry.monthLabel != null ? " (${entry.monthLabel})" : ""}${!isFullyPaid ? " [Partial Due: ₹${(entry.amountDue - newPaid).toStringAsFixed(0)} rolls over]" : ""}',
           'fee_head_id': entry.feeHeadId,
           'ledger_id': entry.id,
           'created_at': nowIso,
@@ -2110,7 +2118,7 @@ class DatabaseService {
           'type': 'income',
           'category': 'Fee Collection',
           'amount': allocate,
-          'description': 'Multi-month payment: ${entry.feeHeadName ?? entry.feeHeadId} (Student: $studentId)',
+          'description': 'Fee payment: ${entry.feeHeadName ?? entry.feeHeadId}${entry.monthLabel != null ? " (${entry.monthLabel})" : ""} (Student: $studentId)',
           'reference_id': transactionId,
           'created_at': nowIso,
         });
@@ -2578,15 +2586,18 @@ class DatabaseService {
   // TRANSPORT MANAGEMENT OPERATIONS (PHASE 2)
   // ============================================================================
 
-  /// Get all drivers from staff table (role = 'driver')
+  /// Get all drivers from staff table (role = 'driver' or designation containing 'driver')
   Future<List<Staff>> getDrivers() async {
     final db = await _db;
-    final results = await db.query(
-      'staff',
-      where: 'LOWER(role) = ?',
-      whereArgs: ['driver'],
-      orderBy: 'first_name ASC',
-    );
+    final results = await db.rawQuery('''
+      SELECT * FROM staff
+      WHERE is_active = 1 AND (
+        LOWER(role) = 'driver' 
+        OR LOWER(role) LIKE '%driver%'
+        OR LOWER(COALESCE(designation, '')) LIKE '%driver%'
+      )
+      ORDER BY first_name ASC
+    ''');
     return results.map((map) => Staff.fromMap(map)).toList();
   }
 
@@ -2698,7 +2709,13 @@ class DatabaseService {
     });
   }
 
-  /// Update route and replace stops
+  /// Update route metadata only (name, vehicle, start/end points) — does NOT touch stops
+  Future<void> updateRouteDetails(Route route) async {
+    final db = await _db;
+    await _updateLogged(db, 'routes', route.toMap(), where: 'id = ?', whereArgs: [route.id]);
+  }
+
+  /// Update route and replace ALL stops (use only when intentionally replacing stops)
   Future<void> updateRoute(Route route) async {
     final db = await _db;
     await db.transaction((txn) async {
@@ -2740,18 +2757,21 @@ class DatabaseService {
     });
   }
 
-  /// Assign student to route + stop + monthly fee, and sync with student_fee_ledger
+  /// Assign student to route + stop, auto-derive fee from stop, and sync with student_fee_ledger
   Future<StudentTransport> assignStudentToRoute({
     required String studentId,
     required String routeId,
     required String stopId,
-    required double monthlyFee,
     required String academicYear,
   }) async {
     final db = await _db;
     late StudentTransport result;
 
     await db.transaction((txn) async {
+      // Look up fee from the stop
+      final stopRows = await txn.query('route_stops', where: 'id = ?', whereArgs: [stopId]);
+      final double monthlyFee = stopRows.isNotEmpty ? (stopRows.first['fee'] as num?)?.toDouble() ?? 0 : 0;
+
       final existing = await txn.rawQuery(
         'SELECT * FROM student_transport WHERE student_id = ? AND academic_year = ? LIMIT 1',
         [studentId, academicYear],
@@ -2788,15 +2808,15 @@ class DatabaseService {
         result = transport;
       }
 
-      // Link with student_fee_ledger system!
-      // Ensure 'fh-transport' fee head exists
+      // Link with student_fee_ledger system
+      // Ensure 'fh-transport' fee head exists (internal, not shown in fee structure)
       final fhRows = await txn.query('fee_heads', where: 'id = ? OR name = ?', whereArgs: ['fh-transport', 'Transport Fee']);
       String feeHeadId = 'fh-transport';
       if (fhRows.isEmpty) {
         await _insertLogged(txn, 'fee_heads', {
           'id': 'fh-transport',
           'name': 'Transport Fee',
-          'description': 'Monthly school bus and conveyance charges',
+          'description': 'Monthly school bus and conveyance charges (auto-managed by transport module)',
           'is_recurring': 1,
           'frequency': 'monthly',
         });
@@ -2804,35 +2824,57 @@ class DatabaseService {
         feeHeadId = fhRows.first['id'] as String;
       }
 
-      // Upsert student_fee_ledger entry for Transport Fee
-      final ledgerRows = await txn.query(
-        'student_fee_ledger',
-        where: 'student_id = ? AND fee_head_id = ? AND academic_year = ?',
-        whereArgs: [studentId, feeHeadId, academicYear],
-      );
-
+      // Generate / sync 12 monthly ledger rows (April to March) for Transport Fee
       final now = DateTime.now();
-      final dueDate = DateTime(now.year, now.month + 1, 0);
+      final yearParts = academicYear.split('-');
+      final startYear = int.tryParse(yearParts[0]) ?? now.year;
+      final monthNames = [
+        'April', 'May', 'June', 'July', 'August', 'September', 
+        'October', 'November', 'December', 'January', 'February', 'March'
+      ];
 
-      if (ledgerRows.isNotEmpty) {
-        final ledgerId = ledgerRows.first['id'] as String;
-        await txn.rawUpdate('''
-          UPDATE student_fee_ledger
-          SET amount_due = ?, updated_at = ?
-          WHERE id = ?
-        ''', [monthlyFee, nowIso, ledgerId]);
-      } else {
-        final ledger = StudentFeeLedger.create(
-          studentId: studentId,
-          feeHeadId: feeHeadId,
-          academicYear: academicYear,
-          amountDue: monthlyFee,
-          dueDate: dueDate,
-          feeHeadName: 'Transport Fee',
-          frequency: 'monthly',
+      for (int i = 0; i < 12; i++) {
+        final monthIndex = (i + 3) % 12 + 1; // 4 to 12, then 1 to 3
+        final currentYear = i < 9 ? startYear : startYear + 1;
+        final dueDate = DateTime(currentYear, monthIndex, 10);
+        final monthLabel = '${monthNames[i]} $currentYear';
+
+        final existingRows = await txn.rawQuery(
+          'SELECT id, amount_paid FROM student_fee_ledger WHERE student_id = ? AND fee_head_id = ? AND academic_year = ? AND month_label = ?',
+          [studentId, feeHeadId, academicYear, monthLabel],
         );
-        await _insertLogged(txn, 'student_fee_ledger', ledger.toMap());
+
+        if (existingRows.isNotEmpty) {
+          final id = existingRows.first['id'] as String;
+          final double paid = (existingRows.first['amount_paid'] as num?)?.toDouble() ?? 0.0;
+          final newStatus = (monthlyFee - paid).abs() <= 0.01
+              ? 'paid'
+              : (paid > 0 ? 'partial' : 'pending');
+          await txn.rawUpdate('''
+            UPDATE student_fee_ledger
+            SET amount_due = ?, status = ?, updated_at = ?
+            WHERE id = ?
+          ''', [monthlyFee, newStatus, nowIso, id]);
+        } else {
+          final ledger = StudentFeeLedger.create(
+            studentId: studentId,
+            feeHeadId: feeHeadId,
+            academicYear: academicYear,
+            amountDue: monthlyFee,
+            dueDate: dueDate,
+            feeHeadName: 'Transport Fee',
+            frequency: 'monthly',
+            monthLabel: monthLabel,
+          );
+          await _insertLogged(txn, 'student_fee_ledger', ledger.toMap());
+        }
       }
+
+      // Also clean up any legacy unlabelled transport ledger rows if unpaid
+      await txn.rawDelete(
+        "DELETE FROM student_fee_ledger WHERE student_id = ? AND fee_head_id = ? AND academic_year = ? AND (month_label IS NULL OR month_label = '') AND amount_paid = 0",
+        [studentId, feeHeadId, academicYear],
+      );
     });
 
     return result;
@@ -2859,12 +2901,12 @@ class DatabaseService {
   /// Get student transport details for a given student & academic year
   Future<StudentTransport?> getStudentTransport(String studentId, String academicYear) async {
     final db = await _db;
-    final results = await db.rawQuery('''
+    var results = await db.rawQuery('''
       SELECT st.*,
              TRIM(COALESCE(s.first_name, '') || ' ' || COALESCE(s.last_name, '')) as student_name,
              s.roll_number, s.grade_level, s.section,
              r.route_name,
-             rs.stop_name, rs.pickup_time, rs.drop_time
+             rs.stop_name, rs.fee as stop_fee
       FROM student_transport st
       JOIN students s ON st.student_id = s.id
       JOIN routes r ON st.route_id = r.id
@@ -2873,8 +2915,67 @@ class DatabaseService {
       LIMIT 1
     ''', [studentId, academicYear]);
 
+    // Fallback: If not found for exact academicYear string, check any active assignment for this student
+    if (results.isEmpty) {
+      results = await db.rawQuery('''
+        SELECT st.*,
+               TRIM(COALESCE(s.first_name, '') || ' ' || COALESCE(s.last_name, '')) as student_name,
+               s.roll_number, s.grade_level, s.section,
+               r.route_name,
+               rs.stop_name, rs.fee as stop_fee
+        FROM student_transport st
+        JOIN students s ON st.student_id = s.id
+        JOIN routes r ON st.route_id = r.id
+        JOIN route_stops rs ON st.stop_id = rs.id
+        WHERE st.student_id = ? AND st.is_active = 1
+        ORDER BY st.created_at DESC
+        LIMIT 1
+      ''', [studentId]);
+    }
+
     if (results.isEmpty) return null;
     return StudentTransport.fromMap(results.first);
+  }
+
+  /// Ensure a student who has an active transport assignment has their 12 monthly transport fee ledger rows generated
+  Future<void> ensureStudentTransportMonthlyLedgers(String studentId, String academicYear) async {
+    final st = await getStudentTransport(studentId, academicYear);
+    if (st == null || !st.isActive || st.monthlyFee <= 0) return;
+
+    final db = await _db;
+    final countRows = await db.rawQuery(
+      'SELECT COUNT(*) as cnt FROM student_fee_ledger WHERE student_id = ? AND fee_head_id = ? AND academic_year = ? AND month_label IS NOT NULL',
+      [studentId, 'fh-transport', academicYear],
+    );
+    final count = (countRows.first['cnt'] as int?) ?? 0;
+    if (count < 12) {
+      await assignStudentToRoute(
+        studentId: studentId,
+        routeId: st.routeId,
+        stopId: st.stopId,
+        academicYear: academicYear,
+      );
+    }
+  }
+
+  /// Get all student transport assignments enriched with student info, route, and stop fee
+  Future<List<StudentTransport>> getAllStudentTransports({String academicYear = '2024-2025'}) async {
+    final db = await _db;
+    final results = await db.rawQuery('''
+      SELECT st.*,
+             TRIM(COALESCE(s.first_name, '') || ' ' || COALESCE(s.last_name, '')) as student_name,
+             s.roll_number, s.grade_level, s.section,
+             r.route_name,
+             rs.stop_name, rs.fee as stop_fee
+      FROM student_transport st
+      JOIN students s ON st.student_id = s.id
+      JOIN routes r ON st.route_id = r.id
+      JOIN route_stops rs ON st.stop_id = rs.id
+      WHERE st.academic_year = ? AND st.is_active = 1
+      ORDER BY r.route_name ASC, rs.stop_order ASC, s.first_name ASC
+    ''', [academicYear]);
+
+    return results.map((m) => StudentTransport.fromMap(m)).toList();
   }
 
   /// Get route manifest with stops in order, each with its assigned students list
@@ -2892,7 +2993,7 @@ class DatabaseService {
                TRIM(COALESCE(s.first_name, '') || ' ' || COALESCE(s.last_name, '')) as student_name,
                s.roll_number, s.grade_level, s.section,
                r.route_name,
-               rs.stop_name, rs.pickup_time, rs.drop_time
+               rs.stop_name, rs.fee as stop_fee
         FROM student_transport st
         JOIN students s ON st.student_id = s.id
         JOIN routes r ON st.route_id = r.id

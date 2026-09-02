@@ -7,32 +7,28 @@ class RouteStop {
   final String routeId;
   final String stopName;
   final int stopOrder;
-  final String? pickupTime;
-  final String? dropTime;
+  final double fee; // Monthly transport fee for this stop
 
   const RouteStop({
     required this.id,
     required this.routeId,
     required this.stopName,
     required this.stopOrder,
-    this.pickupTime,
-    this.dropTime,
+    this.fee = 0,
   });
 
   factory RouteStop.create({
     required String routeId,
     required String stopName,
     required int stopOrder,
-    String? pickupTime,
-    String? dropTime,
+    double fee = 0,
   }) {
     return RouteStop(
       id: const Uuid().v4(),
       routeId: routeId,
       stopName: stopName,
       stopOrder: stopOrder,
-      pickupTime: pickupTime,
-      dropTime: dropTime,
+      fee: fee,
     );
   }
 
@@ -42,8 +38,7 @@ class RouteStop {
       'route_id': routeId,
       'stop_name': stopName,
       'stop_order': stopOrder,
-      'pickup_time': pickupTime,
-      'drop_time': dropTime,
+      'fee': fee,
     };
   }
 
@@ -53,8 +48,7 @@ class RouteStop {
       routeId: map['route_id'] as String,
       stopName: map['stop_name'] as String,
       stopOrder: (map['stop_order'] as num).toInt(),
-      pickupTime: map['pickup_time'] as String?,
-      dropTime: map['drop_time'] as String?,
+      fee: (map['fee'] as num?)?.toDouble() ?? 0,
     );
   }
 
@@ -68,16 +62,14 @@ class RouteStop {
     String? routeId,
     String? stopName,
     int? stopOrder,
-    String? pickupTime,
-    String? dropTime,
+    double? fee,
   }) {
     return RouteStop(
       id: id ?? this.id,
       routeId: routeId ?? this.routeId,
       stopName: stopName ?? this.stopName,
       stopOrder: stopOrder ?? this.stopOrder,
-      pickupTime: pickupTime ?? this.pickupTime,
-      dropTime: dropTime ?? this.dropTime,
+      fee: fee ?? this.fee,
     );
   }
 }

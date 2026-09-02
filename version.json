@@ -1,7 +1,7 @@
 {
-  "latest_version": "1.0.11",
-  "download_url": "https://github.com/whoisadheep/School-Management-System/releases/download/v1.0.11/Eduvia-Installer.exe",
+  "latest_version": "1.0.12",
+  "download_url": "https://github.com/whoisadheep/School-Management-System/releases/download/v1.0.12/Eduvia-Installer.exe",
   "sha256": "",
-  "changelog": "Strict sequential admission numbering (2026-0001, 2026-0002) eliminating sample data random number interference.",
+  "changelog": "Per-stop transport fee configuration, form-based fee collection remake with month range & partial dues rollover, driver dropdown fixes, and fee structure class dropdown stability.",
   "mandatory_update": false
 }

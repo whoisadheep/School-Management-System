@@ -68,7 +68,7 @@ class DatabaseHelper {
   DatabaseHelper._internal();
 
   /// Schema version 27 (Admin Users RBAC)
-  static const int _databaseVersion = 30;
+  static const int _databaseVersion = 31;
   static const String _databaseName = 'school_management.db';
 
   Future<Database> get database async {
@@ -1368,7 +1368,6 @@ class DatabaseHelper {
         await db.execute('''
           INSERT OR IGNORE INTO fee_heads (id, name, description, is_recurring, frequency) VALUES
           ('fh-tuition', 'Tuition Fee', 'Core monthly academic tuition charges', 1, 'monthly'),
-          ('fh-transport', 'Transport Fee', 'Monthly school bus and conveyance charges', 1, 'monthly'),
           ('fh-lab', 'Lab Fee', 'Science and computer lab equipment maintenance', 1, 'quarterly'),
           ('fh-exam', 'Exam Fee', 'Term assessment and examination evaluation fee', 1, 'quarterly'),
           ('fh-admission', 'Admission Fee', 'One-time student enrolment & registration fee', 0, 'one_time'),
@@ -1582,13 +1581,12 @@ class DatabaseHelper {
       // 3. Route stops table
       try {
         await db.execute('''
-          CREATE TABLE IF NOT EXISTS route_stops (
+           CREATE TABLE IF NOT EXISTS route_stops (
             id           TEXT PRIMARY KEY,
             route_id     TEXT NOT NULL,
             stop_name    TEXT NOT NULL,
             stop_order   INTEGER NOT NULL,
-            pickup_time  TEXT,
-            drop_time    TEXT,
+            fee          REAL NOT NULL DEFAULT 0,
             FOREIGN KEY (route_id) REFERENCES routes (id) ON DELETE CASCADE
           )
         ''');
@@ -2172,6 +2170,20 @@ class DatabaseHelper {
         print("Failed to run version 30 migration: $e");
       }
     }
+
+    if (oldVersion < 31) {
+      // v31: Add fee column to route_stops for per-stop transport pricing & remove class-wide transport fee structures
+      try {
+        await db.execute('ALTER TABLE route_stops ADD COLUMN fee REAL NOT NULL DEFAULT 0');
+      } catch (e) {
+        print("Failed to run version 31 migration: $e");
+      }
+      try {
+        await db.execute("DELETE FROM fee_structures WHERE fee_head_id = 'fh-transport' OR fee_category_id = 'fh-transport'");
+      } catch (e) {
+        print("Failed to clean up transport fee_structures: $e");
+      }
+    }
   }
 
   /// Self-Healing Schema Verifier & Master Data Bootstrapper
@@ -2319,7 +2331,6 @@ class DatabaseHelper {
       await db.execute('''
         INSERT OR IGNORE INTO fee_heads (id, name, description, is_recurring, frequency) VALUES
         ('fh-tuition', 'Tuition Fee', 'Core monthly academic tuition charges', 1, 'monthly'),
-        ('fh-transport', 'Transport Fee', 'Monthly school bus and conveyance charges', 1, 'monthly'),
         ('fh-lab', 'Lab Fee', 'Science and computer lab equipment maintenance', 1, 'quarterly'),
         ('fh-exam', 'Exam Fee', 'Term assessment and examination evaluation fee', 1, 'quarterly'),
         ('fh-admission', 'Admission Fee', 'One-time student enrolment & registration fee', 0, 'one_time'),
@@ -2433,8 +2444,7 @@ class DatabaseHelper {
           route_id     TEXT NOT NULL,
           stop_name    TEXT NOT NULL,
           stop_order   INTEGER NOT NULL,
-          pickup_time  TEXT,
-          drop_time    TEXT,
+          fee          REAL NOT NULL DEFAULT 0,
           FOREIGN KEY (route_id) REFERENCES routes (id) ON DELETE CASCADE
         )
       ''');

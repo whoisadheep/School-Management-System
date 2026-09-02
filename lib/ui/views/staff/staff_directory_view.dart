@@ -339,6 +339,7 @@ class _StaffDirectoryViewState extends ConsumerState<StaffDirectoryView>
         await dbService.updateStaff(staff);
       }
       ref.invalidate(staffListProvider);
+      ref.invalidate(driversListProvider);
       ref.invalidate(dashboardMetricsProvider);
       if (_selectedStaff != null) {
         _openStaffDetail(staff);
@@ -407,6 +408,7 @@ class _StaffDirectoryViewState extends ConsumerState<StaffDirectoryView>
 
         if (successCount > 0) {
           ref.invalidate(staffListProvider);
+          ref.invalidate(driversListProvider);
           ref.invalidate(dashboardMetricsProvider);
         }
         if (mounted) {

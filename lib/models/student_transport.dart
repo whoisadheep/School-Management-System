@@ -18,8 +18,7 @@ class StudentTransport {
   final String? section;
   final String? routeName;
   final String? stopName;
-  final String? pickupTime;
-  final String? dropTime;
+  final double? stopFee; // Fee configured on the stop
 
   const StudentTransport({
     required this.id,
@@ -35,8 +34,7 @@ class StudentTransport {
     this.section,
     this.routeName,
     this.stopName,
-    this.pickupTime,
-    this.dropTime,
+    this.stopFee,
   });
 
   factory StudentTransport.create({
@@ -85,8 +83,7 @@ class StudentTransport {
       section: map['section'] as String?,
       routeName: map['route_name'] as String?,
       stopName: map['stop_name'] as String?,
-      pickupTime: map['pickup_time'] as String?,
-      dropTime: map['drop_time'] as String?,
+      stopFee: (map['stop_fee'] as num?)?.toDouble(),
     );
   }
 
@@ -109,8 +106,7 @@ class StudentTransport {
     String? section,
     String? routeName,
     String? stopName,
-    String? pickupTime,
-    String? dropTime,
+    double? stopFee,
   }) {
     return StudentTransport(
       id: id ?? this.id,
@@ -126,8 +122,7 @@ class StudentTransport {
       section: section ?? this.section,
       routeName: routeName ?? this.routeName,
       stopName: stopName ?? this.stopName,
-      pickupTime: pickupTime ?? this.pickupTime,
-      dropTime: dropTime ?? this.dropTime,
+      stopFee: stopFee ?? this.stopFee,
     );
   }
 }

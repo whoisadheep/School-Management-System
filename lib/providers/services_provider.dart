@@ -503,6 +503,12 @@ final studentTransportProvider = FutureProvider.family<StudentTransport?, Studen
   return await dbService.getStudentTransport(param.studentId, param.academicYear);
 });
 
+/// Provider for all active student transport assignments for an academic year
+final allStudentTransportsProvider = FutureProvider.family<List<StudentTransport>, String>((ref, academicYear) async {
+  final dbService = ref.watch(databaseServiceProvider);
+  return await dbService.getAllStudentTransports(academicYear: academicYear);
+});
+
 // ============================================================================
 // EXAMINATION & MARKS PROVIDERS (PHASE 1 & PHASE 2)
 // ============================================================================
