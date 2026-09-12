@@ -9,6 +9,7 @@ import '../../../providers/services_provider.dart';
 import '../../../providers/auth_provider.dart';
 import '../../../core/auth/permission_helper.dart';
 import '../../../services/report_card_generator.dart';
+import '../../widgets/pdf_preview_dialog.dart';
 
 /// Examination & Reports Management View — Exams Setup, Marks Entry,
 /// Report Cards, Term Aggregation, and Grade Scale Config.
@@ -933,23 +934,45 @@ class _ExamManagementViewState extends ConsumerState<ExamManagementView> with Si
                                   ),
                                   ElevatedButton.icon(
                                     onPressed: () async {
-                                      final File file = await ReportCardGenerator.generateReportCard(
-                                        examResult: examRes,
-                                        rankInClass: rank,
-                                      );
-
-                                      if (context.mounted) {
-                                        ScaffoldMessenger.of(context).showSnackBar(
-                                          SnackBar(
-                                            content: Text('Report Card PDF exported to ${file.path}'),
-                                            backgroundColor: AppTheme.primaryPurple,
-                                            duration: const Duration(seconds: 4),
-                                          ),
+                                      try {
+                                        final bytes = await ReportCardGenerator.generateReportCardPdfBytes(
+                                          examResult: examRes,
+                                          rankInClass: rank,
                                         );
+                                        final fileName = ReportCardGenerator.getReportCardFileName(examRes);
+
+                                        if (context.mounted) {
+                                          final File? savedFile = await PdfPreviewDialog.show(
+                                            context: context,
+                                            title: 'Report Card Preview — ${examRes.studentName}',
+                                            pdfBytes: bytes,
+                                            defaultFileName: fileName,
+                                            defaultSubDirectory: 'ReportCards',
+                                          );
+
+                                          if (savedFile != null && context.mounted) {
+                                            ScaffoldMessenger.of(context).showSnackBar(
+                                              SnackBar(
+                                                content: Text('Report Card PDF saved to ${savedFile.path}'),
+                                                backgroundColor: AppTheme.primaryPurple,
+                                                duration: const Duration(seconds: 4),
+                                              ),
+                                            );
+                                          }
+                                        }
+                                      } catch (e) {
+                                        if (context.mounted) {
+                                          ScaffoldMessenger.of(context).showSnackBar(
+                                            SnackBar(
+                                              content: Text('Failed to generate preview: $e'),
+                                              backgroundColor: AppTheme.error,
+                                            ),
+                                          );
+                                        }
                                       }
                                     },
-                                    icon: const Icon(Icons.picture_as_pdf_rounded, size: 18),
-                                    label: Text('Download / Print PDF Report Card', style: GoogleFonts.poppins(fontSize: 12, fontWeight: FontWeight.bold)),
+                                    icon: const Icon(Icons.remove_red_eye_rounded, size: 18),
+                                    label: Text('Preview / Download Report Card', style: GoogleFonts.poppins(fontSize: 12, fontWeight: FontWeight.bold)),
                                     style: ElevatedButton.styleFrom(
                                       backgroundColor: AppTheme.primaryPurple,
                                       foregroundColor: Colors.white,

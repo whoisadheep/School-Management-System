@@ -44,9 +44,14 @@ class UpdateService {
       final dio = Dio();
       dio.options.connectTimeout = const Duration(seconds: 10);
       dio.options.receiveTimeout = const Duration(seconds: 10);
+      dio.options.headers = {
+        'Cache-Control': 'no-cache, no-store, must-revalidate',
+        'Pragma': 'no-cache',
+      };
       
-      // Fetch the static version.json file
-      final response = await dio.get(_updateJsonUrl);
+      // Fetch the static version.json file with cache buster
+      final timestamp = DateTime.now().millisecondsSinceEpoch;
+      final response = await dio.get('$_updateJsonUrl?_t=$timestamp');
       
       if (response.statusCode != 200 || response.data == null) {
         return null;

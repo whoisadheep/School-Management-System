@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:typed_data';
 import 'package:intl/intl.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
@@ -8,8 +9,8 @@ import '../models/models.dart';
 
 /// Printable PDF Report Card Generator
 class ReportCardGenerator {
-  /// Generate a clean A4 PDF Student Progress Report Card
-  static Future<File> generateReportCard({
+  /// Generate a clean A4 PDF Student Progress Report Card as bytes (for preview, print, or saving)
+  static Future<Uint8List> generateReportCardPdfBytes({
     required ExamResultData examResult,
     int? rankInClass,
     String schoolName = 'Eduvia',
@@ -231,7 +232,32 @@ class ReportCardGenerator {
       ),
     );
 
-    // Save to App Documents directory
+    return await pdf.save();
+  }
+
+  /// Generate safe file name for the report card
+  static String getReportCardFileName(ExamResultData examResult) {
+    final safeStudentName = examResult.studentName.replaceAll(RegExp(r'[^a-zA-Z0-9]'), '_');
+    final safeExamName = examResult.examName.replaceAll(RegExp(r'[^a-zA-Z0-9]'), '_');
+    return 'ReportCard_${safeStudentName}_$safeExamName.pdf';
+  }
+
+  /// Generate a clean A4 PDF Student Progress Report Card and save to file
+  static Future<File> generateReportCard({
+    required ExamResultData examResult,
+    int? rankInClass,
+    String schoolName = 'Eduvia',
+    String schoolAddress = '123 Education Boulevard, Academic District',
+    String schoolContact = 'Phone: +1 800 555-0199 | Email: exams@school.edu',
+  }) async {
+    final bytes = await generateReportCardPdfBytes(
+      examResult: examResult,
+      rankInClass: rankInClass,
+      schoolName: schoolName,
+      schoolAddress: schoolAddress,
+      schoolContact: schoolContact,
+    );
+
     final Directory appDocDir = await getApplicationDocumentsDirectory();
     final String exportDir = p.join(appDocDir.path, 'Eduvia', 'ReportCards');
     final dir = Directory(exportDir);
@@ -239,13 +265,11 @@ class ReportCardGenerator {
       await dir.create(recursive: true);
     }
 
-    final safeStudentName = examResult.studentName.replaceAll(RegExp(r'[^a-zA-Z0-9]'), '_');
-    final safeExamName = examResult.examName.replaceAll(RegExp(r'[^a-zA-Z0-9]'), '_');
-    final String fileName = 'ReportCard_${safeStudentName}_$safeExamName.pdf';
+    final String fileName = getReportCardFileName(examResult);
     final String fullPath = p.join(exportDir, fileName);
 
     final File file = File(fullPath);
-    await file.writeAsBytes(await pdf.save());
+    await file.writeAsBytes(bytes);
     return file;
   }
 

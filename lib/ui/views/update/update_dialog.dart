@@ -2,6 +2,7 @@ import 'dart:io';
 import 'package:crypto/crypto.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
+import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:school_management_system/core/theme/app_theme.dart';
 import 'package:school_management_system/services/app_logger.dart';
@@ -29,13 +30,16 @@ class _UpdateDialogState extends State<UpdateDialog> {
 
     try {
       final tempDir = await getTemporaryDirectory();
-      final installerPath = '${tempDir.path}\\sms_updater_${widget.updateInfo.latestVersion}.exe';
+      final installerPath = p.join(tempDir.path, 'sms_updater_${widget.updateInfo.latestVersion}.exe');
       
       final dio = Dio();
       
       // Get content length first
-      final headResponse = await dio.head(widget.updateInfo.downloadUrl);
-      final expectedSize = int.parse(headResponse.headers.value(HttpHeaders.contentLengthHeader) ?? '-1');
+      int expectedSize = -1;
+      try {
+        final headResponse = await dio.head(widget.updateInfo.downloadUrl);
+        expectedSize = int.tryParse(headResponse.headers.value(HttpHeaders.contentLengthHeader) ?? '') ?? -1;
+      } catch (_) {}
 
       await dio.download(
         widget.updateInfo.downloadUrl,
