@@ -73,8 +73,7 @@ class AdmissionState {
         admissionDate = admissionDate ?? DateTime.now();
 
   static String _generateDefaultAdmissionNumber() {
-    final year = DateTime.now().year;
-    return '$year-0001';
+    return '0001';
   }
 
   String get fullName {

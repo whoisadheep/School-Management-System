@@ -2537,49 +2537,42 @@ class DatabaseService {
     return 'RCT-$rctYear-$seqStr';
   }
 
-  /// Generate next serial admission number in format YYYY-0001, YYYY-0002, etc.
+  /// Generate next serial admission number: 0001, 0002, 0003, etc.
   Future<String> getNextAdmissionNumber([String? academicYear]) async {
     final db = await _db;
-    
-    // Determine the 4-digit prefix year from academicYear (e.g. "2026-2027" -> "2026") or current year
-    String yearStr = DateTime.now().year.toString();
-    if (academicYear != null && academicYear.isNotEmpty) {
-      final parts = academicYear.split('-');
-      if (parts.isNotEmpty && parts[0].trim().length == 4) {
-        yearStr = parts[0].trim();
-      }
-    }
 
-    // Query all admission numbers starting with this year prefix
+    // Find the highest pure-numeric admission number across ALL students
     final results = await db.rawQuery(
-      "SELECT admission_number FROM students WHERE admission_number LIKE ? OR admission_number LIKE ? OR admission_number LIKE ?",
-      ['$yearStr-%', 'ADM-$yearStr-%', '$yearStr/%'],
+      "SELECT admission_number FROM students WHERE admission_number IS NOT NULL AND admission_number != ''",
     );
 
     int maxSeq = 0;
     for (final row in results) {
-      final adm = row['admission_number'] as String?;
-      if (adm == null || adm.trim().isEmpty) continue;
-      
-      final clean = adm.replaceAll('ADM-', '').replaceAll('/', '-').trim();
-      final parts = clean.split('-');
-      if (parts.length >= 2) {
-        final seq = int.tryParse(parts.last);
-        // Only accept reasonable incremental sequence numbers (< 5000) so random test numbers (like 8645) don't hijack sequence
-        if (seq != null && seq > maxSeq && seq < 5000) {
-          maxSeq = seq;
+      final adm = (row['admission_number'] as String?)?.trim();
+      if (adm == null || adm.isEmpty) continue;
+
+      // Try parsing the whole thing as a number (handles "0001", "0042", etc.)
+      int? seq = int.tryParse(adm);
+
+      // Also handle legacy formats like "2026-0003" or "ADM-2026-0005" — grab the last numeric segment
+      if (seq == null) {
+        final parts = adm.replaceAll(RegExp(r'[^0-9]+'), '-').split('-');
+        for (final p in parts.reversed) {
+          final n = int.tryParse(p);
+          if (n != null && n > 0 && n < 50000) {
+            seq = n;
+            break;
+          }
         }
+      }
+
+      if (seq != null && seq > maxSeq) {
+        maxSeq = seq;
       }
     }
 
-    // Fallback: If existing records were arbitrary high random numbers (e.g. 8645), use total students count
-    if (maxSeq == 0 && results.isNotEmpty) {
-      maxSeq = results.length;
-    }
-
     final nextSeq = maxSeq + 1;
-    final seqStr = nextSeq.toString().padLeft(4, '0');
-    return '$yearStr-$seqStr';
+    return nextSeq.toString().padLeft(4, '0');
   }
 
   // ============================================================================

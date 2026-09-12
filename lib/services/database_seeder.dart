@@ -151,7 +151,7 @@ class DatabaseSeeder {
       final String ln = data['last']!;
       final String fullName = '$fn $ln';
       final String seqStr = count.toString().padLeft(4, '0');
-      final String admNo = '2026-$seqStr';
+      final String admNo = seqStr;
       final String rollNo = '$count';
       count++;
 
