@@ -2538,40 +2538,12 @@ class DatabaseService {
   }
 
   /// Generate next serial admission number: 0001, 0002, 0003, etc.
+  /// Simply counts total students and returns count + 1.
   Future<String> getNextAdmissionNumber([String? academicYear]) async {
     final db = await _db;
-
-    // Find the highest pure-numeric admission number across ALL students
-    final results = await db.rawQuery(
-      "SELECT admission_number FROM students WHERE admission_number IS NOT NULL AND admission_number != ''",
-    );
-
-    int maxSeq = 0;
-    for (final row in results) {
-      final adm = (row['admission_number'] as String?)?.trim();
-      if (adm == null || adm.isEmpty) continue;
-
-      // Try parsing the whole thing as a number (handles "0001", "0042", etc.)
-      int? seq = int.tryParse(adm);
-
-      // Also handle legacy formats like "2026-0003" or "ADM-2026-0005" — grab the last numeric segment
-      if (seq == null) {
-        final parts = adm.replaceAll(RegExp(r'[^0-9]+'), '-').split('-');
-        for (final p in parts.reversed) {
-          final n = int.tryParse(p);
-          if (n != null && n > 0 && n < 50000) {
-            seq = n;
-            break;
-          }
-        }
-      }
-
-      if (seq != null && seq > maxSeq) {
-        maxSeq = seq;
-      }
-    }
-
-    final nextSeq = maxSeq + 1;
+    final result = await db.rawQuery('SELECT COUNT(*) as total FROM students');
+    final total = (result.first['total'] as int? ?? 0);
+    final nextSeq = total + 1;
     return nextSeq.toString().padLeft(4, '0');
   }
 

@@ -527,23 +527,11 @@ class _AdmissionViewState extends ConsumerState<AdmissionView> {
               ),
               const SizedBox(width: 16),
               Expanded(
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  children: [
-                    Expanded(
-                      child: _buildTextField(
-                        label: 'Admission Number *',
-                        focusNode: _fnAdmissionNo,
-                        controller: _ctrlAdmissionNo,
-                        onChanged: notifier.updateAdmissionNumber,
-                      ),
-                    ),
-                    IconButton(
-                      onPressed: () => notifier.regenerateAdmissionNumber(),
-                      icon: const Icon(Icons.autorenew_rounded, color: Color(0xFF60A5FA)),
-                      tooltip: 'Auto-generate Admission No.',
-                    ),
-                  ],
+                child: _buildTextField(
+                  label: 'Admission Number *',
+                  focusNode: _fnAdmissionNo,
+                  controller: _ctrlAdmissionNo,
+                  onChanged: notifier.updateAdmissionNumber,
                 ),
               ),
             ],
