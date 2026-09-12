@@ -26,8 +26,9 @@ class ImportService {
 
   ImportService({required this.dbService});
 
-  /// Reads a file and returns a list of rows, where each row is a map of Column Header -> Value
-  Future<List<Map<String, dynamic>>> _parseFile(PlatformFile file) async {
+  /// Reads a file and returns a list of rows, where each row is a map of Column Header -> Value.
+  /// Public so the AI mapping flow can call it.
+  Future<List<Map<String, dynamic>>> parseFile(PlatformFile file) async {
     final extension = file.extension?.toLowerCase();
     List<Map<String, dynamic>> parsedData = [];
 
@@ -84,8 +85,22 @@ class ImportService {
     return parsedData;
   }
 
+  /// Extract just the column headers from a file.
+  Future<List<String>> extractHeaders(PlatformFile file) async {
+    final rows = await parseFile(file);
+    if (rows.isEmpty) return [];
+    return rows.first.keys.toList();
+  }
+
+  /// Extract the first data row as sample values (for the mapping UI).
+  Future<List<String>> extractSampleRow(PlatformFile file) async {
+    final rows = await parseFile(file);
+    if (rows.isEmpty) return [];
+    return rows.first.values.map((v) => v?.toString() ?? '').toList();
+  }
+
   Future<ImportResult> importStudents(PlatformFile file) async {
-    final rows = await _parseFile(file);
+    final rows = await parseFile(file);
     int success = 0;
     int failure = 0;
     List<String> errors = [];
@@ -137,8 +152,114 @@ class ImportService {
     return ImportResult(successCount: success, failureCount: failure, errors: errors);
   }
 
+  /// Import students using AI-confirmed column mappings.
+  /// [mapping] is a map of eduviaFieldKey -> sourceColumnHeader.
+  /// If admission_number key is absent, sequential IDs are auto-generated.
+  Future<ImportResult> importStudentsWithMapping({
+    required PlatformFile file,
+    required Map<String, String> mapping,
+  }) async {
+    final rows = await parseFile(file);
+    int success = 0;
+    int failure = 0;
+    List<String> errors = [];
+
+    // Get current student count for auto-generating admission numbers
+    int admissionSeq = 0;
+    try {
+      final nextAdm = await dbService.getNextAdmissionNumber();
+      admissionSeq = int.tryParse(nextAdm) ?? 1;
+      admissionSeq--; // Will be incremented before first use
+    } catch (_) {}
+
+    final bool autoAdmission = !mapping.containsKey('admission_number');
+
+    for (var i = 0; i < rows.length; i++) {
+      final row = rows[i];
+      try {
+        String getValue(String eduviaKey) {
+          final sourceCol = mapping[eduviaKey];
+          if (sourceCol == null) return '';
+          return row[sourceCol]?.toString().trim() ?? '';
+        }
+
+        // Handle full_name -> first + last split
+        String firstName = getValue('first_name');
+        String lastName = getValue('last_name');
+        if (firstName.isEmpty && mapping.containsKey('full_name')) {
+          final fullName = getValue('full_name');
+          final parts = fullName.split(RegExp(r'\s+'));
+          if (parts.isNotEmpty) firstName = parts.first;
+          if (parts.length > 1) lastName = parts.sublist(1).join(' ');
+        }
+
+        final currentClass = getValue('class');
+
+        if (firstName.isEmpty) {
+          errors.add("Row ${i + 2}: Missing required field: First Name");
+          failure++;
+          continue;
+        }
+        if (currentClass.isEmpty) {
+          errors.add("Row ${i + 2}: Missing required field: Class / Grade");
+          failure++;
+          continue;
+        }
+
+        // Admission number: use mapped value or auto-generate
+        String admissionNumber;
+        if (autoAdmission) {
+          admissionSeq++;
+          admissionNumber = admissionSeq.toString().padLeft(4, '0');
+        } else {
+          admissionNumber = getValue('admission_number');
+          if (admissionNumber.isEmpty) {
+            admissionSeq++;
+            admissionNumber = admissionSeq.toString().padLeft(4, '0');
+          }
+        }
+
+        final student = Student.create(
+          name: '$firstName $lastName'.trim(),
+          admissionNumber: admissionNumber,
+          rollNumber: getValue('roll_number').isNotEmpty ? getValue('roll_number') : null,
+          firstName: firstName,
+          lastName: lastName,
+          dob: getValue('dob').isNotEmpty ? getValue('dob') : null,
+          gender: getValue('gender').isNotEmpty ? getValue('gender').toLowerCase() : 'other',
+          bloodGroup: getValue('blood_group').isNotEmpty ? getValue('blood_group') : null,
+          religion: getValue('religion').isNotEmpty ? getValue('religion') : null,
+          caste: getValue('caste').isNotEmpty ? getValue('caste') : null,
+          aadhaarNumber: getValue('aadhaar').isNotEmpty ? getValue('aadhaar') : null,
+          gradeLevel: currentClass,
+          section: getValue('section').isNotEmpty ? getValue('section') : 'A',
+          admissionDate: getValue('admission_date').isNotEmpty
+              ? getValue('admission_date')
+              : DateTime.now().toIso8601String().substring(0, 10),
+          fatherName: getValue('father_name'),
+          fatherPhone: getValue('father_phone'),
+          motherName: getValue('mother_name'),
+          motherPhone: getValue('mother_phone'),
+          guardianPhone: getValue('guardian_phone').isNotEmpty ? getValue('guardian_phone') : getValue('father_phone'),
+          residentialAddress: getValue('residential_address'),
+          permanentAddress: getValue('permanent_address').isNotEmpty
+              ? getValue('permanent_address')
+              : getValue('residential_address'),
+        );
+
+        await dbService.insertStudent(student);
+        success++;
+      } catch (e) {
+        errors.add("Row ${i + 2}: $e");
+        failure++;
+      }
+    }
+
+    return ImportResult(successCount: success, failureCount: failure, errors: errors);
+  }
+
   Future<ImportResult> importStaff(PlatformFile file) async {
-    final rows = await _parseFile(file);
+    final rows = await parseFile(file);
     int success = 0;
     int failure = 0;
     List<String> errors = [];

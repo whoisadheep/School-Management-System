@@ -1,7 +1,7 @@
 [Setup]
 AppId=School Management System
 AppName=Eduvia
-AppVersion=1.0.13
+AppVersion=1.0.14
 DefaultDirName={pf}\Eduvia
 DefaultGroupName=Eduvia
 OutputDir=build\windows\installer

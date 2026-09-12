@@ -1,7 +1,7 @@
 {
-  "latest_version": "1.0.13",
-  "download_url": "https://github.com/whoisadheep/School-Management-System/releases/download/v1.0.13/Eduvia-Installer.exe",
+  "latest_version": "1.0.14",
+  "download_url": "https://github.com/whoisadheep/School-Management-System/releases/download/v1.0.14/Eduvia-Installer.exe",
   "sha256": "",
-  "changelog": "Sequential admission numbers (0001, 0002), exam result preview dialog before printing/downloading, updater CDN cache fix, and stability improvements.",
+  "changelog": "Smart AI Column Mapper for CSV/Excel student imports with multi-provider fallback (OpenRouter -> Groq -> Gemini -> Local offline), sequential admission numbering, and report card preview.",
   "mandatory_update": false
 }

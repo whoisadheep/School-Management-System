@@ -2,10 +2,13 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:file_picker/file_picker.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:school_management_system/core/theme/app_theme.dart';
 import 'package:school_management_system/providers/services_provider.dart';
 import 'package:school_management_system/services/import_service.dart';
+import 'package:school_management_system/services/column_mapping_service.dart';
+import 'package:school_management_system/ui/widgets/ai_column_mapping_dialog.dart';
 
 class DataImportView extends ConsumerStatefulWidget {
   const DataImportView({super.key});
@@ -16,6 +19,7 @@ class DataImportView extends ConsumerStatefulWidget {
 
 class _DataImportViewState extends ConsumerState<DataImportView> {
   bool _isImporting = false;
+  bool _isAnalyzing = false;
   String _importResult = '';
 
   Future<void> _downloadTemplate(String type) async {
@@ -55,7 +59,103 @@ class _DataImportViewState extends ConsumerState<DataImportView> {
     }
   }
 
-  Future<void> _importData(String type) async {
+  /// Student import with AI Smart Column Mapper.
+  Future<void> _importStudentsWithAI() async {
+    try {
+      FilePickerResult? result = await FilePicker.platform.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: ['csv', 'xlsx', 'xls'],
+      );
+
+      if (result == null || result.files.isEmpty) return;
+
+      final file = result.files.first;
+      final dbService = ref.read(databaseServiceProvider);
+      final importService = ImportService(dbService: dbService);
+
+      // Step 1: Extract headers
+      setState(() {
+        _isAnalyzing = true;
+        _importResult = '';
+      });
+
+      final headers = await importService.extractHeaders(file);
+      final sampleRow = await importService.extractSampleRow(file);
+      final rows = await importService.parseFile(file);
+      final totalRows = rows.length;
+
+      if (headers.isEmpty) {
+        setState(() {
+          _isAnalyzing = false;
+          _importResult = 'Error: Could not read headers from the file. Is it empty?';
+        });
+        return;
+      }
+
+      // Step 2: Ask AI to map columns (OpenRouter -> Groq -> Gemini -> Local)
+      final mappingService = ColumnMappingService(dbService);
+      final mappingResponse = await mappingService.mapColumnsWithAI(headers);
+
+      setState(() { _isAnalyzing = false; });
+
+      if (!mounted) return;
+
+      // Step 3: Show review dialog
+      final confirmedMappings = await AIColumnMappingDialog.show(
+        context: context,
+        mappings: mappingResponse.mappings,
+        sampleRow: sampleRow,
+        totalRows: totalRows,
+        providerName: mappingResponse.providerName,
+        model: mappingResponse.model,
+      );
+
+      if (confirmedMappings == null) {
+        // User cancelled
+        return;
+      }
+
+      // Step 4: Build the eduviaKey -> sourceColumn mapping
+      final Map<String, String> finalMapping = {};
+      for (final m in confirmedMappings) {
+        if (m.eduviaFieldKey != 'skip') {
+          finalMapping[m.eduviaFieldKey] = m.sourceHeader;
+        }
+      }
+
+      // Step 5: Run import
+      setState(() {
+        _isImporting = true;
+        _importResult = 'Importing $totalRows students...';
+      });
+
+      final res = await importService.importStudentsWithMapping(
+        file: file,
+        mapping: finalMapping,
+      );
+
+      ref.invalidate(studentsListProvider);
+
+      setState(() {
+        _importResult = '✅ Import Complete!\nSuccess: ${res.successCount}\nFailed: ${res.failureCount}';
+        if (res.errors.isNotEmpty) {
+          _importResult += '\n\nErrors (Showing top 5):\n${res.errors.take(5).join('\n')}';
+        }
+      });
+    } catch (e) {
+      setState(() {
+        _importResult = 'Error during import: $e';
+      });
+    } finally {
+      setState(() {
+        _isImporting = false;
+        _isAnalyzing = false;
+      });
+    }
+  }
+
+  /// Legacy staff import (no AI mapping needed — simpler schema).
+  Future<void> _importStaff() async {
     try {
       FilePickerResult? result = await FilePicker.platform.pickFiles(
         type: FileType.custom,
@@ -71,23 +171,15 @@ class _DataImportViewState extends ConsumerState<DataImportView> {
 
       final file = result.files.first;
       final importService = ImportService(dbService: ref.read(databaseServiceProvider));
-      
-      ImportResult res;
-      if (type == 'students') {
-        res = await importService.importStudents(file);
-        ref.invalidate(studentsListProvider);
-      } else {
-        res = await importService.importStaff(file);
-        ref.invalidate(staffListProvider);
-      }
+      final res = await importService.importStaff(file);
+      ref.invalidate(staffListProvider);
 
       setState(() {
-        _importResult = 'Import Complete!\nSuccess: ${res.successCount}\nFailed: ${res.failureCount}';
+        _importResult = '✅ Import Complete!\nSuccess: ${res.successCount}\nFailed: ${res.failureCount}';
         if (res.errors.isNotEmpty) {
-          _importResult += '\n\nErrors (Showing top 5):\n' + res.errors.take(5).join('\n');
+          _importResult += '\n\nErrors (Showing top 5):\n${res.errors.take(5).join('\n')}';
         }
       });
-      
     } catch (e) {
       setState(() {
         _importResult = 'Error during import: $e';
@@ -99,7 +191,7 @@ class _DataImportViewState extends ConsumerState<DataImportView> {
     }
   }
 
-  Widget _buildImportCard(String title, String type, IconData icon) {
+  Widget _buildStudentImportCard() {
     return Card(
       elevation: 2,
       margin: const EdgeInsets.only(bottom: 16),
@@ -111,30 +203,137 @@ class _DataImportViewState extends ConsumerState<DataImportView> {
           children: [
             Row(
               children: [
-                Icon(icon, size: 32, color: AppTheme.primaryPurple),
+                const Icon(Icons.school, size: 32, color: AppTheme.primaryPurple),
                 const SizedBox(width: 16),
-                Text(title, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppTheme.textPrimary)),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('Import Students', style: GoogleFonts.poppins(fontSize: 18, fontWeight: FontWeight.bold, color: AppTheme.textPrimary)),
+                      const SizedBox(height: 4),
+                      Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: AppTheme.primaryPurple.withValues(alpha: 0.1),
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const Icon(Icons.auto_fix_high_rounded, size: 12, color: AppTheme.primaryPurple),
+                                const SizedBox(width: 4),
+                                Text(
+                                  'AI Smart Mapper',
+                                  style: GoogleFonts.poppins(fontSize: 10, fontWeight: FontWeight.w600, color: AppTheme.primaryPurple),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
               ],
             ),
             const SizedBox(height: 16),
-            const Text(
-              '1. Download the template CSV.\n2. Fill in your data matching the columns.\n3. Upload the filled file (.csv or .xlsx).',
-              style: TextStyle(color: AppTheme.textSecondary),
+            Text(
+              'Upload any CSV or Excel file — our AI will automatically detect and map your columns to Eduvia fields.\n'
+              'No need to match exact column names! Review the mapping before importing.',
+              style: GoogleFonts.poppins(color: AppTheme.textSecondary, fontSize: 13, height: 1.5),
+            ),
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: const Color(0xFFF0FDF4),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: const Color(0xFFBBF7D0)),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.shield_rounded, size: 16, color: Color(0xFF16A34A)),
+                  const SizedBox(width: 8),
+                  Flexible(
+                    child: Text(
+                      '🔒 Only column headers are sent to AI — zero student data leaves your device.',
+                      style: GoogleFonts.poppins(fontSize: 11, color: const Color(0xFF166534), fontWeight: FontWeight.w500),
+                    ),
+                  ),
+                ],
+              ),
             ),
             const SizedBox(height: 16),
             Row(
               children: [
                 OutlinedButton.icon(
-                  onPressed: _isImporting ? null : () => _downloadTemplate(type),
-                  icon: const Icon(Icons.download),
-                  label: const Text('Download Template'),
+                  onPressed: (_isImporting || _isAnalyzing) ? null : () => _downloadTemplate('students'),
+                  icon: const Icon(Icons.download, size: 16),
+                  label: Text('Download Template', style: GoogleFonts.poppins(fontWeight: FontWeight.w500, fontSize: 12)),
                   style: OutlinedButton.styleFrom(foregroundColor: AppTheme.primaryPurple),
                 ),
                 const SizedBox(width: 16),
                 ElevatedButton.icon(
-                  onPressed: _isImporting ? null : () => _importData(type),
-                  icon: const Icon(Icons.upload_file),
-                  label: const Text('Import Data'),
+                  onPressed: (_isImporting || _isAnalyzing) ? null : _importStudentsWithAI,
+                  icon: _isAnalyzing
+                      ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                      : const Icon(Icons.auto_fix_high_rounded, size: 16),
+                  label: Text(
+                    _isAnalyzing ? 'AI Analyzing...' : 'Import with AI Mapper',
+                    style: GoogleFonts.poppins(fontWeight: FontWeight.w600, fontSize: 12),
+                  ),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppTheme.primaryPurple,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildStaffImportCard() {
+    return Card(
+      elevation: 2,
+      margin: const EdgeInsets.only(bottom: 16),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Icon(Icons.people, size: 32, color: AppTheme.primaryPurple),
+                const SizedBox(width: 16),
+                Text('Import Staff', style: GoogleFonts.poppins(fontSize: 18, fontWeight: FontWeight.bold, color: AppTheme.textPrimary)),
+              ],
+            ),
+            const SizedBox(height: 16),
+            Text(
+              '1. Download the template CSV.\n2. Fill in your data matching the columns.\n3. Upload the filled file (.csv or .xlsx).',
+              style: GoogleFonts.poppins(color: AppTheme.textSecondary, fontSize: 13),
+            ),
+            const SizedBox(height: 16),
+            Row(
+              children: [
+                OutlinedButton.icon(
+                  onPressed: _isImporting ? null : () => _downloadTemplate('staff'),
+                  icon: const Icon(Icons.download, size: 16),
+                  label: Text('Download Template', style: GoogleFonts.poppins(fontWeight: FontWeight.w500, fontSize: 12)),
+                  style: OutlinedButton.styleFrom(foregroundColor: AppTheme.primaryPurple),
+                ),
+                const SizedBox(width: 16),
+                ElevatedButton.icon(
+                  onPressed: _isImporting ? null : _importStaff,
+                  icon: const Icon(Icons.upload_file, size: 16),
+                  label: Text('Import Data', style: GoogleFonts.poppins(fontWeight: FontWeight.w600, fontSize: 12)),
                   style: ElevatedButton.styleFrom(backgroundColor: AppTheme.primaryPurple, foregroundColor: Colors.white),
                 ),
               ],
@@ -150,23 +349,23 @@ class _DataImportViewState extends ConsumerState<DataImportView> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text(
+        Text(
           'Data Import Center',
-          style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: AppTheme.textPrimary),
+          style: GoogleFonts.poppins(fontSize: 24, fontWeight: FontWeight.bold, color: AppTheme.textPrimary),
         ),
         const SizedBox(height: 8),
-        const Text(
-          'Easily migrate data from other software by downloading templates and uploading the filled spreadsheets.',
-          style: TextStyle(color: AppTheme.textSecondary, fontSize: 16),
+        Text(
+          'Easily migrate data from other software. Upload any spreadsheet — AI will map your columns automatically.',
+          style: GoogleFonts.poppins(color: AppTheme.textSecondary, fontSize: 15),
         ),
         const SizedBox(height: 24),
-        _buildImportCard('Import Students', 'students', Icons.school),
-        _buildImportCard('Import Staff', 'staff', Icons.people),
+        _buildStudentImportCard(),
+        _buildStaffImportCard(),
         
         if (_isImporting || _importResult.isNotEmpty) ...[
           const SizedBox(height: 24),
           Card(
-            color: _isImporting ? Colors.blue.shade50 : (_importResult.contains('Error') || _importResult.contains('Failed: ') && !_importResult.contains('Failed: 0') ? Colors.orange.shade50 : Colors.green.shade50),
+            color: _isImporting ? Colors.blue.shade50 : (_importResult.contains('Error') || (_importResult.contains('Failed: ') && !_importResult.contains('Failed: 0')) ? Colors.orange.shade50 : Colors.green.shade50),
             child: Padding(
               padding: const EdgeInsets.all(16.0),
               child: Column(
@@ -178,12 +377,12 @@ class _DataImportViewState extends ConsumerState<DataImportView> {
                       if (_isImporting) const SizedBox(width: 8),
                       Text(
                         _isImporting ? 'Processing...' : 'Result',
-                        style: const TextStyle(fontWeight: FontWeight.bold),
+                        style: GoogleFonts.poppins(fontWeight: FontWeight.bold),
                       ),
                     ],
                   ),
                   const SizedBox(height: 8),
-                  Text(_importResult, style: const TextStyle(fontSize: 14)),
+                  Text(_importResult, style: GoogleFonts.poppins(fontSize: 14)),
                 ],
               ),
             ),

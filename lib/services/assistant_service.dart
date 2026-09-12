@@ -1,19 +1,28 @@
-import 'dart:convert';
 import 'package:dio/dio.dart';
-import 'package:flutter_dotenv/flutter_dotenv.dart';
+import 'ai_provider_service.dart';
 import 'database_service.dart';
 
 class AssistantService {
   final DatabaseService _dbService;
+  late final AiProviderService _aiProvider;
   final Dio _http = Dio(BaseOptions(
     connectTimeout: const Duration(seconds: 12),
     receiveTimeout: const Duration(seconds: 25),
   ));
 
-  static const String defaultGeminiKey = 'YOUR_API_KEY';
+  static String get defaultGeminiKey => AiProviderService.defaultGeminiKey;
+  static String get defaultOpenRouterKey => AiProviderService.defaultOpenRouterKey;
+  static String get defaultGroqKey => AiProviderService.defaultGroqKey;
 
-  AssistantService(this._dbService);
+  AssistantService(this._dbService) {
+    _aiProvider = AiProviderService(_dbService);
+  }
 
+  /// Handles user questions using the strict fallback cascade:
+  /// 1. OpenRouter (Llama 3.3 70B)
+  /// 2. Groq (Qwen 3.8 27B)
+  /// 3. Google Gemini (Gemini Flash)
+  /// 4. Built-in Local SQLite Offline Engine
   Future<String> handleCommand(String command) async {
     final normalized = command.trim().toLowerCase();
 
@@ -39,73 +48,140 @@ class AssistantService {
           'How can I help you today?';
     }
 
-    // 1. Try Direct Google Gemini API first
+    // 1. Strict Multi-Provider Cascade: OpenRouter -> Groq -> Gemini
     try {
-      final geminiKey = await getActiveApiKey();
-      if (geminiKey.isNotEmpty) {
-        final geminiResponse = await _queryGeminiDirect(command, geminiKey);
-        if (geminiResponse != null && geminiResponse.trim().isNotEmpty) {
-          return geminiResponse.trim();
-        }
+      final schema = await _getSchema();
+      final aiResult = await _aiProvider.executeSqlAssistantLoop(
+        userQuestion: command,
+        schema: schema,
+        executeSql: _executeSql,
+      );
+      if (aiResult != null && aiResult.text.trim().isNotEmpty) {
+        return aiResult.text.trim();
       }
     } catch (_) {
-      // If Gemini is unreachable or hits quota, seamlessly fallback to offline engine
+      // If remote providers fail, fall through to offline engine
     }
 
-    // 2. Fallback to built-in offline smart query engine
+    // 2. Stage 4: Built-in local offline smart query engine
     return await _handleOfflineQuery(command);
   }
 
-  Future<String> getActiveApiKey() async {
-    try {
-      final db = await _dbService.rawDb;
-      final settingRows = await db.rawQuery(
-        'SELECT setting_value FROM app_settings WHERE setting_key = ? LIMIT 1',
-        ['gemini_api_key'],
-      );
-      if (settingRows.isNotEmpty && settingRows.first['setting_value'] != null) {
-        final val = settingRows.first['setting_value'].toString().trim();
-        if (val.isNotEmpty) return val;
-      }
-    } catch (_) {}
+  Future<String> getActiveApiKey() => _aiProvider.getGeminiKey();
+  Future<String> getOpenRouterKey() => _aiProvider.getOpenRouterKey();
+  Future<String> getGroqKey() => _aiProvider.getGroqKey();
 
-    final envKey = dotenv.env['GEMINI_API_KEY']?.trim() ??
-        dotenv.env['ASSISTANT_INSTALLATION_KEY']?.trim() ??
-        '';
-    if (envKey.isNotEmpty) return envKey;
-
-    return defaultGeminiKey;
-  }
-
-  Future<bool> setApiKey(String key) async {
-    try {
-      final db = await _dbService.rawDb;
-      await db.rawInsert(
-        'INSERT OR REPLACE INTO app_settings (setting_key, setting_value, updated_at) VALUES (?, ?, ?)',
-        ['gemini_api_key', key.trim(), DateTime.now().toIso8601String()],
-      );
-      return true;
-    } catch (_) {
-      return false;
-    }
-  }
+  Future<bool> setApiKey(String key) => _aiProvider.setProviderKey('gemini_api_key', key);
+  Future<bool> setOpenRouterKey(String key) => _aiProvider.setProviderKey('openrouter_api_key', key);
+  Future<bool> setGroqKey(String key) => _aiProvider.setProviderKey('groq_api_key', key);
 
   Future<Map<String, dynamic>> testConnection([String? testKey]) async {
-    final key = (testKey != null && testKey.trim().isNotEmpty) ? testKey.trim() : await getActiveApiKey();
-    if (key.isEmpty) {
-      return {'success': false, 'error': 'API key is empty.'};
+    // If a specific test key was passed in (e.g. from the settings dialog)
+    if (testKey != null && testKey.trim().isNotEmpty) {
+      final key = testKey.trim();
+      if (key.startsWith('sk-or-')) {
+        return _testOpenRouterDirect(key);
+      } else if (key.startsWith('gsk_')) {
+        return _testGroqDirect(key);
+      } else {
+        return _testGeminiDirect(key);
+      }
     }
 
+    // Default: test through the multi-provider cascade
+    final stopwatch = Stopwatch()..start();
+    final result = await _aiProvider.generateText(
+      prompt: 'Hello! Respond with: Connected to Eduvia AI.',
+      maxTokens: 50,
+    );
+    stopwatch.stop();
+
+    if (result != null) {
+      return {
+        'success': true,
+        'provider': result.provider,
+        'model': '${result.provider} (${result.model})',
+        'latencyMs': result.latencyMs,
+      };
+    }
+
+    return {'success': false, 'error': 'All AI providers unreachable. Operating in offline mode.'};
+  }
+
+  Future<Map<String, dynamic>> _testOpenRouterDirect(String apiKey) async {
+    try {
+      final sw = Stopwatch()..start();
+      final res = await _http.post(
+        'https://openrouter.ai/api/v1/chat/completions',
+        data: {
+          'model': 'meta-llama/llama-3.3-70b-instruct',
+          'messages': [{'role': 'user', 'content': 'hi'}],
+          'max_tokens': 10,
+        },
+        options: Options(headers: {
+          'Authorization': 'Bearer $apiKey',
+          'Content-Type': 'application/json',
+          'HTTP-Referer': 'https://eduvia.school',
+          'X-Title': 'Eduvia School Management System',
+        }),
+      );
+      sw.stop();
+      if (res.statusCode == 200) {
+        return {
+          'success': true,
+          'provider': 'OpenRouter',
+          'model': 'Llama 3.3 70B',
+          'latencyMs': sw.elapsedMilliseconds,
+        };
+      }
+    } catch (e) {
+      return {'success': false, 'error': 'OpenRouter test failed: $e'};
+    }
+    return {'success': false, 'error': 'Unable to reach OpenRouter.'};
+  }
+
+  Future<Map<String, dynamic>> _testGroqDirect(String apiKey) async {
+    try {
+      final sw = Stopwatch()..start();
+      final res = await _http.post(
+        'https://api.groq.com/openai/v1/chat/completions',
+        data: {
+          'model': 'qwen/qwen3.8-27b',
+          'messages': [{'role': 'user', 'content': 'hi'}],
+          'max_tokens': 10,
+        },
+        options: Options(headers: {
+          'Authorization': 'Bearer $apiKey',
+          'Content-Type': 'application/json',
+        }),
+      );
+      sw.stop();
+      if (res.statusCode == 200) {
+        return {
+          'success': true,
+          'provider': 'Groq',
+          'model': 'Qwen 3.8 27B',
+          'latencyMs': sw.elapsedMilliseconds,
+        };
+      }
+    } catch (e) {
+      return {'success': false, 'error': 'Groq test failed: $e'};
+    }
+    return {'success': false, 'error': 'Unable to reach Groq.'};
+  }
+
+  Future<Map<String, dynamic>> _testGeminiDirect(String apiKey) async {
     final models = ['gemini-flash-latest', 'gemini-flash-lite-latest'];
     for (final model in models) {
       try {
         final stopwatch = Stopwatch()..start();
-        final url = 'https://generativelanguage.googleapis.com/v1beta/models/$model:generateContent?key=$key';
+        final url =
+            'https://generativelanguage.googleapis.com/v1beta/models/$model:generateContent?key=$apiKey';
         final body = {
           'contents': [
             {
               'role': 'user',
-              'parts': [{'text': 'Hello! Respond with: Connected to Kishan AI.'}],
+              'parts': [{'text': 'Hello! Respond with: Connected to Eduvia AI.'}],
             }
           ],
         };
@@ -120,6 +196,7 @@ class AssistantService {
         if (response.statusCode == 200) {
           return {
             'success': true,
+            'provider': 'Gemini',
             'model': model,
             'latencyMs': stopwatch.elapsedMilliseconds,
           };
@@ -130,146 +207,6 @@ class AssistantService {
     }
 
     return {'success': false, 'error': 'Unable to reach Gemini API with this key.'};
-  }
-
-  Future<String?> _queryGeminiDirect(String command, String apiKey) async {
-    final schema = await _getSchema();
-    final systemInstruction = '''You are an advanced AI Assistant for Eduvia.
-You have direct read-only access to the local SQLite database via function calls.
-When you need data to answer the user's question, output ONLY:
-CALL_FUNCTION:execute_sql_query|{"query": "SELECT ..."}
-Only SELECT queries are permitted for data safety.
-When you have the data (or if no SQL query is needed), answer the question directly, accurately, and politely in formatted Markdown with bullet points or tables.
-
-Database Schema:
-$schema''';
-
-    final contents = <Map<String, dynamic>>[
-      {
-        'role': 'user',
-        'parts': [{'text': command}],
-      }
-    ];
-
-    final models = ['gemini-flash-latest', 'gemini-flash-lite-latest'];
-
-    String? lastError;
-    for (final model in models) {
-      try {
-        for (int turn = 0; turn < 4; turn++) {
-          final url = 'https://generativelanguage.googleapis.com/v1beta/models/$model:generateContent?key=$apiKey';
-          final body = {
-            'systemInstruction': {
-              'parts': [{'text': systemInstruction}],
-            },
-            'contents': contents,
-            'generationConfig': {
-              'maxOutputTokens': 2048,
-              'temperature': 0.2,
-            },
-          };
-
-          final response = await _http.post(
-            url,
-            data: body,
-            options: Options(headers: {'Content-Type': 'application/json'}),
-          );
-
-          if (response.statusCode != 200) {
-            lastError = 'Status ${response.statusCode}: ${response.data}';
-            break;
-          }
-
-          final data = response.data is String ? jsonDecode(response.data) : response.data;
-          final candidates = data['candidates'] as List?;
-          if (candidates == null || candidates.isEmpty) {
-            lastError = 'No candidates returned.';
-            break;
-          }
-
-          final parts = candidates[0]['content']?['parts'] as List?;
-          if (parts == null || parts.isEmpty) {
-            lastError = 'No parts returned.';
-            break;
-          }
-
-          final text = parts.map((p) => p['text'] ?? '').join('\n').trim();
-
-          // Check for function call
-          if (text.contains('CALL_FUNCTION:')) {
-            contents.add({
-              'role': 'model',
-              'parts': [{'text': text}],
-            });
-
-            final lines = text.split('\n');
-            String? sqlQuery;
-            for (final line in lines) {
-              if (line.contains('CALL_FUNCTION:')) {
-                final rest = line.substring(line.indexOf('CALL_FUNCTION:') + 14).trim();
-                final idx = rest.indexOf('|');
-                if (idx > 0) {
-                  final fnName = rest.substring(0, idx).trim();
-                  final jsonArgs = rest.substring(idx + 1).trim();
-                  if (fnName == 'execute_sql_query') {
-                    try {
-                      // Attempt strict parse first
-                      final parsedArgs = jsonDecode(jsonArgs);
-                      sqlQuery = parsedArgs['query'];
-                    } catch (_) {
-                      // Fallback: extract everything between "query": " and the last "
-                      final startIdx = jsonArgs.indexOf('"query":');
-                      if (startIdx != -1) {
-                        final queryStart = jsonArgs.indexOf('"', startIdx + 8) + 1;
-                        final queryEnd = jsonArgs.lastIndexOf('"');
-                        if (queryStart > 0 && queryEnd > queryStart) {
-                          sqlQuery = jsonArgs.substring(queryStart, queryEnd).replaceAll('\\"', '"');
-                        }
-                      }
-                    }
-                  }
-                }
-              }
-            }
-
-            if (sqlQuery != null && sqlQuery.trim().toUpperCase().startsWith('SELECT')) {
-              try {
-                final rows = await _executeSql(sqlQuery);
-                contents.add({
-                  'role': 'user',
-                  'parts': [{'text': '[Function Result for execute_sql_query]: ${jsonEncode(rows)}'}],
-                });
-                continue; // Loop back for Gemini to process SQL result
-              } catch (e) {
-                contents.add({
-                  'role': 'user',
-                  'parts': [{'text': '[Function Result for execute_sql_query]: Error executing query: $e'}],
-                });
-                continue;
-              }
-            } else if (text.contains('CALL_FUNCTION:')) {
-              contents.add({
-                'role': 'user',
-                'parts': [{'text': '[Function Error]: Invalid JSON or missing SELECT query. Please use exact format: CALL_FUNCTION:execute_sql_query|{"query": "SELECT ..."}'}],
-              });
-              continue; // Loop back for Gemini to fix its mistake
-            }
-          }
-
-          // Return final processed text
-          return text;
-        }
-      } on DioException catch (e) {
-        lastError = 'DioException: ${e.response?.data ?? e.message}';
-        continue;
-      } catch (e) {
-        lastError = e.toString();
-        // If current model fails, try next model in fallback list
-        continue;
-      }
-    }
-
-    return null;
   }
 
   Future<String> _handleOfflineQuery(String command) async {
