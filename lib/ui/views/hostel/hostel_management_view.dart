@@ -407,7 +407,7 @@ class _HostelManagementViewState extends ConsumerState<HostelManagementView> wit
                     DropdownButtonFormField<String>(
                       decoration: _inputDeco('Academic Year'),
                       value: _allocYear,
-                      items: ['2025-2026', '2026-2027'].map((y) => DropdownMenuItem(value: y, child: Text(y))).toList(),
+                      items: ['2026-2027'].map((y) => DropdownMenuItem(value: y, child: Text(y))).toList(),
                       onChanged: (v) => setState(() => _allocYear = v ?? '2026-2027'),
                     ),
                     const SizedBox(height: 12),

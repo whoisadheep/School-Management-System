@@ -16,7 +16,7 @@ class FeeStructureSetupView extends ConsumerStatefulWidget {
 
 class _FeeStructureSetupViewState extends ConsumerState<FeeStructureSetupView> {
   String _selectedClass = 'Grade 10';
-  String _selectedAcademicYear = '2024-2025';
+  String _selectedAcademicYear = '2026-2027';
 
   @override
   Widget build(BuildContext context) {
@@ -130,7 +130,7 @@ class _FeeStructureSetupViewState extends ConsumerState<FeeStructureSetupView> {
                 Consumer(
                   builder: (context, ref, _) {
                     final yearsAsync = ref.watch(academicYearsProvider);
-                    final yearList = yearsAsync.value?.map((y) => y.name).toSet().toList() ?? ['2024-2025', '2025-2026'];
+                    final yearList = yearsAsync.value?.map((y) => y.name).toSet().toList() ?? ['2026-2027'];
                     final safeYear = yearList.contains(_selectedAcademicYear) ? _selectedAcademicYear : (yearList.isNotEmpty ? yearList.first : null);
                     if (_selectedAcademicYear != safeYear && safeYear != null) {
                       _selectedAcademicYear = safeYear;

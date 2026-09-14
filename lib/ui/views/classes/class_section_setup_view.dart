@@ -139,9 +139,9 @@ class _ClassSectionSetupViewState extends ConsumerState<ClassSectionSetupView> {
   }
 
   void _showCreateSessionDialog(BuildContext context, VoidCallback onCreated) {
-    final nameCtrl = TextEditingController(text: '2025-2026');
-    final startCtrl = TextEditingController(text: '2025-06-01');
-    final endCtrl = TextEditingController(text: '2026-04-30');
+    final nameCtrl = TextEditingController(text: '2026-2027');
+    final startCtrl = TextEditingController(text: '2026-04-01');
+    final endCtrl = TextEditingController(text: '2027-03-31');
     bool isCurrent = false;
 
     showDialog(
@@ -157,7 +157,7 @@ class _ClassSectionSetupViewState extends ConsumerState<ClassSectionSetupView> {
               children: [
                 TextField(
                   controller: nameCtrl,
-                  decoration: const InputDecoration(labelText: 'Session Name (e.g. 2025-2026) *'),
+                  decoration: const InputDecoration(labelText: 'Session Name (e.g. 2026-2027) *'),
                 ),
                 const SizedBox(height: 12),
                 TextField(
@@ -186,8 +186,8 @@ class _ClassSectionSetupViewState extends ConsumerState<ClassSectionSetupView> {
                 final nm = nameCtrl.text.trim();
                 if (nm.isEmpty) return;
 
-                final startDate = DateTime.tryParse(startCtrl.text.trim()) ?? DateTime(2025, 6, 1);
-                final endDate = DateTime.tryParse(endCtrl.text.trim()) ?? DateTime(2026, 4, 30);
+                final startDate = DateTime.tryParse(startCtrl.text.trim()) ?? DateTime(2026, 4, 1);
+                final endDate = DateTime.tryParse(endCtrl.text.trim()) ?? DateTime(2027, 3, 31);
                 final dbService = ref.read(databaseServiceProvider);
 
                 final ay = AcademicYear(
@@ -230,7 +230,7 @@ class _ClassSectionSetupViewState extends ConsumerState<ClassSectionSetupView> {
     String? sourceYear;
     String? targetYear;
     bool isCustomTarget = false;
-    final customTargetController = TextEditingController(text: '2025-2026');
+    final customTargetController = TextEditingController(text: '2026-2027');
     
     showDialog(
       context: context,
@@ -305,8 +305,8 @@ class _ClassSectionSetupViewState extends ConsumerState<ClassSectionSetupView> {
                               child: TextField(
                                 controller: customTargetController,
                                 decoration: const InputDecoration(
-                                  labelText: 'New Target Academic Year (e.g. 2025-2026) *',
-                                  hintText: '2025-2026',
+                                  labelText: 'New Target Academic Year (e.g. 2026-2027) *',
+                                  hintText: '2026-2027',
                                 ),
                                 onChanged: (v) => setDialogState(() => targetYear = v.trim()),
                               ),
@@ -341,8 +341,8 @@ class _ClassSectionSetupViewState extends ConsumerState<ClassSectionSetupView> {
                         
                         // Ensure academic year exists in database
                         final parts = effectiveTarget.split('-');
-                        final startY = parts.isNotEmpty ? int.tryParse(parts[0]) ?? 2025 : 2025;
-                        final endY = parts.length > 1 ? int.tryParse(parts[1]) ?? 2026 : 2026;
+                        final startY = parts.isNotEmpty ? int.tryParse(parts[0]) ?? 2026 : 2026;
+                        final endY = parts.length > 1 ? int.tryParse(parts[1]) ?? 2027 : 2027;
                         final ay = AcademicYear(
                           id: 'ay-$effectiveTarget',
                           name: effectiveTarget,
@@ -983,7 +983,7 @@ class _ClassSectionSetupViewState extends ConsumerState<ClassSectionSetupView> {
 
   void _showAddEditClassDialog(BuildContext context, {ClassModel? classModel}) {
     final nameController = TextEditingController(text: classModel?.name ?? 'Grade 11');
-    final yearController = TextEditingController(text: classModel?.academicYear ?? '2024-2025');
+    final yearController = TextEditingController(text: classModel?.academicYear ?? '2026-2027');
     final capacityController = TextEditingController(text: (classModel?.capacity ?? 40).toString());
 
     showDialog(
@@ -1005,7 +1005,7 @@ class _ClassSectionSetupViewState extends ConsumerState<ClassSectionSetupView> {
               TextField(
                 controller: yearController,
                 style: GoogleFonts.poppins(color: AppTheme.textPrimary),
-                decoration: const InputDecoration(labelText: 'Academic Year (e.g. 2024-2025) *'),
+                decoration: const InputDecoration(labelText: 'Academic Year (e.g. 2026-2027) *'),
               ),
               const SizedBox(height: 12),
               TextField(
@@ -1032,8 +1032,8 @@ class _ClassSectionSetupViewState extends ConsumerState<ClassSectionSetupView> {
                 // Ensure academic year exists in academic_years table
                 if (yr.isNotEmpty) {
                   final parts = yr.split('-');
-                  final startY = parts.isNotEmpty ? int.tryParse(parts[0]) ?? 2024 : 2024;
-                  final endY = parts.length > 1 ? int.tryParse(parts[1]) ?? 2025 : 2025;
+                  final startY = parts.isNotEmpty ? int.tryParse(parts[0]) ?? 2026 : 2026;
+                  final endY = parts.length > 1 ? int.tryParse(parts[1]) ?? 2027 : 2027;
                   final ay = AcademicYear(
                     id: 'ay-$yr',
                     name: yr,

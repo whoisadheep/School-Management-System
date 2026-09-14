@@ -83,7 +83,7 @@ class FeeStructure {
       feeCategoryId: (map['fee_category_id'] as String?) ?? (map['fee_head_id'] as String?) ?? '',
       className: (map['class'] as String?) ?? (map['grade_level'] as String?) ?? '',
       sectionName: map['section'] as String?,
-      academicYear: (map['academic_year'] as String?) ?? (map['academic_year_id'] as String?) ?? '2024-2025',
+      academicYear: (map['academic_year'] as String?) ?? (map['academic_year_id'] as String?) ?? '2026-2027',
       amount: (map['amount'] as num).toDouble(),
       dueDayOfMonth: map['due_day_of_month'] as int?,
       createdAt: map['created_at'] != null

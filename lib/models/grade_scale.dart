@@ -50,7 +50,7 @@ class GradeScale {
   factory GradeScale.fromMap(Map<String, dynamic> map) {
     return GradeScale(
       id: map['id'] as String,
-      academicYear: (map['academic_year'] as String?) ?? '2024-2025',
+      academicYear: (map['academic_year'] as String?) ?? '2026-2027',
       minPercent: (map['min_percent'] as num).toDouble(),
       maxPercent: (map['max_percent'] as num).toDouble(),
       grade: map['grade'] as String,

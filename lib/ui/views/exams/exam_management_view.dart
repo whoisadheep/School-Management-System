@@ -25,7 +25,7 @@ class _ExamManagementViewState extends ConsumerState<ExamManagementView> with Si
   final _dateFormat = DateFormat('dd MMM yyyy');
 
   String _selectedClassFilter = 'All';
-  String _selectedAcademicYear = '2024-2025';
+  String _selectedAcademicYear = '2026-2027';
 
   // Marks Entry Tab state
   String? _selectedExamIdForMarks;
@@ -131,7 +131,7 @@ class _ExamManagementViewState extends ConsumerState<ExamManagementView> with Si
               Consumer(
                 builder: (context, ref, _) {
                   final yearsAsync = ref.watch(academicYearsProvider);
-                  final yearList = yearsAsync.value?.map((y) => y.name).toList() ?? ['2024-2025', '2025-2026'];
+                  final yearList = yearsAsync.value?.map((y) => y.name).toList() ?? ['2026-2027'];
                   if (!yearList.contains(_selectedAcademicYear) && yearList.isNotEmpty) {
                     _selectedAcademicYear = yearList.first;
                   }
@@ -1213,7 +1213,7 @@ class _ExamManagementViewState extends ConsumerState<ExamManagementView> with Si
                         TextField(
                           controller: nameController,
                           decoration: InputDecoration(
-                            hintText: 'e.g. Mid-Term Examination 2024-25',
+                            hintText: 'e.g. Mid-Term Examination 2026-27',
                             border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
                             contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                           ),

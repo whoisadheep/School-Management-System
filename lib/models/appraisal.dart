@@ -3,7 +3,7 @@ import 'dart:convert';
 class Appraisal {
   final String id;
   final String staffId;
-  final String reviewPeriod; // e.g. '2024-2025 Q1', 'Annual 2025'
+  final String reviewPeriod; // e.g. '2026-2027 Q1', 'Annual 2026'
   final String selfAssessment;
   final String principalRemarks;
   final int rating; // 1 to 5

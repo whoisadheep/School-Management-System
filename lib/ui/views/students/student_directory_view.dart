@@ -2621,7 +2621,7 @@ class _StudentDirectoryViewState extends ConsumerState<StudentDirectoryView>
   }
 
   Widget _buildStudentDiscountsAndNetFeeCard(BuildContext context, Student student) {
-    const academicYear = '2024-2025';
+    const academicYear = '2026-2027';
     final studentYearParam = StudentYearParam(studentId: student.id, academicYear: academicYear);
     final studentClassYearParam = StudentClassYearParam(studentId: student.id, className: student.gradeLevel, academicYear: academicYear);
 
@@ -2820,7 +2820,7 @@ class _StudentDirectoryViewState extends ConsumerState<StudentDirectoryView>
             TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
             ElevatedButton(
               onPressed: () async {
-                const academicYear = '2024-2025';
+                const academicYear = '2026-2027';
                 final sd = StudentDiscount.create(
                   studentId: student.id,
                   discountTypeId: selectedTypeId,

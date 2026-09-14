@@ -128,10 +128,10 @@ class _FeeCollectionViewState extends ConsumerState<FeeCollectionView> with Sing
   Widget build(BuildContext context) {
     final yearsAsync = ref.watch(academicYearsProvider);
     final currentYear = ref.watch(currentAcademicYearProvider).value?.name;
-    final yearList = yearsAsync.value?.map((y) => y.name).toList() ?? ['2024-2025', '2025-2026'];
+    final yearList = yearsAsync.value?.map((y) => y.name).toList() ?? ['2026-2027'];
 
     if (_selectedAcademicYear == null || !_selectedAcademicYear!.contains('-')) {
-      _selectedAcademicYear = currentYear ?? (yearList.isNotEmpty ? yearList.first : '2024-2025');
+      _selectedAcademicYear = currentYear ?? (yearList.isNotEmpty ? yearList.first : '2026-2027');
     }
 
     return Scaffold(
@@ -263,7 +263,7 @@ class _FeeCollectionViewState extends ConsumerState<FeeCollectionView> with Sing
 
   Widget _buildCollectionFormTab() {
     final studentsAsync = ref.watch(studentsListProvider);
-    final activeYear = _selectedAcademicYear ?? '2024-2025';
+    final activeYear = _selectedAcademicYear ?? '2026-2027';
 
     return SingleChildScrollView(
       padding: const EdgeInsets.all(28),

@@ -29,7 +29,7 @@ class _StudentAttendanceViewState extends ConsumerState<StudentAttendanceView> w
 
   final List<String> _classes = ['Grade 1', 'Grade 2', 'Grade 3', 'Grade 4', 'Grade 5', 'Grade 6', 'Grade 7', 'Grade 8', 'Grade 9', 'Grade 10'];
   final List<String> _sections = ['A', 'B', 'C'];
-  final List<String> _years = ['2023-2024', '2024-2025', '2025-2026', '2026-2027'];
+  final List<String> _years = ['2026-2027'];
 
   @override
   void initState() {

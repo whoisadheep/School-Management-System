@@ -2,7 +2,7 @@ import 'package:uuid/uuid.dart';
 
 class AcademicYear {
   final String id;
-  final String name; // e.g. "2025-2026"
+  final String name; // e.g. "2026-2027"
   final DateTime startDate;
   final DateTime endDate;
   final bool isCurrent;
@@ -42,11 +42,11 @@ class AcademicYear {
       id: map['id'] as String,
       name: map['name'] as String,
       startDate: map['start_date'] != null
-          ? DateTime.tryParse(map['start_date'] as String) ?? DateTime(2024, 6, 1)
-          : DateTime(2024, 6, 1),
+          ? DateTime.tryParse(map['start_date'] as String) ?? DateTime(2026, 4, 1)
+          : DateTime(2026, 4, 1),
       endDate: map['end_date'] != null
-          ? DateTime.tryParse(map['end_date'] as String) ?? DateTime(2025, 4, 30)
-          : DateTime(2025, 4, 30),
+          ? DateTime.tryParse(map['end_date'] as String) ?? DateTime(2027, 3, 31)
+          : DateTime(2027, 3, 31),
       isCurrent: (map['is_current'] as int?) == 1,
       createdAt: map['created_at'] != null
           ? DateTime.tryParse(map['created_at'] as String) ?? DateTime.now()

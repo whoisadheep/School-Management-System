@@ -508,7 +508,7 @@ class _TransportViewState extends ConsumerState<TransportView> with SingleTicker
 
   Widget _buildStudentAllocationsTab() {
     final currentYear = ref.watch(currentAcademicYearProvider).value?.name;
-    final academicYear = currentYear ?? '2024-2025';
+    final academicYear = currentYear ?? '2026-2027';
     final transportsAsync = ref.watch(allStudentTransportsProvider(academicYear));
 
     return SingleChildScrollView(
@@ -755,7 +755,7 @@ class _TransportViewState extends ConsumerState<TransportView> with SingleTicker
 
   void _showAssignStudentTransportDialog(BuildContext context, {StudentTransport? existing}) {
     final currentYear = ref.watch(currentAcademicYearProvider).value?.name;
-    final academicYear = existing?.academicYear ?? currentYear ?? '2024-2025';
+    final academicYear = existing?.academicYear ?? currentYear ?? '2026-2027';
     String? selectedStudentId = existing?.studentId;
     Student? selectedStudentObj;
     String filterClass = 'All Classes';

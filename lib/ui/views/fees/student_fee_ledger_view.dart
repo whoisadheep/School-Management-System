@@ -19,7 +19,7 @@ class StudentFeeLedgerView extends ConsumerStatefulWidget {
   const StudentFeeLedgerView({
     super.key,
     required this.student,
-    this.academicYear = '2024-2025',
+    this.academicYear = '2026-2027',
   });
 
   @override
@@ -347,7 +347,7 @@ class _StudentFeeLedgerViewState extends ConsumerState<StudentFeeLedgerView> wit
                   Consumer(
                     builder: (context, ref, _) {
                       final yearsAsync = ref.watch(academicYearsProvider);
-                      final yearList = yearsAsync.value?.map((y) => y.name).toList() ?? ['2024-2025', '2025-2026'];
+                      final yearList = yearsAsync.value?.map((y) => y.name).toList() ?? ['2026-2027'];
                       if (!yearList.contains(_selectedAcademicYear) && yearList.isNotEmpty) {
                         _selectedAcademicYear = yearList.first;
                       }

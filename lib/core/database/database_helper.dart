@@ -470,7 +470,7 @@ class DatabaseHelper {
     final adminPinHash = User.hashPin('1234');
     batch.execute('''
       INSERT INTO academic_years (id, name, start_date, end_date, is_current)
-      VALUES ('ay-2025-2026', '2025-2026', '2025-06-01', '2026-04-30', 1)
+      VALUES ('ay-2026-2027', '2026-2027', '2026-04-01', '2027-03-31', 1)
     ''');
 
     batch.execute('''
@@ -1274,7 +1274,7 @@ class DatabaseHelper {
           final classId = 'cls-${cName.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '')}';
           classNameToId[cName] = classId;
           await db.execute(
-            "INSERT OR IGNORE INTO classes (id, name, academic_year, capacity, created_at) VALUES (?, ?, '2024-2025', 40, datetime('now'))",
+            "INSERT OR IGNORE INTO classes (id, name, academic_year, capacity, created_at) VALUES (?, ?, '2026-2027', 40, datetime('now'))",
             [classId, cName],
           );
 
@@ -1498,7 +1498,7 @@ class DatabaseHelper {
         for (final inv in existingInvoices) {
           final invoiceId = inv['id'] as String;
           final studentId = inv['student_id'] as String;
-          final academicYear = (inv['academic_year_id'] as String?) ?? '2024-2025';
+          final academicYear = (inv['academic_year_id'] as String?) ?? '2026-2027';
           final totalAmount = (inv['total_amount'] as num).toDouble();
           final discountAmount = (inv['discount_amount'] as num?)?.toDouble() ?? 0.0;
           final penaltyAmount = (inv['penalty_amount'] as num?)?.toDouble() ?? 0.0;
@@ -1722,16 +1722,16 @@ class DatabaseHelper {
           )
         ''');
 
-        // Seed default grade scale thresholds for 2024-2025
+        // Seed default grade scale thresholds for 2026-2027
         await db.execute('''
           INSERT OR IGNORE INTO grade_scale (id, academic_year, min_percent, max_percent, grade, grade_point) VALUES
-          ('gs-a-plus', '2024-2025', 90.0, 100.0, 'A+', 4.0),
-          ('gs-a', '2024-2025', 80.0, 89.99, 'A', 3.5),
-          ('gs-b', '2024-2025', 70.0, 79.99, 'B', 3.0),
-          ('gs-c', '2024-2025', 60.0, 69.99, 'C', 2.5),
-          ('gs-d', '2024-2025', 50.0, 59.99, 'D', 2.0),
-          ('gs-e', '2024-2025', 35.0, 49.99, 'E', 1.0),
-          ('gs-f', '2024-2025', 0.0, 34.99, 'F', 0.0)
+          ('gs-a-plus', '2026-2027', 90.0, 100.0, 'A+', 4.0),
+          ('gs-a', '2026-2027', 80.0, 89.99, 'A', 3.5),
+          ('gs-b', '2026-2027', 70.0, 79.99, 'B', 3.0),
+          ('gs-c', '2026-2027', 60.0, 69.99, 'C', 2.5),
+          ('gs-d', '2026-2027', 50.0, 59.99, 'D', 2.0),
+          ('gs-e', '2026-2027', 35.0, 49.99, 'E', 1.0),
+          ('gs-f', '2026-2027', 0.0, 34.99, 'F', 0.0)
         ''');
       } catch (e) {
         print("Failed to create grade_scale table: $e");
@@ -2264,10 +2264,34 @@ class DatabaseHelper {
         await db.execute("ALTER TABLE invoices ADD COLUMN ledger_id TEXT");
       } catch (_) {}
 
-      // Ensure 2024-2025 academic year exists for foreign keys
+      // Ensure 2026-2027 academic year exists as current
       await db.execute(
-        "INSERT OR IGNORE INTO academic_years (id, name, start_date, end_date, is_current) VALUES ('ay-2024-2025', '2024-2025', '2024-06-01', '2025-04-30', 0)"
+        "INSERT OR IGNORE INTO academic_years (id, name, start_date, end_date, is_current) VALUES ('ay-2026-2027', '2026-2027', '2026-04-01', '2027-03-31', 1)"
       );
+      await db.execute("UPDATE academic_years SET is_current = 1 WHERE name = '2026-2027'");
+
+      // Migrate existing foreign keys and session records to 2026-2027 before deleting other sessions
+      try {
+        await db.execute("UPDATE invoices SET academic_year_id = 'ay-2026-2027' WHERE academic_year_id IS NOT NULL AND academic_year_id != 'ay-2026-2027' AND academic_year_id != '2026-2027'");
+      } catch (_) {}
+      try {
+        await db.execute("UPDATE classes SET academic_year = '2026-2027' WHERE academic_year IS NULL OR academic_year != '2026-2027'");
+      } catch (_) {}
+      try {
+        await db.execute("UPDATE fee_structures SET academic_year_id = 'ay-2026-2027', academic_year = '2026-2027' WHERE academic_year_id != 'ay-2026-2027' AND academic_year_id != '2026-2027'");
+      } catch (_) {}
+      try {
+        await db.execute("UPDATE student_fee_ledger SET academic_year = '2026-2027' WHERE academic_year != '2026-2027'");
+      } catch (_) {}
+      try {
+        await db.execute("UPDATE exams SET academic_year = '2026-2027' WHERE academic_year != '2026-2027'");
+      } catch (_) {}
+      try {
+        await db.execute("UPDATE grade_scale SET academic_year = '2026-2027' WHERE academic_year != '2026-2027'");
+      } catch (_) {}
+
+      // Remove all sessions except 2026-2027
+      await db.execute("DELETE FROM academic_years WHERE name != '2026-2027'");
 
       // Seed default classes if none exist
       final classCountRes = await db.rawQuery('SELECT COUNT(*) as count FROM classes');
@@ -2280,7 +2304,7 @@ class DatabaseHelper {
         for (final g in defaultGrades) {
           final cid = 'cls-${g.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '')}';
           await db.execute(
-            "INSERT OR IGNORE INTO classes (id, name, academic_year, capacity, created_at) VALUES (?, ?, '2024-2025', 40, datetime('now'))",
+            "INSERT OR IGNORE INTO classes (id, name, academic_year, capacity, created_at) VALUES (?, ?, '2026-2027', 40, datetime('now'))",
             [cid, g],
           );
           for (final sec in ['A', 'B']) {
@@ -2581,13 +2605,13 @@ class DatabaseHelper {
 
       await db.execute('''
         INSERT OR IGNORE INTO grade_scale (id, academic_year, min_percent, max_percent, grade, grade_point) VALUES
-        ('gs-a-plus', '2024-2025', 90.0, 100.0, 'A+', 4.0),
-        ('gs-a', '2024-2025', 80.0, 89.99, 'A', 3.5),
-        ('gs-b', '2024-2025', 70.0, 79.99, 'B', 3.0),
-        ('gs-c', '2024-2025', 60.0, 69.99, 'C', 2.5),
-        ('gs-d', '2024-2025', 50.0, 59.99, 'D', 2.0),
-        ('gs-e', '2024-2025', 35.0, 49.99, 'E', 1.0),
-        ('gs-f', '2024-2025', 0.0, 34.99, 'F', 0.0)
+        ('gs-a-plus', '2026-2027', 90.0, 100.0, 'A+', 4.0),
+        ('gs-a', '2026-2027', 80.0, 89.99, 'A', 3.5),
+        ('gs-b', '2026-2027', 70.0, 79.99, 'B', 3.0),
+        ('gs-c', '2026-2027', 60.0, 69.99, 'C', 2.5),
+        ('gs-d', '2026-2027', 50.0, 59.99, 'D', 2.0),
+        ('gs-e', '2026-2027', 35.0, 49.99, 'E', 1.0),
+        ('gs-f', '2026-2027', 0.0, 34.99, 'F', 0.0)
       ''');
 
       // 5. Staff, Timetable, Circulars, Documents

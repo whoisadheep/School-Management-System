@@ -64,7 +64,7 @@ final dashboardMetricsProvider = FutureProvider<DashboardMetrics>((ref) async {
     final currentYearObj = allYears.isNotEmpty
         ? allYears.firstWhere((y) => y.isCurrent, orElse: () => allYears.first)
         : null;
-    final currentAcademicYear = currentYearObj?.name ?? '2024-2025';
+    final currentAcademicYear = currentYearObj?.name ?? '2026-2027';
 
     // 1. Total Revenue (Income entries in ledger + transactions)
     final ledgerSummary = await dbService.getLedgerSummary();

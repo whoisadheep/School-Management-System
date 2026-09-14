@@ -1655,8 +1655,8 @@ class DatabaseService {
     
     final ayId = fs.academicYear.startsWith('ay-') ? fs.academicYear : 'ay-${fs.academicYear}';
     final parts = fs.academicYear.split('-');
-    final startYear = parts.isNotEmpty ? parts[0] : '2024';
-    final endYear = parts.length > 1 ? parts[1] : '2025';
+    final startYear = parts.isNotEmpty ? parts[0] : '2026';
+    final endYear = parts.length > 1 ? parts[1] : '2027';
     
     await db.execute(
       'INSERT OR IGNORE INTO academic_years (id, name, start_date, end_date) VALUES (?, ?, ?, ?)',
@@ -2581,7 +2581,7 @@ class DatabaseService {
       WHERE t.timestamp >= ? AND t.timestamp <= ?
     ''';
 
-    // Invoices might use 'ay-2024-2025' or '2024-2025'
+    // Invoices might use 'ay-2026-2027' or '2026-2027'
     final ayStr = academicYear.startsWith('ay-') ? academicYear : 'ay-$academicYear';
     query += ' AND (i.academic_year_id = ? OR i.academic_year_id = ?)';
     args.addAll([academicYear, ayStr]);
@@ -3022,7 +3022,7 @@ class DatabaseService {
   }
 
   /// Get all student transport assignments enriched with student info, route, and stop fee
-  Future<List<StudentTransport>> getAllStudentTransports({String academicYear = '2024-2025'}) async {
+  Future<List<StudentTransport>> getAllStudentTransports({String academicYear = '2026-2027'}) async {
     final db = await _db;
     final results = await db.rawQuery('''
       SELECT st.*,
@@ -3042,7 +3042,7 @@ class DatabaseService {
   }
 
   /// Get route manifest with stops in order, each with its assigned students list
-  Future<Map<String, dynamic>> getRouteWithStudents(String routeId, {String academicYear = '2024-2025'}) async {
+  Future<Map<String, dynamic>> getRouteWithStudents(String routeId, {String academicYear = '2026-2027'}) async {
     final db = await _db;
     final route = await getRouteById(routeId);
     if (route == null) return {'route': null, 'stops': []};
@@ -3079,7 +3079,7 @@ class DatabaseService {
   }
 
   /// Get Fleet Overview: vehicle details, capacity, assigned student count, renewal alerts
-  Future<List<Map<String, dynamic>>> getFleetOverview({String academicYear = '2024-2025'}) async {
+  Future<List<Map<String, dynamic>>> getFleetOverview({String academicYear = '2026-2027'}) async {
     final db = await _db;
     final vehicles = await getAllVehicles();
     final List<Map<String, dynamic>> overview = [];
@@ -3383,7 +3383,7 @@ class DatabaseService {
   // ============================================================================
 
   /// Get grade scale list for an academic year
-  Future<List<GradeScale>> getGradeScales({String academicYear = '2024-2025'}) async {
+  Future<List<GradeScale>> getGradeScales({String academicYear = '2026-2027'}) async {
     final db = await _db;
     final results = await db.query(
       'grade_scale',
@@ -3394,13 +3394,13 @@ class DatabaseService {
     if (results.isEmpty) {
       // Return default scale
       return const [
-        GradeScale(id: 'gs-a-plus', academicYear: '2024-2025', minPercent: 90.0, maxPercent: 100.0, grade: 'A+', gradePoint: 4.0),
-        GradeScale(id: 'gs-a', academicYear: '2024-2025', minPercent: 80.0, maxPercent: 89.99, grade: 'A', gradePoint: 3.5),
-        GradeScale(id: 'gs-b', academicYear: '2024-2025', minPercent: 70.0, maxPercent: 79.99, grade: 'B', gradePoint: 3.0),
-        GradeScale(id: 'gs-c', academicYear: '2024-2025', minPercent: 60.0, maxPercent: 69.99, grade: 'C', gradePoint: 2.5),
-        GradeScale(id: 'gs-d', academicYear: '2024-2025', minPercent: 50.0, maxPercent: 59.99, grade: 'D', gradePoint: 2.0),
-        GradeScale(id: 'gs-e', academicYear: '2024-2025', minPercent: 35.0, maxPercent: 49.99, grade: 'E', gradePoint: 1.0),
-        GradeScale(id: 'gs-f', academicYear: '2024-2025', minPercent: 0.0, maxPercent: 34.99, grade: 'F', gradePoint: 0.0),
+        GradeScale(id: 'gs-a-plus', academicYear: '2026-2027', minPercent: 90.0, maxPercent: 100.0, grade: 'A+', gradePoint: 4.0),
+        GradeScale(id: 'gs-a', academicYear: '2026-2027', minPercent: 80.0, maxPercent: 89.99, grade: 'A', gradePoint: 3.5),
+        GradeScale(id: 'gs-b', academicYear: '2026-2027', minPercent: 70.0, maxPercent: 79.99, grade: 'B', gradePoint: 3.0),
+        GradeScale(id: 'gs-c', academicYear: '2026-2027', minPercent: 60.0, maxPercent: 69.99, grade: 'C', gradePoint: 2.5),
+        GradeScale(id: 'gs-d', academicYear: '2026-2027', minPercent: 50.0, maxPercent: 59.99, grade: 'D', gradePoint: 2.0),
+        GradeScale(id: 'gs-e', academicYear: '2026-2027', minPercent: 35.0, maxPercent: 49.99, grade: 'E', gradePoint: 1.0),
+        GradeScale(id: 'gs-f', academicYear: '2026-2027', minPercent: 0.0, maxPercent: 34.99, grade: 'F', gradePoint: 0.0),
       ];
     }
     return results.map((map) => GradeScale.fromMap(map)).toList();

@@ -498,7 +498,7 @@ class _StaffDetailViewState extends ConsumerState<StaffDetailView> with SingleTi
   }
 
   void _showAddAppraisalDialog(BuildContext context) {
-    final periodController = TextEditingController(text: 'Annual Review 2025-2026');
+    final periodController = TextEditingController(text: 'Annual Review 2026-2027');
     final selfController = TextEditingController();
     final remarksController = TextEditingController();
     int rating = 4;
@@ -517,7 +517,7 @@ class _StaffDetailViewState extends ConsumerState<StaffDetailView> with SingleTi
                 TextField(
                   controller: periodController,
                   style: GoogleFonts.poppins(color: AppTheme.textPrimary),
-                  decoration: const InputDecoration(labelText: 'Review Period (e.g. 2024-2025 Q1) *'),
+                  decoration: const InputDecoration(labelText: 'Review Period (e.g. 2026-2027 Q1) *'),
                 ),
                 const SizedBox(height: 12),
                 Row(
@@ -1771,7 +1771,7 @@ class _StaffDetailViewState extends ConsumerState<StaffDetailView> with SingleTi
               TextField(
                 controller: yearController,
                 style: GoogleFonts.poppins(color: AppTheme.textPrimary),
-                decoration: const InputDecoration(labelText: 'Academic Year (e.g. 2024-2025)'),
+                decoration: const InputDecoration(labelText: 'Academic Year (e.g. 2026-2027)'),
               ),
             ],
           ),
@@ -2134,7 +2134,7 @@ class _StaffDetailViewState extends ConsumerState<StaffDetailView> with SingleTi
                   const SizedBox(width: 12),
                   DropdownButton<int>(
                     value: _selectedAttendanceYear,
-                    items: [2024, 2025, 2026].map((y) => DropdownMenuItem(value: y, child: Text('$y'))).toList(),
+                    items: [DateTime.now().year - 1, DateTime.now().year, DateTime.now().year + 1].toSet().map((y) => DropdownMenuItem(value: y, child: Text('$y'))).toList(),
                     onChanged: (val) {
                       if (val != null) setState(() => _selectedAttendanceYear = val);
                     },

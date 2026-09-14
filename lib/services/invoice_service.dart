@@ -42,7 +42,7 @@ class InvoiceService {
     for (final student in students) {
       generatedInvoices.add(Invoice.create(
         studentId: student.id,
-        academicYearId: academicYearId ?? 'ay-2025-2026',
+        academicYearId: academicYearId ?? 'ay-2026-2027',
         totalAmount: invoiceAmount,
         discountAmount: discountAmount,
         penaltyAmount: penaltyAmount,

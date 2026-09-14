@@ -20,7 +20,7 @@ class FeeReportsView extends ConsumerStatefulWidget {
 
 class _FeeReportsViewState extends ConsumerState<FeeReportsView> with SingleTickerProviderStateMixin {
   late final TabController _tabController;
-  String _selectedAcademicYear = '2024-2025';
+  String _selectedAcademicYear = '2026-2027';
   DateTime? _startDate;
   DateTime? _endDate;
 
@@ -124,7 +124,7 @@ class _FeeReportsViewState extends ConsumerState<FeeReportsView> with SingleTick
               Consumer(
                 builder: (context, ref, _) {
                   final yearsAsync = ref.watch(academicYearsProvider);
-                  final yearList = yearsAsync.value?.map((y) => y.name).toList() ?? ['2023-2024', '2024-2025', '2025-2026'];
+                  final yearList = yearsAsync.value?.map((y) => y.name).toList() ?? ['2026-2027'];
                   if (!yearList.contains(_selectedAcademicYear) && yearList.isNotEmpty) {
                     _selectedAcademicYear = yearList.first;
                   }
