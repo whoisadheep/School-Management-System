@@ -4,6 +4,7 @@ import 'package:google_fonts/google_fonts.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../providers/services_provider.dart';
 import '../../../providers/navigation_provider.dart';
+import 'widgets/assistant_message_content.dart';
 
 class AssistantView extends ConsumerStatefulWidget {
   const AssistantView({super.key});
@@ -519,14 +520,9 @@ class _AssistantViewState extends ConsumerState<AssistantView> with TickerProvid
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  SelectableText(
-                    displayText,
-                    style: GoogleFonts.poppins(
-                      color: isUser ? Colors.white : AppTheme.textPrimary,
-                      fontSize: 14,
-                      height: 1.5,
-                      fontWeight: FontWeight.w400,
-                    ),
+                  FormattedAssistantMessageContent(
+                    text: displayText,
+                    isUser: isUser,
                   ),
                   if (navTab != null && !isUser) ...[
                     const SizedBox(height: 12),
