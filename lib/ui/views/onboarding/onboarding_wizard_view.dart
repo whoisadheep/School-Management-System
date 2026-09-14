@@ -180,10 +180,11 @@ class _OnboardingWizardViewState extends ConsumerState<OnboardingWizardView>
         final existingYears = await dbService.getAllAcademicYears();
         final found = existingYears.where((y) => y.name == ayName);
         if (found.isEmpty) {
-          await dbService.createAcademicYear(AcademicYear(
+          final now = DateTime.now();
+          await dbService.createAcademicYear(AcademicYear.create(
             name: ayName,
-            startDate: '${DateTime.now().year}-04-01',
-            endDate: '${DateTime.now().year + 1}-03-31',
+            startDate: DateTime(now.year, 4, 1),
+            endDate: DateTime(now.year + 1, 3, 31),
             isCurrent: true,
           ));
         }
