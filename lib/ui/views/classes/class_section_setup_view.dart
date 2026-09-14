@@ -667,38 +667,190 @@ class _ClassSectionSetupViewState extends ConsumerState<ClassSectionSetupView> {
                                         ],
                                       ),
                                     ),
-                                    OutlinedButton.icon(
-                                      onPressed: () => _showAddEditSectionDialog(context, classModel),
-                                      icon: const Icon(Icons.add_rounded, size: 14),
-                                      label: Text('Add Section', style: GoogleFonts.poppins(fontSize: 11, fontWeight: FontWeight.bold)),
-                                      style: OutlinedButton.styleFrom(
-                                        foregroundColor: AppTheme.primaryPurple,
-                                        side: const BorderSide(color: AppTheme.primaryPurple),
-                                      ),
-                                    ),
-                                    const SizedBox(width: 12),
-                                    IconButton(
-                                      icon: const Icon(Icons.edit_outlined, color: AppTheme.textSecondary, size: 20),
-                                      onPressed: () => _showAddEditClassDialog(context, classModel: classModel),
-                                      tooltip: 'Edit Class',
-                                    ),
-                                    IconButton(
-                                      icon: const Icon(Icons.delete_outline_rounded, color: AppTheme.error, size: 20),
-                                      onPressed: () {
-                                        if (!PermissionHelper.requireAdminRole(context, ref, RiskyAction.deleteRecord)) return;
-                                        _confirmDeleteClass(context, classModel);
-                                      },
-                                      tooltip: 'Delete Class',
-                                    ),
-                                    Icon(isExpanded ? Icons.keyboard_arrow_up_rounded : Icons.keyboard_arrow_down_rounded, color: AppTheme.textSecondary),
-                                  ],
-                                ),
-                              ),
-                            ),
+                                     OutlinedButton.icon(
+                                       onPressed: () => _showManageClassSubjectsDialog(context, classModel),
+                                       icon: const Icon(Icons.menu_book_rounded, size: 14),
+                                       label: Text('Subjects', style: GoogleFonts.poppins(fontSize: 11, fontWeight: FontWeight.bold)),
+                                       style: OutlinedButton.styleFrom(
+                                         foregroundColor: AppTheme.primaryPurple,
+                                         side: const BorderSide(color: AppTheme.primaryPurple),
+                                       ),
+                                     ),
+                                     const SizedBox(width: 8),
+                                     OutlinedButton.icon(
+                                       onPressed: () => _showAddEditSectionDialog(context, classModel),
+                                       icon: const Icon(Icons.add_rounded, size: 14),
+                                       label: Text('Add Section', style: GoogleFonts.poppins(fontSize: 11, fontWeight: FontWeight.bold)),
+                                       style: OutlinedButton.styleFrom(
+                                         foregroundColor: AppTheme.primaryPurple,
+                                         side: const BorderSide(color: AppTheme.primaryPurple),
+                                       ),
+                                     ),
+                                     const SizedBox(width: 12),
+                                     IconButton(
+                                       icon: const Icon(Icons.edit_outlined, color: AppTheme.textSecondary, size: 20),
+                                       onPressed: () => _showAddEditClassDialog(context, classModel: classModel),
+                                       tooltip: 'Edit Class',
+                                     ),
+                                     IconButton(
+                                       icon: const Icon(Icons.delete_outline_rounded, color: AppTheme.error, size: 20),
+                                       onPressed: () {
+                                         if (!PermissionHelper.requireAdminRole(context, ref, RiskyAction.deleteRecord)) return;
+                                         _confirmDeleteClass(context, classModel);
+                                       },
+                                       tooltip: 'Delete Class',
+                                     ),
+                                     Icon(isExpanded ? Icons.keyboard_arrow_up_rounded : Icons.keyboard_arrow_down_rounded, color: AppTheme.textSecondary),
+                                   ],
+                                 ),
+                               ),
+                             ),
 
-                            // Sections Grid (Expandable)
-                            if (isExpanded) ...[
-                              const Divider(height: 1),
+                             // Class Content (Expandable: Subjects & Sections)
+                             if (isExpanded) ...[
+                               const Divider(height: 1),
+                               // Class Subjects Section
+                               Padding(
+                                 padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+                                 child: Column(
+                                   crossAxisAlignment: CrossAxisAlignment.start,
+                                   children: [
+                                     Row(
+                                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                       children: [
+                                         Row(
+                                           children: [
+                                             const Icon(Icons.auto_stories_rounded, size: 18, color: AppTheme.primaryPurple),
+                                             const SizedBox(width: 8),
+                                             Text(
+                                               'Class Subjects Curriculum',
+                                               style: GoogleFonts.poppins(fontSize: 13, fontWeight: FontWeight.bold, color: AppTheme.textPrimary),
+                                             ),
+                                             const SizedBox(width: 8),
+                                             Consumer(
+                                               builder: (context, ref, _) {
+                                                 final subsAsync = ref.watch(classSubjectsProvider(classModel.id));
+                                                 return subsAsync.when(
+                                                   data: (subs) => Container(
+                                                     padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                                     decoration: BoxDecoration(
+                                                       color: AppTheme.primaryPurple.withValues(alpha: 0.1),
+                                                       borderRadius: BorderRadius.circular(12),
+                                                     ),
+                                                     child: Text(
+                                                       '${subs.length} subjects',
+                                                       style: GoogleFonts.poppins(fontSize: 10, fontWeight: FontWeight.w600, color: AppTheme.primaryPurple),
+                                                     ),
+                                                   ),
+                                                   loading: () => const SizedBox.shrink(),
+                                                   error: (_, __) => const SizedBox.shrink(),
+                                                 );
+                                               },
+                                             ),
+                                           ],
+                                         ),
+                                         TextButton.icon(
+                                           onPressed: () => _showManageClassSubjectsDialog(context, classModel),
+                                           icon: const Icon(Icons.tune_rounded, size: 14),
+                                           label: Text('Manage Subjects', style: GoogleFonts.poppins(fontSize: 11, fontWeight: FontWeight.w600)),
+                                           style: TextButton.styleFrom(foregroundColor: AppTheme.primaryPurple),
+                                         ),
+                                       ],
+                                     ),
+                                     const SizedBox(height: 8),
+                                     Consumer(
+                                       builder: (context, ref, _) {
+                                         final subsAsync = ref.watch(classSubjectsProvider(classModel.id));
+                                         return subsAsync.when(
+                                           data: (subjects) {
+                                             if (subjects.isEmpty) {
+                                               return Container(
+                                                 width: double.infinity,
+                                                 padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                                                 decoration: BoxDecoration(
+                                                   color: AppTheme.bgMain,
+                                                   borderRadius: BorderRadius.circular(8),
+                                                   border: Border.all(color: AppTheme.divider),
+                                                 ),
+                                                 child: Row(
+                                                   children: [
+                                                     const Icon(Icons.info_outline_rounded, size: 16, color: AppTheme.textHint),
+                                                     const SizedBox(width: 8),
+                                                     Expanded(
+                                                       child: Text(
+                                                         'No subjects configured for ${classModel.name} yet. Configure subjects to auto-populate them when creating exams.',
+                                                         style: GoogleFonts.poppins(fontSize: 11, color: AppTheme.textSecondary, fontStyle: FontStyle.italic),
+                                                       ),
+                                                     ),
+                                                     TextButton(
+                                                       onPressed: () => _showManageClassSubjectsDialog(context, classModel),
+                                                       child: const Text('Add Subjects', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+                                                     ),
+                                                   ],
+                                                 ),
+                                               );
+                                             }
+                                             return Wrap(
+                                               spacing: 8,
+                                               runSpacing: 8,
+                                               children: subjects.map((sub) {
+                                                 return Container(
+                                                   padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                                                   decoration: BoxDecoration(
+                                                     color: AppTheme.bgMain,
+                                                     borderRadius: BorderRadius.circular(8),
+                                                     border: Border.all(color: AppTheme.divider),
+                                                   ),
+                                                   child: Row(
+                                                     mainAxisSize: MainAxisSize.min,
+                                                     children: [
+                                                       const Icon(Icons.menu_book_rounded, size: 14, color: AppTheme.primaryPurple),
+                                                       const SizedBox(width: 6),
+                                                       Text(
+                                                         sub.subjectName,
+                                                         style: GoogleFonts.poppins(fontSize: 12, fontWeight: FontWeight.w600, color: AppTheme.textPrimary),
+                                                       ),
+                                                       const SizedBox(width: 6),
+                                                       Container(
+                                                         padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+                                                         decoration: BoxDecoration(
+                                                           color: Colors.white,
+                                                           borderRadius: BorderRadius.circular(4),
+                                                           border: Border.all(color: AppTheme.divider),
+                                                         ),
+                                                         child: Text(
+                                                           'Max: ${sub.defaultMaxMarks.toStringAsFixed(0)} | Pass: ${sub.defaultPassMarks.toStringAsFixed(0)}',
+                                                           style: GoogleFonts.poppins(fontSize: 10, color: AppTheme.textSecondary),
+                                                         ),
+                                                       ),
+                                                       const SizedBox(width: 4),
+                                                       InkWell(
+                                                         onTap: () async {
+                                                           final dbService = ref.read(databaseServiceProvider);
+                                                           await dbService.deleteClassSubject(sub.id);
+                                                           ref.invalidate(classSubjectsProvider(classModel.id));
+                                                         },
+                                                         borderRadius: BorderRadius.circular(10),
+                                                         child: const Padding(
+                                                           padding: EdgeInsets.all(2.0),
+                                                           child: Icon(Icons.close, size: 14, color: AppTheme.textSecondary),
+                                                         ),
+                                                       ),
+                                                     ],
+                                                   ),
+                                                 );
+                                               }).toList(),
+                                             );
+                                           },
+                                           loading: () => const LinearProgressIndicator(),
+                                           error: (e, _) => Text('Error loading subjects: $e', style: GoogleFonts.poppins(fontSize: 11, color: AppTheme.error)),
+                                         );
+                                       },
+                                     ),
+                                   ],
+                                 ),
+                               ),
+                               const Divider(height: 1),
                               Padding(
                                 padding: const EdgeInsets.all(20),
                                 child: sectionsAsync.when(
@@ -1128,6 +1280,320 @@ class _ClassSectionSetupViewState extends ConsumerState<ClassSectionSetupView> {
             child: const Text('Delete Class'),
           ),
         ],
+      ),
+    );
+  }
+
+  void _showManageClassSubjectsDialog(BuildContext context, ClassModel classModel) {
+    final subjectNameCtrl = TextEditingController();
+    final maxMarksCtrl = TextEditingController(text: '100');
+    final passMarksCtrl = TextEditingController(text: '35');
+
+    final suggestedSubjects = [
+      'Mathematics',
+      'English',
+      'Hindi',
+      'Science',
+      'Social Studies',
+      'Computer Science',
+      'Physics',
+      'Chemistry',
+      'Biology',
+      'History',
+      'Geography',
+      'Sanskrit',
+      'Art & Craft',
+      'Physical Education',
+      'Economics',
+    ];
+
+    showDialog(
+      context: context,
+      builder: (dialogCtx) => Consumer(
+        builder: (context, ref, _) {
+          final subjectsAsync = ref.watch(classSubjectsProvider(classModel.id));
+          final dbService = ref.read(databaseServiceProvider);
+
+          return StatefulBuilder(
+            builder: (context, setDialogState) => AlertDialog(
+              backgroundColor: Colors.white,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+              title: Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: AppTheme.primaryPurple.withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: const Icon(Icons.menu_book_rounded, color: AppTheme.primaryPurple, size: 20),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('Manage Subjects — ${classModel.name}',
+                            style: GoogleFonts.poppins(fontWeight: FontWeight.bold, fontSize: 16)),
+                        Text('Configure subjects taught in this class. They will auto-populate during exam creation.',
+                            style: GoogleFonts.poppins(fontSize: 11, color: AppTheme.textSecondary)),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              content: SizedBox(
+                width: 580,
+                child: SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // Quick Add Suggestions
+                      Text('Suggested Subjects (Click to add):',
+                          style: GoogleFonts.poppins(fontSize: 11, fontWeight: FontWeight.w600, color: AppTheme.textSecondary)),
+                      const SizedBox(height: 8),
+                      subjectsAsync.when(
+                        data: (existingSubs) {
+                          final existingNames = existingSubs.map((s) => s.subjectName.toLowerCase()).toSet();
+                          return Wrap(
+                            spacing: 6,
+                            runSpacing: 6,
+                            children: suggestedSubjects.map((sName) {
+                              final isAdded = existingNames.contains(sName.toLowerCase());
+                              return ActionChip(
+                                avatar: Icon(
+                                  isAdded ? Icons.check_circle_rounded : Icons.add_rounded,
+                                  size: 14,
+                                  color: isAdded ? AppTheme.success : AppTheme.primaryPurple,
+                                ),
+                                label: Text(
+                                  sName,
+                                  style: GoogleFonts.poppins(
+                                    fontSize: 11,
+                                    color: isAdded ? AppTheme.textSecondary : AppTheme.primaryPurple,
+                                    fontWeight: isAdded ? FontWeight.normal : FontWeight.w600,
+                                  ),
+                                ),
+                                backgroundColor: isAdded ? AppTheme.bgMain : AppTheme.primaryPurple.withValues(alpha: 0.08),
+                                side: BorderSide(
+                                  color: isAdded ? AppTheme.divider : AppTheme.primaryPurple.withValues(alpha: 0.3),
+                                ),
+                                onPressed: isAdded
+                                    ? null
+                                    : () async {
+                                        final sub = ClassSubject.create(
+                                          classId: classModel.id,
+                                          subjectName: sName,
+                                          defaultMaxMarks: 100.0,
+                                          defaultPassMarks: 35.0,
+                                        );
+                                        await dbService.addClassSubject(sub);
+                                        ref.invalidate(classSubjectsProvider(classModel.id));
+                                      },
+                              );
+                            }).toList(),
+                          );
+                        },
+                        loading: () => const LinearProgressIndicator(),
+                        error: (_, __) => const SizedBox.shrink(),
+                      ),
+
+                      const SizedBox(height: 16),
+                      const Divider(),
+                      const SizedBox(height: 12),
+
+                      // Add Custom Subject Form
+                      Text('Add Custom Subject:',
+                          style: GoogleFonts.poppins(fontSize: 11, fontWeight: FontWeight.w600, color: AppTheme.textPrimary)),
+                      const SizedBox(height: 8),
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Expanded(
+                            flex: 4,
+                            child: TextField(
+                              controller: subjectNameCtrl,
+                              style: GoogleFonts.poppins(fontSize: 12),
+                              decoration: InputDecoration(
+                                hintText: 'Subject name (e.g. Sanskrit)',
+                                labelText: 'Subject Name',
+                                isDense: true,
+                                border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                                contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            flex: 2,
+                            child: TextField(
+                              controller: maxMarksCtrl,
+                              keyboardType: TextInputType.number,
+                              style: GoogleFonts.poppins(fontSize: 12),
+                              decoration: InputDecoration(
+                                labelText: 'Max Marks',
+                                isDense: true,
+                                border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                                contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            flex: 2,
+                            child: TextField(
+                              controller: passMarksCtrl,
+                              keyboardType: TextInputType.number,
+                              style: GoogleFonts.poppins(fontSize: 12),
+                              decoration: InputDecoration(
+                                labelText: 'Pass Marks',
+                                isDense: true,
+                                border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                                contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          ElevatedButton.icon(
+                            onPressed: () async {
+                              final name = subjectNameCtrl.text.trim();
+                              if (name.isEmpty) return;
+                              final maxM = double.tryParse(maxMarksCtrl.text.trim()) ?? 100.0;
+                              final passM = double.tryParse(passMarksCtrl.text.trim()) ?? 35.0;
+
+                              final sub = ClassSubject.create(
+                                classId: classModel.id,
+                                subjectName: name,
+                                defaultMaxMarks: maxM,
+                                defaultPassMarks: passM,
+                              );
+                              await dbService.addClassSubject(sub);
+                              subjectNameCtrl.clear();
+                              ref.invalidate(classSubjectsProvider(classModel.id));
+                            },
+                            icon: const Icon(Icons.add, size: 16),
+                            label: Text('Add', style: GoogleFonts.poppins(fontSize: 12, fontWeight: FontWeight.bold)),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: AppTheme.primaryPurple,
+                              foregroundColor: Colors.white,
+                              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                            ),
+                          ),
+                        ],
+                      ),
+
+                      const SizedBox(height: 16),
+                      const Divider(),
+                      const SizedBox(height: 12),
+
+                      // Configured Subjects Table/List
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text('Configured Subjects for ${classModel.name}:',
+                              style: GoogleFonts.poppins(fontSize: 12, fontWeight: FontWeight.bold, color: AppTheme.textPrimary)),
+                          subjectsAsync.when(
+                            data: (subs) => subs.isEmpty
+                                ? OutlinedButton.icon(
+                                    onPressed: () async {
+                                      final standard = ['Mathematics', 'English', 'Hindi', 'Science', 'Social Studies'];
+                                      await dbService.setSubjectsForClass(classModel.id, standard);
+                                      ref.invalidate(classSubjectsProvider(classModel.id));
+                                    },
+                                    icon: const Icon(Icons.auto_fix_high_rounded, size: 14),
+                                    label: Text('Seed Standard Subjects', style: GoogleFonts.poppins(fontSize: 11)),
+                                    style: OutlinedButton.styleFrom(
+                                      foregroundColor: AppTheme.primaryPurple,
+                                      side: const BorderSide(color: AppTheme.primaryPurple),
+                                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                                    ),
+                                  )
+                                : const SizedBox.shrink(),
+                            loading: () => const SizedBox.shrink(),
+                            error: (_, __) => const SizedBox.shrink(),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+
+                      subjectsAsync.when(
+                        data: (subs) {
+                          if (subs.isEmpty) {
+                            return Container(
+                              width: double.infinity,
+                              padding: const EdgeInsets.all(24),
+                              decoration: BoxDecoration(
+                                color: AppTheme.bgMain,
+                                borderRadius: BorderRadius.circular(8),
+                                border: Border.all(color: AppTheme.divider),
+                              ),
+                              child: Center(
+                                child: Column(
+                                  children: [
+                                    const Icon(Icons.menu_book_outlined, size: 36, color: AppTheme.textHint),
+                                    const SizedBox(height: 8),
+                                    Text('No subjects added for this class yet.',
+                                        style: GoogleFonts.poppins(fontSize: 12, color: AppTheme.textSecondary)),
+                                    const SizedBox(height: 4),
+                                    Text('Click suggested subjects above or add custom ones.',
+                                        style: GoogleFonts.poppins(fontSize: 11, color: AppTheme.textHint)),
+                                  ],
+                                ),
+                              ),
+                            );
+                          }
+
+                          return Container(
+                            decoration: BoxDecoration(
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(color: AppTheme.divider),
+                            ),
+                            child: ListView.separated(
+                              shrinkWrap: true,
+                              physics: const NeverScrollableScrollPhysics(),
+                              itemCount: subs.length,
+                              separatorBuilder: (_, __) => const Divider(height: 1),
+                              itemBuilder: (ctx, idx) {
+                                final s = subs[idx];
+                                return ListTile(
+                                  dense: true,
+                                  leading: const Icon(Icons.menu_book_rounded, size: 18, color: AppTheme.primaryPurple),
+                                  title: Text(s.subjectName, style: GoogleFonts.poppins(fontSize: 13, fontWeight: FontWeight.w600)),
+                                  subtitle: Text(
+                                    'Default Max: ${s.defaultMaxMarks.toStringAsFixed(0)}  •  Pass: ${s.defaultPassMarks.toStringAsFixed(0)}',
+                                    style: GoogleFonts.poppins(fontSize: 11, color: AppTheme.textSecondary),
+                                  ),
+                                  trailing: IconButton(
+                                    icon: const Icon(Icons.delete_outline_rounded, size: 18, color: AppTheme.error),
+                                    tooltip: 'Remove Subject',
+                                    onPressed: () async {
+                                      await dbService.deleteClassSubject(s.id);
+                                      ref.invalidate(classSubjectsProvider(classModel.id));
+                                    },
+                                  ),
+                                );
+                              },
+                            ),
+                          );
+                        },
+                        loading: () => const LinearProgressIndicator(),
+                        error: (e, _) => Text('Error loading subjects: $e', style: GoogleFonts.poppins(color: AppTheme.error)),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              actions: [
+                ElevatedButton(
+                  onPressed: () => Navigator.pop(dialogCtx),
+                  style: ElevatedButton.styleFrom(backgroundColor: AppTheme.primaryPurple, foregroundColor: Colors.white),
+                  child: const Text('Done'),
+                ),
+              ],
+            ),
+          );
+        },
       ),
     );
   }

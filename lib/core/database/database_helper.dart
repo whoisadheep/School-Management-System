@@ -2242,6 +2242,20 @@ class DatabaseHelper {
         )
       ''');
 
+      // Class Subjects table (Subjects configured per class)
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS class_subjects (
+          id                  TEXT PRIMARY KEY,
+          class_id            TEXT NOT NULL,
+          subject_name        TEXT NOT NULL,
+          default_max_marks   REAL NOT NULL DEFAULT 100.0,
+          default_pass_marks  REAL NOT NULL DEFAULT 35.0,
+          created_at          TEXT NOT NULL DEFAULT (datetime('now')),
+          FOREIGN KEY (class_id) REFERENCES classes (id) ON DELETE CASCADE,
+          CONSTRAINT unq_class_subject UNIQUE (class_id, subject_name)
+        )
+      ''');
+
       // Ensure invoices table has newer columns
       try {
         await db.execute("ALTER TABLE invoices ADD COLUMN fee_head_id TEXT");
@@ -2274,6 +2288,34 @@ class DatabaseHelper {
             await db.execute(
               "INSERT OR IGNORE INTO sections (id, class_id, name, capacity) VALUES (?, ?, ?, 40)",
               [secId, cid, sec],
+            );
+          }
+        }
+      }
+
+      // Seed standard default subjects for existing classes if none exist in class_subjects
+      final classSubCountRes = await db.rawQuery('SELECT COUNT(*) as count FROM class_subjects');
+      final classSubCount = (classSubCountRes.first['count'] as int?) ?? 0;
+      if (classSubCount == 0) {
+        final existingClasses = await db.query('classes', columns: ['id', 'name']);
+        for (final c in existingClasses) {
+          final cid = c['id'] as String;
+          final cname = (c['name'] as String).toLowerCase();
+          
+          List<String> defaultSubs;
+          if (cname.contains('1') || cname.contains('2') || cname.contains('3') || cname.contains('4') || cname.contains('5')) {
+            // Primary classes
+            defaultSubs = ['Mathematics', 'English', 'Hindi', 'General Science', 'Social Studies'];
+          } else {
+            // Middle & Secondary classes
+            defaultSubs = ['Mathematics', 'English', 'Hindi', 'Science', 'Social Science', 'Computer Science'];
+          }
+
+          for (final subName in defaultSubs) {
+            final subId = 'csub-${cid.replaceAll(RegExp(r'[^a-zA-Z0-9]'), '')}-${subName.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '')}';
+            await db.execute(
+              "INSERT OR IGNORE INTO class_subjects (id, class_id, subject_name, default_max_marks, default_pass_marks) VALUES (?, ?, ?, 100.0, 35.0)",
+              [subId, cid, subName],
             );
           }
         }

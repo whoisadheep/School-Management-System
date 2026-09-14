@@ -1510,6 +1510,104 @@ class DatabaseService {
   }
 
   // ============================================================================
+  // CLASS SUBJECTS CRUD OPERATIONS
+  // ============================================================================
+
+  /// Get all subjects configured for a specific class ID
+  Future<List<ClassSubject>> getSubjectsForClass(String classId) async {
+    final db = await _db;
+    final results = await db.query(
+      'class_subjects',
+      where: 'class_id = ?',
+      whereArgs: [classId],
+      orderBy: 'subject_name ASC',
+    );
+    return results.map((m) => ClassSubject.fromMap(m)).toList();
+  }
+
+  /// Get subjects configured for a class by class name or id
+  Future<List<ClassSubject>> getSubjectsByClassName(String className) async {
+    final db = await _db;
+    // 1. Direct join by class name or id
+    final results = await db.rawQuery('''
+      SELECT cs.* 
+      FROM class_subjects cs
+      JOIN classes c ON cs.class_id = c.id
+      WHERE LOWER(TRIM(c.name)) = LOWER(TRIM(?)) OR c.id = ?
+      ORDER BY cs.subject_name ASC
+    ''', [className, className]);
+
+    if (results.isNotEmpty) {
+      return results.map((m) => ClassSubject.fromMap(m)).toList();
+    }
+
+    // 2. Direct lookup on class_id
+    final direct = await db.query(
+      'class_subjects',
+      where: 'class_id = ?',
+      whereArgs: [className],
+      orderBy: 'subject_name ASC',
+    );
+    if (direct.isNotEmpty) {
+      return direct.map((m) => ClassSubject.fromMap(m)).toList();
+    }
+
+    // 3. Fuzzy lookup: try matching "Class X" to "Grade X" or vice versa
+    final normalized = className.toLowerCase().replaceAll('class', '').replaceAll('grade', '').trim();
+    if (normalized.isNotEmpty) {
+      final fuzzy = await db.rawQuery('''
+        SELECT cs.* 
+        FROM class_subjects cs
+        JOIN classes c ON cs.class_id = c.id
+        WHERE REPLACE(REPLACE(LOWER(c.name), 'class', ''), 'grade', '') LIKE ?
+        ORDER BY cs.subject_name ASC
+      ''', ['%$normalized%']);
+      if (fuzzy.isNotEmpty) {
+        return fuzzy.map((m) => ClassSubject.fromMap(m)).toList();
+      }
+    }
+
+    return [];
+  }
+
+  /// Add a subject to a class
+  Future<int> addClassSubject(ClassSubject subject) async {
+    final db = await _db;
+    return await _insertLogged(db, 'class_subjects', subject.toMap(), conflictAlgorithm: ConflictAlgorithm.replace);
+  }
+
+  /// Update a class subject
+  Future<int> updateClassSubject(ClassSubject subject) async {
+    final db = await _db;
+    return await _updateLogged(db, 'class_subjects', subject.toMap(), where: 'id = ?', whereArgs: [subject.id]);
+  }
+
+  /// Delete a class subject
+  Future<int> deleteClassSubject(String id) async {
+    final db = await _db;
+    return await _deleteLogged(db, 'class_subjects', where: 'id = ?', whereArgs: [id]);
+  }
+
+  /// Set multiple subjects for a class in a transaction
+  Future<void> setSubjectsForClass(String classId, List<String> subjectNames, {double defaultMaxMarks = 100.0, double defaultPassMarks = 35.0}) async {
+    final db = await _db;
+    await db.transaction((txn) async {
+      await txn.delete('class_subjects', where: 'class_id = ?', whereArgs: [classId]);
+      for (final name in subjectNames) {
+        if (name.trim().isNotEmpty) {
+          final sub = ClassSubject.create(
+            classId: classId,
+            subjectName: name.trim(),
+            defaultMaxMarks: defaultMaxMarks,
+            defaultPassMarks: defaultPassMarks,
+          );
+          await txn.insert('class_subjects', sub.toMap(), conflictAlgorithm: ConflictAlgorithm.replace);
+        }
+      }
+    });
+  }
+
+  // ============================================================================
   // FEE HEADS & FEE STRUCTURE CONFIGURATION (PHASE 1)
   // ============================================================================
 
@@ -3146,6 +3244,16 @@ class DatabaseService {
   Future<void> insertExamSubject(ExamSubject examSubject) async {
     final db = await _db;
     await _insertLogged(db, 'exam_subjects', examSubject.toMap(), conflictAlgorithm: ConflictAlgorithm.replace);
+  }
+
+  /// Batch insert exam subjects
+  Future<void> insertExamSubjects(List<ExamSubject> subjects) async {
+    final db = await _db;
+    await db.transaction((txn) async {
+      for (final s in subjects) {
+        await txn.insert('exam_subjects', s.toMap(), conflictAlgorithm: ConflictAlgorithm.replace);
+      }
+    });
   }
 
   /// Update exam subject

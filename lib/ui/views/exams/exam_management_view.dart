@@ -299,6 +299,56 @@ class _ExamManagementViewState extends ConsumerState<ExamManagementView> with Si
                                 Row(
                                   children: [
                                     OutlinedButton.icon(
+                                      onPressed: () async {
+                                        final dbService = ref.read(databaseServiceProvider);
+                                        final classSubs = await dbService.getSubjectsByClassName(exam.className);
+                                        final currentExamSubs = await dbService.getExamSubjects(exam.id);
+                                        final currentSubNames = currentExamSubs.map((s) => s.subject.toLowerCase()).toSet();
+
+                                        final toAdd = <ExamSubject>[];
+                                        for (final cs in classSubs) {
+                                          if (!currentSubNames.contains(cs.subjectName.toLowerCase())) {
+                                            toAdd.add(ExamSubject.create(
+                                              examId: exam.id,
+                                              subject: cs.subjectName,
+                                              examDate: exam.startDate,
+                                              maxMarks: cs.defaultMaxMarks,
+                                              passingMarks: cs.defaultPassMarks,
+                                            ));
+                                          }
+                                        }
+                                        if (toAdd.isNotEmpty) {
+                                          await dbService.insertExamSubjects(toAdd);
+                                          ref.invalidate(examSubjectsProvider(exam.id));
+                                          if (context.mounted) {
+                                            ScaffoldMessenger.of(context).showSnackBar(
+                                              SnackBar(
+                                                content: Text('Auto-picked ${toAdd.length} subject(s) from ${exam.className} curriculum!'),
+                                                backgroundColor: AppTheme.primaryPurple,
+                                              ),
+                                            );
+                                          }
+                                        } else {
+                                          if (context.mounted) {
+                                            ScaffoldMessenger.of(context).showSnackBar(
+                                              SnackBar(
+                                                content: Text('All configured subjects for ${exam.className} are already in this exam.'),
+                                                backgroundColor: AppTheme.primaryPurple,
+                                              ),
+                                            );
+                                          }
+                                        }
+                                      },
+                                      icon: const Icon(Icons.sync_rounded, size: 14),
+                                      label: Text('Auto-pick from Class', style: GoogleFonts.poppins(fontSize: 11, fontWeight: FontWeight.w600)),
+                                      style: OutlinedButton.styleFrom(
+                                        foregroundColor: AppTheme.primaryPurple,
+                                        side: const BorderSide(color: AppTheme.primaryPurple),
+                                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                                      ),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    OutlinedButton.icon(
                                       onPressed: () => _showAddSubjectDialog(context, exam),
                                       icon: const Icon(Icons.add_task_rounded, size: 16),
                                       label: Text('Add Subject Paper', style: GoogleFonts.poppins(fontSize: 11, fontWeight: FontWeight.w600)),
@@ -1104,11 +1154,16 @@ class _ExamManagementViewState extends ConsumerState<ExamManagementView> with Si
   void _showAddEditExamDialog(BuildContext context, {Exam? exam}) {
     final isEdit = exam != null;
     final nameController = TextEditingController(text: exam?.name ?? '');
+    final customSubjectController = TextEditingController();
     String? selectedTypeId = exam?.examTypeId;
     String selectedClass = exam?.className ?? 'Grade 8';
     String? selectedSection = exam?.section;
     DateTime startDate = exam?.startDate ?? DateTime.now();
     DateTime endDate = exam?.endDate ?? DateTime.now().add(const Duration(days: 7));
+
+    final List<_ExamSubjectDraft> examSubjectDrafts = [];
+    bool subjectsLoaded = false;
+    String? loadedClass;
 
     showDialog(
       context: context,
@@ -1118,179 +1173,375 @@ class _ExamManagementViewState extends ConsumerState<ExamManagementView> with Si
           final classesAsync = ref.watch(classListProvider);
 
           return StatefulBuilder(
-            builder: (ctx, setDialogState) => AlertDialog(
-              backgroundColor: Colors.white,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-              title: Text(isEdit ? 'Edit Examination Event' : 'Create Examination Event', style: GoogleFonts.poppins(fontWeight: FontWeight.bold)),
-              content: SizedBox(
-                width: 440,
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text('Exam Event Name *', style: GoogleFonts.poppins(fontSize: 11, fontWeight: FontWeight.w600)),
-                    const SizedBox(height: 4),
-                    TextField(
-                      controller: nameController,
-                      decoration: InputDecoration(
-                        hintText: 'e.g. Mid-Term Examination 2024-25',
-                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-                        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                      ),
-                    ),
-                    const SizedBox(height: 12),
+            builder: (ctx, setDialogState) {
+              // Auto-load class subjects when creating a new exam
+              if (!isEdit && (!subjectsLoaded || loadedClass != selectedClass)) {
+                subjectsLoaded = true;
+                loadedClass = selectedClass;
+                Future.microtask(() async {
+                  final dbService = ref.read(databaseServiceProvider);
+                  final subs = await dbService.getSubjectsByClassName(selectedClass);
+                  setDialogState(() {
+                    examSubjectDrafts.clear();
+                    for (var i = 0; i < subs.length; i++) {
+                      final s = subs[i];
+                      final pDate = startDate.add(Duration(days: i < 7 ? i : 0));
+                      examSubjectDrafts.add(_ExamSubjectDraft(
+                        subject: s.subjectName,
+                        maxMarks: s.defaultMaxMarks,
+                        passingMarks: s.defaultPassMarks,
+                        examDate: pDate.isAfter(endDate) ? startDate : pDate,
+                      ));
+                    }
+                  });
+                });
+              }
 
-                    Text('Exam Category / Type *', style: GoogleFonts.poppins(fontSize: 11, fontWeight: FontWeight.w600)),
-                    const SizedBox(height: 4),
-                    typesAsync.when(
-                      data: (types) {
-                        if (selectedTypeId == null && types.isNotEmpty) {
-                          selectedTypeId = types.first.id;
-                        }
-
-                        return DropdownButtonFormField<String>(
-                          value: selectedTypeId,
+              return AlertDialog(
+                backgroundColor: Colors.white,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                title: Text(isEdit ? 'Edit Examination Event' : 'Create Examination Event', style: GoogleFonts.poppins(fontWeight: FontWeight.bold)),
+                content: SizedBox(
+                  width: 520,
+                  child: SingleChildScrollView(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('Exam Event Name *', style: GoogleFonts.poppins(fontSize: 11, fontWeight: FontWeight.w600)),
+                        const SizedBox(height: 4),
+                        TextField(
+                          controller: nameController,
                           decoration: InputDecoration(
+                            hintText: 'e.g. Mid-Term Examination 2024-25',
                             border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
                             contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                           ),
-                          items: types
-                              .map((t) => DropdownMenuItem(
-                                    value: t.id,
-                                    child: Text('${t.name} (${t.weightagePercent}% weightage)', style: GoogleFonts.poppins(fontSize: 12)),
-                                  ))
-                              .toList(),
-                          onChanged: (val) => setDialogState(() => selectedTypeId = val),
-                        );
-                      },
-                      loading: () => const LinearProgressIndicator(),
-                      error: (e, _) => Text('Error: $e'),
-                    ),
-                    const SizedBox(height: 12),
+                        ),
+                        const SizedBox(height: 12),
 
-                    Row(
-                      children: [
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text('Class *', style: GoogleFonts.poppins(fontSize: 11, fontWeight: FontWeight.w600)),
-                              const SizedBox(height: 4),
-                              classesAsync.when(
-                                data: (classes) {
-                                  return DropdownButtonFormField<String>(
-                                    value: classes.any((c) => c.name == selectedClass) ? selectedClass : (classes.isNotEmpty ? classes.first.name : 'Grade 8'),
+                        Text('Exam Category / Type *', style: GoogleFonts.poppins(fontSize: 11, fontWeight: FontWeight.w600)),
+                        const SizedBox(height: 4),
+                        typesAsync.when(
+                          data: (types) {
+                            if (selectedTypeId == null && types.isNotEmpty) {
+                              selectedTypeId = types.first.id;
+                            }
+
+                            return DropdownButtonFormField<String>(
+                              value: selectedTypeId,
+                              decoration: InputDecoration(
+                                border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                                contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                              ),
+                              items: types
+                                  .map((t) => DropdownMenuItem(
+                                        value: t.id,
+                                        child: Text('${t.name} (${t.weightagePercent}% weightage)', style: GoogleFonts.poppins(fontSize: 12)),
+                                      ))
+                                  .toList(),
+                              onChanged: (val) => setDialogState(() => selectedTypeId = val),
+                            );
+                          },
+                          loading: () => const LinearProgressIndicator(),
+                          error: (e, _) => Text('Error: $e'),
+                        ),
+                        const SizedBox(height: 12),
+
+                        Row(
+                          children: [
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text('Class *', style: GoogleFonts.poppins(fontSize: 11, fontWeight: FontWeight.w600)),
+                                  const SizedBox(height: 4),
+                                  classesAsync.when(
+                                    data: (classes) {
+                                      if (!classes.any((c) => c.name == selectedClass) && classes.isNotEmpty) {
+                                        selectedClass = classes.first.name;
+                                      }
+                                      return DropdownButtonFormField<String>(
+                                        value: selectedClass,
+                                        decoration: InputDecoration(
+                                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                                          contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                                        ),
+                                        items: classes.map((c) => DropdownMenuItem(value: c.name, child: Text(c.name, style: GoogleFonts.poppins(fontSize: 12)))).toList(),
+                                        onChanged: (val) {
+                                          if (val != null && val != selectedClass) {
+                                            setDialogState(() {
+                                              selectedClass = val;
+                                              loadedClass = null; // Triggers reloading subjects for the new class
+                                            });
+                                          }
+                                        },
+                                      );
+                                    },
+                                    loading: () => const LinearProgressIndicator(),
+                                    error: (e, _) => Text('Error: $e'),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text('Section (Optional)', style: GoogleFonts.poppins(fontSize: 11, fontWeight: FontWeight.w600)),
+                                  const SizedBox(height: 4),
+                                  DropdownButtonFormField<String?>(
+                                    value: selectedSection,
                                     decoration: InputDecoration(
                                       border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
                                       contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                                     ),
-                                    items: classes.map((c) => DropdownMenuItem(value: c.name, child: Text(c.name, style: GoogleFonts.poppins(fontSize: 12)))).toList(),
-                                    onChanged: (val) {
-                                      if (val != null) setDialogState(() => selectedClass = val);
-                                    },
+                                    items: const [
+                                      DropdownMenuItem(value: null, child: Text('All Sections')),
+                                      DropdownMenuItem(value: 'A', child: Text('Section A')),
+                                      DropdownMenuItem(value: 'B', child: Text('Section B')),
+                                      DropdownMenuItem(value: 'C', child: Text('Section C')),
+                                    ],
+                                    onChanged: (val) => setDialogState(() => selectedSection = val),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 12),
+
+                        Row(
+                          children: [
+                            Expanded(
+                              child: OutlinedButton.icon(
+                                onPressed: () async {
+                                  final d = await showDatePicker(context: context, initialDate: startDate, firstDate: DateTime(2020), lastDate: DateTime(2030));
+                                  if (d != null) setDialogState(() => startDate = d);
+                                },
+                                icon: const Icon(Icons.calendar_month_rounded, size: 16),
+                                label: Text('Start: ${_dateFormat.format(startDate)}', style: GoogleFonts.poppins(fontSize: 11)),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: OutlinedButton.icon(
+                                onPressed: () async {
+                                  final d = await showDatePicker(context: context, initialDate: endDate, firstDate: DateTime(2020), lastDate: DateTime(2030));
+                                  if (d != null) setDialogState(() => endDate = d);
+                                },
+                                icon: const Icon(Icons.event_rounded, size: 16),
+                                label: Text('End: ${_dateFormat.format(endDate)}', style: GoogleFonts.poppins(fontSize: 11)),
+                              ),
+                            ),
+                          ],
+                        ),
+
+                        if (!isEdit) ...[
+                          const SizedBox(height: 16),
+                          const Divider(height: 1),
+                          const SizedBox(height: 12),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Row(
+                                children: [
+                                  const Icon(Icons.menu_book_rounded, size: 16, color: AppTheme.primaryPurple),
+                                  const SizedBox(width: 6),
+                                  Text(
+                                    'Exam Subject Papers (${examSubjectDrafts.length})',
+                                    style: GoogleFonts.poppins(fontSize: 12, fontWeight: FontWeight.bold),
+                                  ),
+                                ],
+                              ),
+                              Text(
+                                'Auto-picked for $selectedClass',
+                                style: GoogleFonts.poppins(fontSize: 11, color: AppTheme.primaryPurple, fontStyle: FontStyle.italic),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            'The subjects configured for $selectedClass are auto-loaded below. You can remove any subject you do not want in this exam, or add custom ones.',
+                            style: GoogleFonts.poppins(fontSize: 10, color: AppTheme.textSecondary),
+                          ),
+                          const SizedBox(height: 8),
+
+                          if (examSubjectDrafts.isEmpty)
+                            Container(
+                              width: double.infinity,
+                              padding: const EdgeInsets.all(12),
+                              decoration: BoxDecoration(
+                                color: AppTheme.bgMain,
+                                borderRadius: BorderRadius.circular(8),
+                                border: Border.all(color: AppTheme.divider),
+                              ),
+                              child: Text(
+                                'No subjects configured for $selectedClass in Class Setup. You can add subjects manually below.',
+                                style: GoogleFonts.poppins(fontSize: 11, color: AppTheme.textSecondary, fontStyle: FontStyle.italic),
+                              ),
+                            )
+                          else
+                            Container(
+                              constraints: const BoxConstraints(maxHeight: 180),
+                              decoration: BoxDecoration(
+                                color: AppTheme.bgMain,
+                                borderRadius: BorderRadius.circular(8),
+                                border: Border.all(color: AppTheme.divider),
+                              ),
+                              child: ListView.separated(
+                                shrinkWrap: true,
+                                itemCount: examSubjectDrafts.length,
+                                separatorBuilder: (_, __) => const Divider(height: 1),
+                                itemBuilder: (ctx, idx) {
+                                  final draft = examSubjectDrafts[idx];
+                                  return Padding(
+                                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                                    child: Row(
+                                      children: [
+                                        const Icon(Icons.auto_stories_rounded, size: 14, color: AppTheme.primaryPurple),
+                                        const SizedBox(width: 8),
+                                        Expanded(
+                                          child: Text(
+                                            draft.subject,
+                                            style: GoogleFonts.poppins(fontSize: 12, fontWeight: FontWeight.w600),
+                                          ),
+                                        ),
+                                        Container(
+                                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                          decoration: BoxDecoration(
+                                            color: Colors.white,
+                                            borderRadius: BorderRadius.circular(4),
+                                            border: Border.all(color: AppTheme.divider),
+                                          ),
+                                          child: Text(
+                                            'Max: ${draft.maxMarks.toStringAsFixed(0)} | Pass: ${draft.passingMarks.toStringAsFixed(0)}',
+                                            style: GoogleFonts.poppins(fontSize: 10, color: AppTheme.textSecondary),
+                                          ),
+                                        ),
+                                        const SizedBox(width: 8),
+                                        Tooltip(
+                                          message: 'Remove subject from this exam',
+                                          child: InkWell(
+                                            onTap: () {
+                                              setDialogState(() {
+                                                examSubjectDrafts.removeAt(idx);
+                                              });
+                                            },
+                                            borderRadius: BorderRadius.circular(12),
+                                            child: const Padding(
+                                              padding: EdgeInsets.all(4.0),
+                                              child: Icon(Icons.close_rounded, size: 16, color: AppTheme.error),
+                                            ),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
                                   );
                                 },
-                                loading: () => const LinearProgressIndicator(),
-                                error: (e, _) => Text('Error: $e'),
                               ),
-                            ],
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
+                            ),
+                          const SizedBox(height: 8),
+
+                          // Add extra custom subject row
+                          Row(
                             children: [
-                              Text('Section (Optional)', style: GoogleFonts.poppins(fontSize: 11, fontWeight: FontWeight.w600)),
-                              const SizedBox(height: 4),
-                              DropdownButtonFormField<String?>(
-                                value: selectedSection,
-                                decoration: InputDecoration(
-                                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-                                  contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                              Expanded(
+                                child: TextField(
+                                  controller: customSubjectController,
+                                  style: GoogleFonts.poppins(fontSize: 11),
+                                  decoration: InputDecoration(
+                                    hintText: 'Add another subject paper (e.g. Sanskrit)',
+                                    isDense: true,
+                                    contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(6)),
+                                  ),
                                 ),
-                                items: const [
-                                  DropdownMenuItem(value: null, child: Text('All Sections')),
-                                  DropdownMenuItem(value: 'A', child: Text('Section A')),
-                                  DropdownMenuItem(value: 'B', child: Text('Section B')),
-                                  DropdownMenuItem(value: 'C', child: Text('Section C')),
-                                ],
-                                onChanged: (val) => setDialogState(() => selectedSection = val),
+                              ),
+                              const SizedBox(width: 8),
+                              ElevatedButton.icon(
+                                onPressed: () {
+                                  final sName = customSubjectController.text.trim();
+                                  if (sName.isEmpty) return;
+                                  setDialogState(() {
+                                    examSubjectDrafts.add(_ExamSubjectDraft(
+                                      subject: sName,
+                                      maxMarks: 100.0,
+                                      passingMarks: 35.0,
+                                      examDate: startDate,
+                                    ));
+                                    customSubjectController.clear();
+                                  });
+                                },
+                                icon: const Icon(Icons.add, size: 14),
+                                label: Text('Add Paper', style: GoogleFonts.poppins(fontSize: 11, fontWeight: FontWeight.bold)),
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: AppTheme.primaryPurple,
+                                  foregroundColor: Colors.white,
+                                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                                ),
                               ),
                             ],
                           ),
-                        ),
+                        ],
                       ],
                     ),
-                    const SizedBox(height: 12),
-
-                    Row(
-                      children: [
-                        Expanded(
-                          child: OutlinedButton.icon(
-                            onPressed: () async {
-                              final d = await showDatePicker(context: context, initialDate: startDate, firstDate: DateTime(2020), lastDate: DateTime(2030));
-                              if (d != null) setDialogState(() => startDate = d);
-                            },
-                            icon: const Icon(Icons.calendar_month_rounded, size: 16),
-                            label: Text('Start: ${_dateFormat.format(startDate)}', style: GoogleFonts.poppins(fontSize: 11)),
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: OutlinedButton.icon(
-                            onPressed: () async {
-                              final d = await showDatePicker(context: context, initialDate: endDate, firstDate: DateTime(2020), lastDate: DateTime(2030));
-                              if (d != null) setDialogState(() => endDate = d);
-                            },
-                            icon: const Icon(Icons.event_rounded, size: 16),
-                            label: Text('End: ${_dateFormat.format(endDate)}', style: GoogleFonts.poppins(fontSize: 11)),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
+                  ),
                 ),
-              ),
-              actions: [
-                TextButton(onPressed: () => Navigator.of(ctx).pop(), child: const Text('Cancel')),
-                ElevatedButton(
-                  onPressed: () async {
-                    if (nameController.text.trim().isEmpty || selectedTypeId == null) return;
+                actions: [
+                  TextButton(onPressed: () => Navigator.of(ctx).pop(), child: const Text('Cancel')),
+                  ElevatedButton(
+                    onPressed: () async {
+                      if (nameController.text.trim().isEmpty || selectedTypeId == null) return;
 
-                    final dbService = ref.read(databaseServiceProvider);
-                    if (isEdit) {
-                      final updated = exam.copyWith(
-                        name: nameController.text.trim(),
-                        examTypeId: selectedTypeId,
-                        className: selectedClass,
-                        section: selectedSection,
-                        startDate: startDate,
-                        endDate: endDate,
-                      );
-                      if (!PermissionHelper.requireAdminRole(context, ref, RiskyAction.updateRecord)) return;
-                      await dbService.updateExam(updated);
-                    } else {
-                      final newExam = Exam.create(
-                        name: nameController.text.trim(),
-                        examTypeId: selectedTypeId!,
-                        className: selectedClass,
-                        section: selectedSection,
-                        academicYear: _selectedAcademicYear,
-                        startDate: startDate,
-                        endDate: endDate,
-                      );
-                      await dbService.insertExam(newExam);
-                    }
+                      final dbService = ref.read(databaseServiceProvider);
+                      if (isEdit) {
+                        final updated = exam.copyWith(
+                          name: nameController.text.trim(),
+                          examTypeId: selectedTypeId,
+                          className: selectedClass,
+                          section: selectedSection,
+                          startDate: startDate,
+                          endDate: endDate,
+                        );
+                        if (!PermissionHelper.requireAdminRole(context, ref, RiskyAction.updateRecord)) return;
+                        await dbService.updateExam(updated);
+                      } else {
+                        final newExam = Exam.create(
+                          name: nameController.text.trim(),
+                          examTypeId: selectedTypeId!,
+                          className: selectedClass,
+                          section: selectedSection,
+                          academicYear: _selectedAcademicYear,
+                          startDate: startDate,
+                          endDate: endDate,
+                        );
+                        await dbService.insertExam(newExam);
 
-                    ref.invalidate(examsProvider);
-                    if (ctx.mounted) Navigator.of(ctx).pop();
-                  },
-                  style: ElevatedButton.styleFrom(backgroundColor: AppTheme.primaryPurple, foregroundColor: Colors.white),
-                  child: Text(isEdit ? 'Save Exam' : 'Create Exam', style: GoogleFonts.poppins(fontWeight: FontWeight.bold)),
-                ),
-              ],
-            ),
+                        // Batch insert auto-picked subject papers for this exam
+                        if (examSubjectDrafts.isNotEmpty) {
+                          final subjectsToInsert = examSubjectDrafts.map((d) => ExamSubject.create(
+                            examId: newExam.id,
+                            subject: d.subject,
+                            examDate: d.examDate,
+                            maxMarks: d.maxMarks,
+                            passingMarks: d.passingMarks,
+                          )).toList();
+                          await dbService.insertExamSubjects(subjectsToInsert);
+                          ref.invalidate(examSubjectsProvider(newExam.id));
+                        }
+                      }
+
+                      ref.invalidate(examsProvider);
+                      if (ctx.mounted) Navigator.of(ctx).pop();
+                    },
+                    style: ElevatedButton.styleFrom(backgroundColor: AppTheme.primaryPurple, foregroundColor: Colors.white),
+                    child: Text(isEdit ? 'Save Exam' : 'Create Exam', style: GoogleFonts.poppins(fontWeight: FontWeight.bold)),
+                  ),
+                ],
+              );
+            },
           );
         },
       ),
@@ -2139,4 +2390,18 @@ class _MarksEntryRowItemState extends State<_MarksEntryRowItem> {
       ),
     );
   }
+}
+
+class _ExamSubjectDraft {
+  String subject;
+  double maxMarks;
+  double passingMarks;
+  DateTime examDate;
+
+  _ExamSubjectDraft({
+    required this.subject,
+    required this.maxMarks,
+    required this.passingMarks,
+    required this.examDate,
+  });
 }

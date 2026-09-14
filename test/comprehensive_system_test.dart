@@ -159,5 +159,63 @@ void main() {
       expect(isStudentPassed(85.0, true), isFalse);
       expect(isStudentPassed(null, false), isFalse);
     });
+
+    test('ClassSubject model serialization round-trip', () {
+      final now = DateTime(2026, 9, 14, 12, 0, 0);
+      final cs = ClassSubject(
+        id: 'csub-cls1-math',
+        classId: 'cls-grade1',
+        subjectName: 'Mathematics',
+        defaultMaxMarks: 100.0,
+        defaultPassMarks: 40.0,
+        createdAt: now,
+      );
+
+      final map = cs.toMap();
+      expect(map['id'], 'csub-cls1-math');
+      expect(map['class_id'], 'cls-grade1');
+      expect(map['subject_name'], 'Mathematics');
+      expect(map['default_max_marks'], 100.0);
+      expect(map['default_pass_marks'], 40.0);
+
+      final restored = ClassSubject.fromMap(map);
+      expect(restored.id, cs.id);
+      expect(restored.classId, cs.classId);
+      expect(restored.subjectName, cs.subjectName);
+      expect(restored.defaultMaxMarks, 100.0);
+      expect(restored.defaultPassMarks, 40.0);
+    });
+
+    test('Class subject to exam auto-pick and flexible removal logic', () {
+      // Setup subjects for Class 1 and Class 2
+      final class1Subjects = [
+        ClassSubject.create(classId: 'cls-1', subjectName: 'Mathematics'),
+        ClassSubject.create(classId: 'cls-1', subjectName: 'English'),
+        ClassSubject.create(classId: 'cls-1', subjectName: 'Hindi'),
+        ClassSubject.create(classId: 'cls-1', subjectName: 'Science'),
+      ];
+
+      final class2Subjects = [
+        ClassSubject.create(classId: 'cls-2', subjectName: 'Mathematics'),
+        ClassSubject.create(classId: 'cls-2', subjectName: 'English'),
+        ClassSubject.create(classId: 'cls-2', subjectName: 'Environmental Studies'),
+        ClassSubject.create(classId: 'cls-2', subjectName: 'Drawing'),
+      ];
+
+      // Auto-pick for Class 1 exam
+      final exam1Drafts = List<ClassSubject>.from(class1Subjects);
+      expect(exam1Drafts.length, 4);
+      expect(exam1Drafts.map((s) => s.subjectName), containsAll(['Mathematics', 'English', 'Hindi', 'Science']));
+
+      // User chooses to remove 'Hindi' from this specific Class 1 exam
+      exam1Drafts.removeWhere((s) => s.subjectName == 'Hindi');
+      expect(exam1Drafts.length, 3);
+      expect(exam1Drafts.any((s) => s.subjectName == 'Hindi'), isFalse);
+
+      // Verify Class 2 has distinct subjects
+      final exam2Drafts = List<ClassSubject>.from(class2Subjects);
+      expect(exam2Drafts.any((s) => s.subjectName == 'Environmental Studies'), isTrue);
+      expect(exam1Drafts.any((s) => s.subjectName == 'Environmental Studies'), isFalse);
+    });
   });
 }
