@@ -123,7 +123,7 @@ class _LicenseActivationViewState extends ConsumerState<LicenseActivationView> {
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  const Text('YOUR PC HARDWARE ID (Send to Sai Infotek)', style: TextStyle(color: Color(0xFF64748B), fontSize: 10, fontWeight: FontWeight.bold)),
+                                  const Text('YOUR PC HARDWARE ID (Send to Kishan - 9839994285)', style: TextStyle(color: Color(0xFF64748B), fontSize: 10, fontWeight: FontWeight.bold)),
                                   const SizedBox(height: 2),
                                   Text(
                                     hwId,
@@ -281,6 +281,18 @@ class _LicenseActivationViewState extends ConsumerState<LicenseActivationView> {
                       ),
                     ),
                   ],
+                ),
+
+                const SizedBox(height: 18),
+                const Center(
+                  child: Text(
+                    'Developed by Kishan  •  Contact: 9839994285',
+                    style: TextStyle(
+                      color: Color(0xFF94A3B8),
+                      fontSize: 11.5,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
                 ),
               ],
             ),

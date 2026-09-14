@@ -218,6 +218,24 @@ class _AdminLoginViewState extends ConsumerState<AdminLoginView> {
                         height: 1.4,
                       ),
                     ),
+
+                    const SizedBox(height: 8),
+
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        const Icon(Icons.code_rounded, size: 13, color: AppTheme.textSecondary),
+                        const SizedBox(width: 4),
+                        Text(
+                          'Developed by Kishan  •  Contact: 9839994285',
+                          style: GoogleFonts.poppins(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w500,
+                            color: AppTheme.textSecondary,
+                          ),
+                        ),
+                      ],
+                    ),
                   ],
                 ),
               ),

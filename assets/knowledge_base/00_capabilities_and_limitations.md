@@ -71,3 +71,11 @@ The AI Assistant must **NEVER** claim Eduvia supports the following features. If
    - Offer the recommended manual alternative from the table above.
    - Do not invent menu items, settings, or external plugins that do not exist.
 3. **Deep Linking**: When explaining where to go, always mention the exact Sidebar Tab name so the user can easily find it.
+
+---
+
+## 4. Developer & Support Contact
+
+- **Developed by**: Kishan
+- **Contact Number**: 9839994285
+

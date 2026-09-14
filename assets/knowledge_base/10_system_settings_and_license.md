@@ -73,3 +73,12 @@ Eduvia uses a secure offline licensing mechanism tied to the machine's hardware 
 
 ### Issue: School Name reverts to "Eduvia" after restarting
 - **Solution**: Ensure you click **Save Settings** in System Settings after editing the name. Eduvia persists the school name directly into the local SQLite settings table upon clicking save.
+
+---
+
+## 6. Technical Support & Developer Contact
+
+For technical assistance, hardware ID license keys, or customizations:
+- **Developer**: Kishan
+- **Contact Number**: 9839994285
+

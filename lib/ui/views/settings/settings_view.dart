@@ -313,16 +313,31 @@ class _SettingsViewState extends ConsumerState<SettingsView>
                 color: AppTheme.bgMain,
                 borderRadius: BorderRadius.circular(10),
               ),
-              child: Row(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
                 children: [
-                  Icon(Icons.verified_rounded,
-                      size: 16, color: AppTheme.success),
-                  const SizedBox(width: 8),
+                  Row(
+                    children: [
+                      Icon(Icons.verified_rounded,
+                          size: 16, color: AppTheme.success),
+                      const SizedBox(width: 8),
+                      Text(
+                        'v1.0.0 — Licensed',
+                        style: GoogleFonts.poppins(
+                          color: AppTheme.textSecondary,
+                          fontSize: 11,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 6),
                   Text(
-                    'v1.0.0 — Licensed',
+                    'Dev: Kishan • 9839994285',
                     style: GoogleFonts.poppins(
-                      color: AppTheme.textSecondary,
-                      fontSize: 11,
+                      color: AppTheme.textSecondary.withValues(alpha: 0.85),
+                      fontSize: 10,
                       fontWeight: FontWeight.w500,
                     ),
                   ),
@@ -1080,6 +1095,57 @@ class _SettingsViewState extends ConsumerState<SettingsView>
                   color: AppTheme.textSecondary,
                 ),
                 textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 18),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                decoration: BoxDecoration(
+                  color: AppTheme.primaryPurple.withValues(alpha: 0.05),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: AppTheme.primaryPurple.withValues(alpha: 0.15)),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: AppTheme.primaryPurple.withValues(alpha: 0.1),
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Icon(Icons.person_rounded, size: 18, color: AppTheme.primaryPurple),
+                    ),
+                    const SizedBox(width: 12),
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Developed by Kishan',
+                          style: GoogleFonts.poppins(
+                            fontSize: 13,
+                            fontWeight: FontWeight.bold,
+                            color: AppTheme.primaryPurple,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Row(
+                          children: [
+                            const Icon(Icons.phone_outlined, size: 13, color: AppTheme.textSecondary),
+                            const SizedBox(width: 4),
+                            Text(
+                              'Contact: 9839994285',
+                              style: GoogleFonts.poppins(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w500,
+                                color: AppTheme.textSecondary,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
               ),
             ],
           ),

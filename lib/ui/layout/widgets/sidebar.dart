@@ -136,8 +136,42 @@ class DesktopSidebar extends ConsumerWidget {
                         Text('Keyboard Shortcuts:', style: GoogleFonts.poppins(fontWeight: FontWeight.bold, fontSize: 13)),
                         const SizedBox(height: 4),
                         Text('• Ctrl + 1: Dashboard\n• Ctrl + 2: Fee Collection\n• Ctrl + 3: Admissions\n• Ctrl + 4: Students Directory\n• Ctrl + 5: Operational Expenses\n• Ctrl + 6: System Settings', style: GoogleFonts.poppins(fontSize: 12, height: 1.5)),
-                        const SizedBox(height: 12),
-                        Text('For assistance, contact: support@saiinfotek.com', style: GoogleFonts.poppins(fontSize: 12, color: Colors.grey.shade700)),
+                        const SizedBox(height: 14),
+                        Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF4C3BCF).withValues(alpha: 0.08),
+                            borderRadius: BorderRadius.circular(10),
+                            border: Border.all(color: const Color(0xFF4C3BCF).withValues(alpha: 0.2)),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                children: [
+                                  const Icon(Icons.code_rounded, size: 15, color: Color(0xFF4C3BCF)),
+                                  const SizedBox(width: 6),
+                                  Text(
+                                    'Developed by Kishan',
+                                    style: GoogleFonts.poppins(fontSize: 12.5, fontWeight: FontWeight.bold, color: const Color(0xFF4C3BCF)),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 4),
+                              Row(
+                                children: [
+                                  const Icon(Icons.phone_rounded, size: 14, color: Colors.black87),
+                                  const SizedBox(width: 6),
+                                  Text(
+                                    'Contact: 9839994285',
+                                    style: GoogleFonts.poppins(fontSize: 12, fontWeight: FontWeight.w600, color: Colors.black87),
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ),
+                        ),
                       ],
                     ),
                     actions: [
