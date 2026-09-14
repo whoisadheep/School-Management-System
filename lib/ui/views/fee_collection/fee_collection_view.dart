@@ -275,7 +275,7 @@ class _FeeCollectionViewState extends ConsumerState<FeeCollectionView> with Sing
             children: [
               // ── 1. STUDENT LOOKUP SECTION ──
               _buildCardContainer(
-                title: '1. Select Student (Search by ID, Name, or Roll No)',
+                title: '1. Select Student (Search by Adm No, Name, or Roll No)',
                 icon: Icons.person_search_rounded,
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -283,12 +283,13 @@ class _FeeCollectionViewState extends ConsumerState<FeeCollectionView> with Sing
                     studentsAsync.when(
                       data: (students) {
                         return Autocomplete<Student>(
-                          displayStringForOption: (s) => '${s.name} (${s.gradeLevel} - Roll: ${s.rollNumber ?? "N/A"}) [ID: ${s.id.substring(0, 8)}]',
+                          displayStringForOption: (s) => '${s.name} (${s.gradeLevel} - Adm No: ${s.admissionNumber ?? "N/A"}) [ID: ${s.id.substring(0, 8)}]',
                           optionsBuilder: (textEditingValue) {
                             if (textEditingValue.text.isEmpty) return const Iterable<Student>.empty();
                             final q = textEditingValue.text.toLowerCase().trim();
                             return students.where((s) {
                               return s.name.toLowerCase().contains(q) ||
+                                  (s.admissionNumber != null && s.admissionNumber!.toLowerCase().contains(q)) ||
                                   (s.rollNumber != null && s.rollNumber!.toLowerCase().contains(q)) ||
                                   (s.guardianPhone != null && s.guardianPhone!.contains(q)) ||
                                   s.id.toLowerCase().contains(q) ||
@@ -306,6 +307,7 @@ class _FeeCollectionViewState extends ConsumerState<FeeCollectionView> with Sing
                                 if (q.isNotEmpty) {
                                   final matches = students.where((s) =>
                                     s.name.toLowerCase().contains(q) ||
+                                    (s.admissionNumber != null && s.admissionNumber!.toLowerCase().contains(q)) ||
                                     (s.rollNumber != null && s.rollNumber!.toLowerCase().contains(q)) ||
                                     s.id.toLowerCase().contains(q)
                                   ).toList();
@@ -316,7 +318,7 @@ class _FeeCollectionViewState extends ConsumerState<FeeCollectionView> with Sing
                                 }
                               },
                               decoration: InputDecoration(
-                                hintText: 'Type Student Name, Admission Roll No, or ID and press Enter...',
+                                hintText: 'Type Student Name, Admission No, or ID and press Enter...',
                                 hintStyle: GoogleFonts.poppins(fontSize: 13, color: AppTheme.textHint),
                                 prefixIcon: const Icon(Icons.search_rounded, color: AppTheme.primaryPurple),
                                 suffixIcon: _selectedStudent != null
@@ -367,7 +369,7 @@ class _FeeCollectionViewState extends ConsumerState<FeeCollectionView> with Sing
                                           ),
                                         ),
                                         title: Text(s.name, style: GoogleFonts.poppins(fontSize: 13, fontWeight: FontWeight.bold, color: AppTheme.textPrimary)),
-                                        subtitle: Text('Class: ${s.gradeLevel} ${s.section ?? ""} • Roll: ${s.rollNumber ?? "N/A"} • ID: ${s.id.substring(0, 8)}',
+                                        subtitle: Text('Class: ${s.gradeLevel} ${s.section ?? ""} • Adm No: ${s.admissionNumber ?? "N/A"} • ID: ${s.id.substring(0, 8)}',
                                             style: GoogleFonts.poppins(fontSize: 11, color: AppTheme.textSecondary)),
                                         trailing: const Icon(Icons.arrow_forward_ios_rounded, size: 14, color: AppTheme.textHint),
                                         onTap: () => onSelected(s),
@@ -470,7 +472,7 @@ class _FeeCollectionViewState extends ConsumerState<FeeCollectionView> with Sing
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  'Roll No: ${student.rollNumber ?? "N/A"}  •  Guardian Phone: ${student.guardianPhone ?? "N/A"}  •  ID: ${student.id.substring(0, 8)}',
+                  'Adm No: ${student.admissionNumber ?? "N/A"}  •  Guardian Phone: ${student.guardianPhone ?? "N/A"}  •  ID: ${student.id.substring(0, 8)}',
                   style: GoogleFonts.poppins(fontSize: 11.5, color: AppTheme.textSecondary),
                 ),
                 const SizedBox(height: 6),
