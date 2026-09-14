@@ -48,4 +48,5 @@ flutter:
   uses-material-design: true
   assets:
     - assets/icons/
+    - assets/knowledge_base/
     - .env
