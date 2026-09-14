@@ -1,7 +1,7 @@
 {
-  "latest_version": "1.0.15",
-  "download_url": "https://github.com/whoisadheep/School-Management-System/releases/download/v1.0.15/Eduvia-Installer.exe",
+  "latest_version": "1.0.16",
+  "download_url": "https://github.com/whoisadheep/School-Management-System/releases/download/v1.0.16/Eduvia-Installer.exe",
   "sha256": "",
-  "changelog": "Fixed marks entry roster text field reversal bug where typing digits jumped cursor to start, preventing reverse input (e.g. 24 becoming 42). Added over-max marks validation warning.",
+  "changelog": "Fixed school name and motto persistence bug where app restart reverted customized school names back to Eduvia. Customized profile settings now persist permanently.",
   "mandatory_update": false
 }

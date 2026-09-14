@@ -1485,19 +1485,19 @@ class _SettingsViewState extends ConsumerState<SettingsView>
   Future<void> _saveAllSettings() async {
     setState(() => _isSaving = true);
     try {
-      await _settingsService.setReceiptExportPath(_receiptPathController.text);
+      await _settingsService.setReceiptExportPath(_receiptPathController.text.trim());
       await _settingsService.setSetting(
-          'backup_export_path', _backupPathController.text);
+          'backup_export_path', _backupPathController.text.trim());
       await _settingsService.setSetting(
-          'school_name', _schoolNameController.text);
+          'school_name', _schoolNameController.text.trim());
       await _settingsService.setSetting(
-          'school_address', _schoolAddressController.text);
+          'school_address', _schoolAddressController.text.trim());
       await _settingsService.setSetting(
-          'school_contact', _schoolContactController.text);
+          'school_contact', _schoolContactController.text.trim());
       await _settingsService.setSetting(
-          'school_motto', _schoolMottoController.text);
+          'school_motto', _schoolMottoController.text.trim());
       await _settingsService.setSetting(
-          'school_principal', _schoolPrincipalController.text);
+          'school_principal', _schoolPrincipalController.text.trim());
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(

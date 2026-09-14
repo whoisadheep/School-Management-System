@@ -2799,13 +2799,13 @@ class DatabaseHelper {
         await db.execute('ALTER TABLE admin_users ADD COLUMN security_answer_hash TEXT');
       } catch (_) {}
 
-      // 8. Default App Settings
+      // 8. Default App Settings (only insert if key does not exist yet)
       await db.execute('''
-        INSERT OR REPLACE INTO app_settings (key, value)
+        INSERT OR IGNORE INTO app_settings (key, value)
         VALUES ('school_name', 'Eduvia')
       ''');
       await db.execute('''
-        INSERT OR REPLACE INTO app_settings (key, value)
+        INSERT OR IGNORE INTO app_settings (key, value)
         VALUES ('school_motto', 'Inspiring Excellence, Building Futures')
       ''');
     } catch (e) {
