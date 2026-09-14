@@ -35,15 +35,14 @@ class _AssistantViewState extends ConsumerState<AssistantView> with TickerProvid
   
   final List<AssistantMessage> _messages = [
     AssistantMessage(
-      text: '👋 Hello! I am your **Eduvia AI Assistant**.\n\n'
-          'I am connected directly to your school database and Google Gemini AI. '
-          'You can ask me about students, fees, pending balances, teachers, attendance, transport routes, and exams!',
+      text: '👋 Hello! I am your **Eduvia Support Agent**.\n\n'
+          'I am here to help you navigate the software, guide you through tasks, and look up school information.\n\n'
+          'How can I help you today?',
       isUser: false,
     ),
   ];
   bool _isProcessing = false;
   bool? _isAiOnline;
-  String _activeModel = 'gemini-flash-latest';
 
   @override
   void initState() {
@@ -67,9 +66,6 @@ class _AssistantViewState extends ConsumerState<AssistantView> with TickerProvid
       if (mounted) {
         setState(() {
           _isAiOnline = result['success'] == true;
-          if (result['model'] != null) {
-            _activeModel = result['model'].toString();
-          }
         });
       }
     } catch (_) {
@@ -136,172 +132,6 @@ class _AssistantViewState extends ConsumerState<AssistantView> with TickerProvid
     });
   }
 
-  void _showAiSettingsDialog() async {
-    final service = ref.read(assistantServiceProvider);
-    final currentKey = await service.getActiveApiKey();
-    final keyController = TextEditingController(text: currentKey);
-    bool testing = false;
-    String? testResultMsg;
-    bool? testSuccess;
-
-    if (!mounted) return;
-
-    showDialog(
-      context: context,
-      builder: (dialogCtx) => StatefulBuilder(
-        builder: (context, setDialogState) {
-          return AlertDialog(
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
-            title: Row(
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(8),
-                  decoration: BoxDecoration(
-                    color: AppTheme.primarySoft,
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: const Icon(Icons.psychology, color: AppTheme.primaryPurple, size: 22),
-                ),
-                const SizedBox(width: 12),
-                Text(
-                  'AI Engine & API Key',
-                  style: GoogleFonts.poppins(fontWeight: FontWeight.w600, fontSize: 18),
-                ),
-              ],
-            ),
-            content: SizedBox(
-              width: 520,
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Google Gemini API Key',
-                    style: GoogleFonts.poppins(fontWeight: FontWeight.w500, fontSize: 13, color: AppTheme.textPrimary),
-                  ),
-                  const SizedBox(height: 6),
-                  TextField(
-                    controller: keyController,
-                    obscureText: true,
-                    style: GoogleFonts.sourceCodePro(fontSize: 13),
-                    decoration: InputDecoration(
-                      hintText: 'Enter your Gemini API key (AQ... or AIza...)',
-                      filled: true,
-                      fillColor: AppTheme.bgSurface,
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(10),
-                        borderSide: const BorderSide(color: AppTheme.divider),
-                      ),
-                      suffixIcon: IconButton(
-                        icon: const Icon(Icons.paste_rounded, size: 18),
-                        tooltip: 'Paste from clipboard',
-                        onPressed: () {},
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 14),
-                  if (testResultMsg != null) ...[
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                      decoration: BoxDecoration(
-                        color: testSuccess == true
-                            ? Colors.green.withValues(alpha: 0.1)
-                            : Colors.red.withValues(alpha: 0.1),
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(
-                          color: testSuccess == true ? Colors.green : Colors.redAccent,
-                          width: 1,
-                        ),
-                      ),
-                      child: Row(
-                        children: [
-                          Icon(
-                            testSuccess == true ? Icons.check_circle : Icons.error_outline,
-                            color: testSuccess == true ? Colors.green : Colors.redAccent,
-                            size: 18,
-                          ),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: Text(
-                              testResultMsg!,
-                              style: GoogleFonts.poppins(
-                                fontSize: 12,
-                                color: testSuccess == true ? Colors.green.shade800 : Colors.red.shade800,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                  ],
-                  Row(
-                    children: [
-                      OutlinedButton.icon(
-                        icon: testing
-                            ? const SizedBox(
-                                width: 14,
-                                height: 14,
-                                child: CircularProgressIndicator(strokeWidth: 2),
-                              )
-                            : const Icon(Icons.network_ping, size: 16),
-                        label: Text(testing ? 'Testing...' : 'Test Connection'),
-                        style: OutlinedButton.styleFrom(
-                          foregroundColor: AppTheme.primaryPurple,
-                          side: const BorderSide(color: AppTheme.primaryPurple),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                        ),
-                        onPressed: testing
-                            ? null
-                            : () async {
-                                setDialogState(() {
-                                  testing = true;
-                                  testResultMsg = null;
-                                });
-                                final res = await service.testConnection(keyController.text.trim());
-                                setDialogState(() {
-                                  testing = false;
-                                  testSuccess = res['success'] == true;
-                                  testResultMsg = res['success'] == true
-                                      ? 'Connected to ${res['model']} (${res['latencyMs']}ms)'
-                                      : 'Failed: ${res['error']}';
-                                });
-                              },
-                      ),
-                      const Spacer(),
-                      TextButton(
-                        onPressed: () => Navigator.pop(dialogCtx),
-                        child: const Text('Cancel'),
-                      ),
-                      const SizedBox(width: 8),
-                      ElevatedButton(
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: AppTheme.primaryPurple,
-                          foregroundColor: Colors.white,
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                        ),
-                        onPressed: () async {
-                          final key = keyController.text.trim();
-                          await service.setApiKey(key);
-                          if (dialogCtx.mounted) {
-                            Navigator.pop(dialogCtx);
-                          }
-                          _verifyAiConnection();
-                        },
-                        child: const Text('Save & Apply'),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-          );
-        },
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -324,7 +154,7 @@ class _AssistantViewState extends ConsumerState<AssistantView> with TickerProvid
               mainAxisSize: MainAxisSize.min,
               children: [
                 Text(
-                  'AI Assistant', 
+                  'Eduvia Support Agent', 
                   style: GoogleFonts.poppins(
                     color: AppTheme.textPrimary,
                     fontWeight: FontWeight.w600,
@@ -346,8 +176,8 @@ class _AssistantViewState extends ConsumerState<AssistantView> with TickerProvid
                     const SizedBox(width: 6),
                     Text(
                       _isAiOnline == true
-                          ? 'Google Gemini Online (${_activeModel.replaceAll("gemini-", "")})'
-                          : (_isAiOnline == false ? 'Built-in DB Engine (Offline)' : 'Checking status...'),
+                          ? 'Support Agent • Online'
+                          : (_isAiOnline == false ? 'Support Agent • Offline Mode' : 'Connecting...'),
                       style: GoogleFonts.poppins(
                         fontSize: 11,
                         fontWeight: FontWeight.w500,
@@ -362,13 +192,8 @@ class _AssistantViewState extends ConsumerState<AssistantView> with TickerProvid
             ),
           ],
         ),
-        actions: [
-          IconButton(
-            tooltip: 'Configure AI Key & Engine',
-            icon: const Icon(Icons.tune_rounded, color: AppTheme.textPrimary),
-            onPressed: _showAiSettingsDialog,
-          ),
-          const SizedBox(width: 12),
+        actions: const [
+          SizedBox(width: 16),
         ],
         backgroundColor: AppTheme.bgMain,
         elevation: 0,

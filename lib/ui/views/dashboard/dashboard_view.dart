@@ -1137,7 +1137,7 @@ class _DashboardViewState extends ConsumerState<DashboardView> {
               _buildQuickActionBtn('View Reports', Icons.bar_chart, const Color(0xFFF59E0B), () {
                 ref.read(selectedTabProvider.notifier).state = NavigationTab.feeReports;
               }),
-              _buildQuickActionBtn('AI Assistant', Icons.auto_awesome, const Color(0xFF8B5CF6), () {
+              _buildQuickActionBtn('Support Agent', Icons.auto_awesome, const Color(0xFF8B5CF6), () {
                 ref.read(selectedTabProvider.notifier).state = NavigationTab.assistant;
               }),
             ],

@@ -375,7 +375,7 @@ class DesktopTopBar extends ConsumerWidget {
       case NavigationTab.library:
         return 'Library Management';
       case NavigationTab.assistant:
-        return 'AI Assistant';
+        return 'Support Agent';
       case NavigationTab.inventory:
         return 'Inventory Management';
       case NavigationTab.manageUsers:

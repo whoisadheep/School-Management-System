@@ -36,7 +36,7 @@ class AssistantService {
 
     // 1. Intent: Greeting
     if (intent == AssistantIntent.greeting) {
-      return '👋 **Hello! Welcome to Eduvia AI Assistant**\n\n'
+      return '👋 **Hello! Welcome to Eduvia Support Agent**\n\n'
           'I am your intelligent school assistant with access to both software guidance and your school database.\n\n'
           'You can ask me:\n'
           '• 📖 **Software Help**: *"How do I assign subjects to Class 1?"* or *"Where do I enter exam marks?"*\n'

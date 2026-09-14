@@ -56,7 +56,7 @@ enum NavigationTab {
       case NavigationTab.inventory:
         return 'Inventory Management';
       case NavigationTab.assistant:
-        return 'AI Assistant';
+        return 'Support Agent';
       case NavigationTab.manageUsers:
         return 'Manage Admin Users';
       case NavigationTab.activityLog:
