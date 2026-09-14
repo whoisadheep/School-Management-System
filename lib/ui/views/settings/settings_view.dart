@@ -11,6 +11,7 @@ import '../../../services/backup_service.dart';
 import '../../../services/settings_service.dart';
 import '../../../services/app_logger.dart';
 import 'data_import_view.dart';
+import '../../../providers/onboarding_provider.dart';
 
 final backupsListProvider = FutureProvider<List<BackupFileInfo>>((ref) async {
   final backupService = BackupService();
@@ -457,7 +458,67 @@ class _SettingsViewState extends ConsumerState<SettingsView>
           subtitle:
               'Configure the official school identity printed on receipts, ID cards, and exports.',
         ),
-        const SizedBox(height: 28),
+        const SizedBox(height: 20),
+
+        // Launch Setup Wizard Banner
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
+          decoration: BoxDecoration(
+            color: AppTheme.primarySoft,
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: AppTheme.primaryPurple.withValues(alpha: 0.2)),
+          ),
+          child: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: AppTheme.primaryPurple,
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: const Icon(Icons.auto_awesome, color: Colors.white, size: 18),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'First-Run Setup Wizard',
+                      style: GoogleFonts.poppins(
+                        fontWeight: FontWeight.w600,
+                        fontSize: 13.5,
+                        color: AppTheme.primaryDark,
+                      ),
+                    ),
+                    Text(
+                      'Relaunch the step-by-step guided onboarding wizard to configure school details and branding.',
+                      style: GoogleFonts.poppins(
+                        fontSize: 12,
+                        color: AppTheme.textSecondary,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 12),
+              ElevatedButton.icon(
+                icon: const Icon(Icons.rocket_launch_rounded, size: 16),
+                label: const Text('Launch Wizard'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppTheme.primaryPurple,
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                ),
+                onPressed: () {
+                  ref.read(onboardingPendingProvider.notifier).state = true;
+                },
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 24),
 
         // Live Preview Card
         _buildCard(

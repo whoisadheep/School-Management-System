@@ -1,6 +1,8 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/models.dart';
 import '../services/auth_service.dart';
+import '../services/settings_service.dart';
+import 'onboarding_provider.dart';
 
 class AuthState {
   final User? currentUser;
@@ -77,6 +79,13 @@ class AuthNotifier extends StateNotifier<AuthState> {
           forcePasswordChange: forceChange,
           isLoading: false,
         );
+
+        // Check if first-run onboarding setup is pending
+        final isCompleted = await SettingsService().getSetting('is_onboarding_completed');
+        if (isCompleted != '1') {
+          ref.read(onboardingPendingProvider.notifier).state = true;
+        }
+
         return true;
       } else {
         state = state.copyWith(

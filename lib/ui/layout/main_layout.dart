@@ -30,6 +30,8 @@ import '../views/settings/admin_users_view.dart';
 import '../views/settings/activity_log_view.dart';
 import '../views/settings/settings_view.dart';
 import '../views/update/update_dialog.dart';
+import '../views/onboarding/onboarding_wizard_view.dart';
+import '../../providers/onboarding_provider.dart';
 import '../../services/update_service.dart';
 import 'widgets/sidebar.dart';
 import 'widgets/top_bar.dart';
@@ -77,6 +79,11 @@ class _MainLayoutState extends ConsumerState<MainLayout> {
     final securityQuestionPending = ref.watch(securityQuestionPendingProvider);
     if (securityQuestionPending) {
       return const SecurityQuestionSetupView();
+    }
+
+    final onboardingPending = ref.watch(onboardingPendingProvider);
+    if (onboardingPending) {
+      return const OnboardingWizardView();
     }
 
     final selectedTab = ref.watch(selectedTabProvider);
