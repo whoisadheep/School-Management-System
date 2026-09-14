@@ -594,6 +594,7 @@ class _ExamManagementViewState extends ConsumerState<ExamManagementView> with Si
                                       setState(() => _isSavingMarks = true);
                                       final dbService = ref.read(databaseServiceProvider);
                                       await dbService.bulkUpdateMarks(_selectedSubjectIdForMarks!, _currentMarksSheet);
+                                      _currentMarksSheet = [];
                                       ref.invalidate(marksSheetProvider(_selectedSubjectIdForMarks!));
                                       setState(() => _isSavingMarks = false);
 
@@ -645,105 +646,14 @@ class _ExamManagementViewState extends ConsumerState<ExamManagementView> with Si
                                 separatorBuilder: (_, __) => const Divider(height: 1, color: AppTheme.divider),
                                 itemBuilder: (context, index) {
                                   final m = _currentMarksSheet[index];
-                                  final obtainedController = TextEditingController(
-                                    text: m.marksObtained != null ? m.marksObtained!.toStringAsFixed(1) : '',
-                                  );
-                                  final remarksController = TextEditingController(text: m.remarks ?? '');
-
-                                  final isAbsent = m.isAbsent;
-                                  final double val = m.marksObtained ?? 0.0;
-                                  final bool pass = !isAbsent && m.marksObtained != null && val >= passMarks;
-
-                                  return Padding(
-                                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-                                    child: Row(
-                                      children: [
-                                        Expanded(
-                                          flex: 2,
-                                          child: Text(m.rollNumber ?? 'N/A', style: GoogleFonts.poppins(fontSize: 12, fontWeight: FontWeight.bold)),
-                                        ),
-                                        Expanded(
-                                          flex: 5,
-                                          child: Text(m.studentName ?? 'Student', style: GoogleFonts.poppins(fontSize: 13, fontWeight: FontWeight.w600)),
-                                        ),
-                                        Expanded(
-                                          flex: 3,
-                                          child: Text('${m.gradeLevel ?? ""} ${m.section ?? ""}', style: GoogleFonts.poppins(fontSize: 12, color: AppTheme.textSecondary)),
-                                        ),
-                                        Expanded(
-                                          flex: 3,
-                                          child: SizedBox(
-                                            height: 36,
-                                            child: TextField(
-                                              enabled: !isAbsent,
-                                              controller: obtainedController,
-                                              keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                                              style: GoogleFonts.poppins(fontSize: 12, fontWeight: FontWeight.bold),
-                                              decoration: InputDecoration(
-                                                contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                                                border: OutlineInputBorder(borderRadius: BorderRadius.circular(6)),
-                                                hintText: '/ ${maxMarks.toStringAsFixed(0)}',
-                                              ),
-                                              onChanged: (text) {
-                                                final parsed = double.tryParse(text);
-                                                _currentMarksSheet[index] = m.copyWith(marksObtained: parsed);
-                                                setState(() {});
-                                              },
-                                            ),
-                                          ),
-                                        ),
-                                        Expanded(
-                                          flex: 2,
-                                          child: Checkbox(
-                                            value: isAbsent,
-                                            activeColor: AppTheme.error,
-                                            onChanged: (val) {
-                                              setState(() {
-                                                _currentMarksSheet[index] = m.copyWith(isAbsent: val ?? false);
-                                              });
-                                            },
-                                          ),
-                                        ),
-                                        Expanded(
-                                          flex: 3,
-                                          child: Container(
-                                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                                            decoration: BoxDecoration(
-                                              color: isAbsent
-                                                  ? AppTheme.error.withValues(alpha: 0.1)
-                                                  : (pass ? AppTheme.success.withValues(alpha: 0.1) : AppTheme.error.withValues(alpha: 0.1)),
-                                              borderRadius: BorderRadius.circular(4),
-                                            ),
-                                            child: Text(
-                                              isAbsent ? 'ABSENT' : (m.marksObtained != null ? (pass ? 'PASS' : 'FAIL') : 'PENDING'),
-                                              style: GoogleFonts.poppins(
-                                                fontSize: 11,
-                                                fontWeight: FontWeight.bold,
-                                                color: isAbsent ? AppTheme.error : (pass ? AppTheme.success : AppTheme.error),
-                                              ),
-                                            ),
-                                          ),
-                                        ),
-                                        Expanded(
-                                          flex: 4,
-                                          child: SizedBox(
-                                            height: 36,
-                                            child: TextField(
-                                              controller: remarksController,
-                                              style: GoogleFonts.poppins(fontSize: 11),
-                                              decoration: InputDecoration(
-                                                contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                                                border: OutlineInputBorder(borderRadius: BorderRadius.circular(6)),
-                                                hintText: 'Optional remark',
-                                              ),
-                                              onChanged: (text) {
-                                                _currentMarksSheet[index] = m.copyWith(remarks: text);
-                                              },
-                                            ),
-                                          ),
-                                        ),
-                                      ],
-                                    ),
+                                  return _MarksEntryRowItem(
+                                    key: ValueKey('${m.studentId}_${m.examSubjectId}_$index'),
+                                    marks: m,
+                                    maxMarks: maxMarks,
+                                    passMarks: passMarks,
+                                    onChanged: (updated) {
+                                      _currentMarksSheet[index] = updated;
+                                    },
                                   );
                                 },
                               ),
@@ -2022,4 +1932,211 @@ class _ExamManagementViewState extends ConsumerState<ExamManagementView> with Si
     );
   }
 
+}
+
+/// Dedicated row widget for marks entry roster.
+/// Manages its own TextEditingControllers so typing does not reset the cursor
+/// or invert the entered numbers.
+class _MarksEntryRowItem extends StatefulWidget {
+  final Marks marks;
+  final double maxMarks;
+  final double passMarks;
+  final ValueChanged<Marks> onChanged;
+
+  const _MarksEntryRowItem({
+    super.key,
+    required this.marks,
+    required this.maxMarks,
+    required this.passMarks,
+    required this.onChanged,
+  });
+
+  @override
+  State<_MarksEntryRowItem> createState() => _MarksEntryRowItemState();
+}
+
+class _MarksEntryRowItemState extends State<_MarksEntryRowItem> {
+  late final TextEditingController _obtainedController;
+  late final TextEditingController _remarksController;
+  late bool _isAbsent;
+  double? _marksObtained;
+
+  @override
+  void initState() {
+    super.initState();
+    _isAbsent = widget.marks.isAbsent;
+    _marksObtained = widget.marks.marksObtained;
+    _obtainedController = TextEditingController(text: _formatMarks(_marksObtained));
+    _remarksController = TextEditingController(text: widget.marks.remarks ?? '');
+  }
+
+  static String _formatMarks(double? marks) {
+    if (marks == null) return '';
+    return marks % 1 == 0 ? marks.toInt().toString() : marks.toString();
+  }
+
+  @override
+  void didUpdateWidget(covariant _MarksEntryRowItem oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // If external marks changed (e.g. fresh roster loaded from DB or different student)
+    if (widget.marks.studentId != oldWidget.marks.studentId ||
+        widget.marks.examSubjectId != oldWidget.marks.examSubjectId) {
+      _isAbsent = widget.marks.isAbsent;
+      _marksObtained = widget.marks.marksObtained;
+      _obtainedController.text = _formatMarks(_marksObtained);
+      _remarksController.text = widget.marks.remarks ?? '';
+    }
+  }
+
+  @override
+  void dispose() {
+    _obtainedController.dispose();
+    _remarksController.dispose();
+    super.dispose();
+  }
+
+  void _notifyParent() {
+    final updated = widget.marks.copyWith(
+      marksObtained: _marksObtained,
+      isAbsent: _isAbsent,
+      remarks: _remarksController.text.trim(),
+    );
+    widget.onChanged(updated);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final m = widget.marks;
+    final isAbsent = _isAbsent;
+    final double val = _marksObtained ?? 0.0;
+    final bool pass = !isAbsent && _marksObtained != null && val >= widget.passMarks;
+    final bool isOverMax = !isAbsent && _marksObtained != null && val > widget.maxMarks;
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+      child: Row(
+        children: [
+          Expanded(
+            flex: 2,
+            child: Text(
+              m.rollNumber ?? 'N/A',
+              style: GoogleFonts.poppins(fontSize: 12, fontWeight: FontWeight.bold),
+            ),
+          ),
+          Expanded(
+            flex: 5,
+            child: Text(
+              m.studentName ?? 'Student',
+              style: GoogleFonts.poppins(fontSize: 13, fontWeight: FontWeight.w600),
+            ),
+          ),
+          Expanded(
+            flex: 3,
+            child: Text(
+              '${m.gradeLevel ?? ""} ${m.section ?? ""}'.trim(),
+              style: GoogleFonts.poppins(fontSize: 12, color: AppTheme.textSecondary),
+            ),
+          ),
+          Expanded(
+            flex: 3,
+            child: SizedBox(
+              height: 36,
+              child: TextField(
+                enabled: !isAbsent,
+                controller: _obtainedController,
+                keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                style: GoogleFonts.poppins(
+                  fontSize: 12,
+                  fontWeight: FontWeight.bold,
+                  color: isOverMax ? AppTheme.error : AppTheme.textPrimary,
+                ),
+                decoration: InputDecoration(
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(6),
+                    borderSide: BorderSide(color: isOverMax ? AppTheme.error : AppTheme.divider),
+                  ),
+                  enabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(6),
+                    borderSide: BorderSide(color: isOverMax ? AppTheme.error : Colors.grey.shade300),
+                  ),
+                  hintText: '/ ${widget.maxMarks.toStringAsFixed(0)}',
+                ),
+                onChanged: (text) {
+                  final parsed = double.tryParse(text.trim());
+                  setState(() {
+                    _marksObtained = parsed;
+                  });
+                  _notifyParent();
+                },
+              ),
+            ),
+          ),
+          Expanded(
+            flex: 2,
+            child: Checkbox(
+              value: isAbsent,
+              activeColor: AppTheme.error,
+              onChanged: (val) {
+                setState(() {
+                  _isAbsent = val ?? false;
+                });
+                _notifyParent();
+              },
+            ),
+          ),
+          Expanded(
+            flex: 3,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              decoration: BoxDecoration(
+                color: isAbsent
+                    ? AppTheme.error.withValues(alpha: 0.1)
+                    : isOverMax
+                        ? AppTheme.warning.withValues(alpha: 0.1)
+                        : (_marksObtained != null
+                            ? (pass ? AppTheme.success.withValues(alpha: 0.1) : AppTheme.error.withValues(alpha: 0.1))
+                            : Colors.grey.withValues(alpha: 0.1)),
+                borderRadius: BorderRadius.circular(4),
+              ),
+              child: Text(
+                isAbsent
+                    ? 'ABSENT'
+                    : isOverMax
+                        ? '> MAX'
+                        : (_marksObtained != null ? (pass ? 'PASS' : 'FAIL') : 'PENDING'),
+                style: GoogleFonts.poppins(
+                  fontSize: 11,
+                  fontWeight: FontWeight.bold,
+                  color: isAbsent
+                      ? AppTheme.error
+                      : isOverMax
+                          ? AppTheme.warning
+                          : (pass ? AppTheme.success : AppTheme.error),
+                ),
+              ),
+            ),
+          ),
+          Expanded(
+            flex: 4,
+            child: SizedBox(
+              height: 36,
+              child: TextField(
+                controller: _remarksController,
+                style: GoogleFonts.poppins(fontSize: 11),
+                decoration: InputDecoration(
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(6)),
+                  hintText: 'Optional remark',
+                ),
+                onChanged: (text) {
+                  _notifyParent();
+                },
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 }

@@ -1,7 +1,7 @@
 {
-  "latest_version": "1.0.14",
-  "download_url": "https://github.com/whoisadheep/School-Management-System/releases/download/v1.0.14/Eduvia-Installer.exe",
+  "latest_version": "1.0.15",
+  "download_url": "https://github.com/whoisadheep/School-Management-System/releases/download/v1.0.15/Eduvia-Installer.exe",
   "sha256": "",
-  "changelog": "Smart AI Column Mapper for CSV/Excel student imports with multi-provider fallback (OpenRouter -> Groq -> Gemini -> Local offline), sequential admission numbering, and report card preview.",
+  "changelog": "Fixed marks entry roster text field reversal bug where typing digits jumped cursor to start, preventing reverse input (e.g. 24 becoming 42). Added over-max marks validation warning.",
   "mandatory_update": false
 }
