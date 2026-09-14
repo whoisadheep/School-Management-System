@@ -1,10 +1,13 @@
 import 'package:dio/dio.dart';
 import 'ai_provider_service.dart';
 import 'database_service.dart';
+import 'rag_service.dart';
+import '../providers/navigation_provider.dart';
 
 class AssistantService {
   final DatabaseService _dbService;
   late final AiProviderService _aiProvider;
+  final RagService _rag = RagService();
   final Dio _http = Dio(BaseOptions(
     connectTimeout: const Duration(seconds: 12),
     receiveTimeout: const Duration(seconds: 25),
@@ -18,53 +21,123 @@ class AssistantService {
     _aiProvider = AiProviderService(_dbService);
   }
 
-  /// Handles user questions using the strict fallback cascade:
-  /// 1. OpenRouter (Llama 3.3 70B)
-  /// 2. Groq (Qwen 3.8 27B)
-  /// 3. Google Gemini (Gemini Flash)
-  /// 4. Built-in Local SQLite Offline Engine
+  /// Handles user questions using the Advanced RAG & Multi-Provider Architecture:
+  /// 1. Query Routing (Greeting vs Navigation vs How-To Knowledge vs Database Query)
+  /// 2. Advanced RAG Knowledge Base Retrieval (BM25 + Hybrid Re-Ranking)
+  /// 3. Strict Multi-Provider Cascade: OpenRouter -> Groq -> Gemini
+  /// 4. Built-in Offline Engine Fallback (Offline Knowledge formatting + SQLite metrics)
   Future<String> handleCommand(String command) async {
-    final normalized = command.trim().toLowerCase();
-
-    if (normalized.isEmpty) {
+    final trimmed = command.trim();
+    if (trimmed.isEmpty) {
       return 'Please type a question or type "help" for examples.';
     }
 
-    final greetings = [
-      'hi', 'hy', 'hyy', 'hey', 'heyy', 'hii', 'hiii', 'hello', 'helloo',
-      'good morning', 'good afternoon', 'good evening', 'namaste', 'sup',
-      "what's up", 'how are you', 'who are you', 'help', 'commands'
-    ];
+    final intent = _rag.classifyIntent(trimmed);
 
-    if (greetings.any((g) => normalized == g || normalized.startsWith('$g '))) {
+    // 1. Intent: Greeting
+    if (intent == AssistantIntent.greeting) {
       return '👋 **Hello! Welcome to Eduvia AI Assistant**\n\n'
-          'I am your intelligent school assistant with direct access to your database. You can ask me:\n\n'
-          '• 📊 **Students**: *"How many students are enrolled?"* or *"Show class breakdown"*\n'
-          '• 💰 **Fees & Dues**: *"Show fee collection summary"* or *"What are overdue balances?"*\n'
-          '• 👥 **Staff & Teachers**: *"Show faculty details"* or *"How many staff members?"*\n'
-          '• 🚌 **Transport**: *"Show bus fleet and routes"*\n'
-          '• 📚 **Library**: *"Show available books"*\n'
-          '• 📝 **Exams**: *"Show scheduled exams"*\n\n'
-          'How can I help you today?';
+          'I am your intelligent school assistant with access to both software guidance and your school database.\n\n'
+          'You can ask me:\n'
+          '• 📖 **Software Help**: *"How do I assign subjects to Class 1?"* or *"Where do I enter exam marks?"*\n'
+          '• 💳 **Fee Collection**: *"How do I collect fee by admission number?"* or *"Can I connect online card payment?"*\n'
+          '• 📊 **Live Database Metrics**: *"How many students are enrolled?"* or *"Show fee dues summary"*\n'
+          '• 🚀 **Direct Navigation**: *"Take me to Class Setup"* or *"Open fee collection"*\n\n'
+          'How can I assist you today?';
     }
 
-    // 1. Strict Multi-Provider Cascade: OpenRouter -> Groq -> Gemini
+    // 2. Intent: Direct Navigation Command
+    if (intent == AssistantIntent.navigation) {
+      final tab = _rag.resolveTargetTab(trimmed);
+      if (tab != null) {
+        return 'Navigating you to **${tab.title}**...\n\n[NAV:${tab.name}]';
+      }
+    }
+
+    // 3. Intent: Knowledge, How-To, or Capabilities Query (RAG Pipeline)
+    if (intent == AssistantIntent.knowledgeHowTo) {
+      return await _handleKnowledgeQuery(trimmed);
+    }
+
+    // 4. Intent: Database / Metrics Query (SQL Execution Cascade)
     try {
       final schema = await _getSchema();
       final aiResult = await _aiProvider.executeSqlAssistantLoop(
-        userQuestion: command,
+        userQuestion: trimmed,
         schema: schema,
         executeSql: _executeSql,
       );
       if (aiResult != null && aiResult.text.trim().isNotEmpty) {
         return aiResult.text.trim();
       }
-    } catch (_) {
-      // If remote providers fail, fall through to offline engine
+    } catch (_) {}
+
+    // Fallback to knowledge search if SQL loop didn't produce an answer
+    final knowledgeFallback = await _handleKnowledgeQuery(trimmed, isFallback: true);
+    if (knowledgeFallback.isNotEmpty) {
+      return knowledgeFallback;
     }
 
-    // 2. Stage 4: Built-in local offline smart query engine
-    return await _handleOfflineQuery(command);
+    // Stage 4: Built-in local offline smart query engine
+    return await _handleOfflineQuery(trimmed);
+  }
+
+  /// Processes how-to and capability questions using the Advanced RAG pipeline
+  Future<String> _handleKnowledgeQuery(String command, {bool isFallback = false}) async {
+    try {
+      final rankedResults = await _rag.retrieveRelevantChunks(query: command, topK: 2);
+      if (rankedResults.isEmpty) {
+        if (isFallback) return '';
+        return 'I could not find a specific guide for that in the Eduvia documentation. Please check the sidebar menu or contact support.';
+      }
+
+      final contextText = _rag.buildPromptContext(rankedResults);
+      final targetTab = _rag.resolveTargetTab(command, rankedResults);
+
+      final systemInstruction = '''You are the expert Copilot for Eduvia School Management System.
+Your job is to provide clear, friendly, and step-by-step guidance to school staff (teachers, accountants, administrators).
+
+CRITICAL INSTRUCTIONS:
+1. Base your answer EXCLUSIVELY on the provided Eduvia Knowledge Base context.
+2. If the user asks how to do something, provide a clear, numbered step-by-step guide with exact menu and button names.
+3. If the user asks about an UNSUPPORTED feature (e.g. Biometric/RFID hardware sync, online payment gateways, automated SMS/WhatsApp, parent mobile app, cloud multi-branch sync), politely state that Eduvia does not currently support this feature and provide the recommended manual/alternative workflow mentioned in the context.
+4. Do NOT invent fictional menus, external plugins, or settings that do not exist.
+5. If a relevant screen is identified, ensure the navigation tag [NAV:${targetTab?.name ?? "dashboard"}] is included at the very end of your response.
+
+$contextText''';
+
+      // Run generation across multi-provider cascade (OpenRouter -> Groq -> Gemini)
+      final aiResult = await _aiProvider.generateText(
+        prompt: command,
+        systemInstruction: systemInstruction,
+        temperature: 0.2,
+      );
+
+      if (aiResult != null && aiResult.text.trim().isNotEmpty) {
+        var text = aiResult.text.trim();
+        // Ensure the navigation tag is present if we identified a target tab
+        if (targetTab != null && !text.contains('[NAV:')) {
+          text = '$text\n\n[NAV:${targetTab.name}]';
+        }
+        return text;
+      }
+
+      // Offline Fallback for RAG: Format directly from retrieved chunk
+      final bestChunk = rankedResults.first.chunk;
+      final buffer = StringBuffer();
+      buffer.writeln('📖 **Eduvia Guide: ${bestChunk.title}**\n');
+      if (bestChunk.section != null && bestChunk.section != 'General Overview') {
+        buffer.writeln('### ${bestChunk.section}\n');
+      }
+      buffer.writeln(bestChunk.content);
+      if (targetTab != null) {
+        buffer.writeln('\n\n[NAV:${targetTab.name}]');
+      }
+      return buffer.toString();
+    } catch (e) {
+      if (isFallback) return '';
+      return 'An error occurred while searching the knowledge base: $e';
+    }
   }
 
   Future<String> getActiveApiKey() => _aiProvider.getGeminiKey();

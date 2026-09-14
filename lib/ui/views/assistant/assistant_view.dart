@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../providers/services_provider.dart';
+import '../../../providers/navigation_provider.dart';
 
 class AssistantView extends ConsumerStatefulWidget {
   const AssistantView({super.key});
@@ -458,6 +459,22 @@ class _AssistantViewState extends ConsumerState<AssistantView> with TickerProvid
   Widget _buildMessageBubble(AssistantMessage message) {
     final isUser = message.isUser;
     
+    // Parse deep-link navigation tag if present (e.g. [NAV:classes])
+    NavigationTab? navTab;
+    String displayText = message.text;
+    final navMatch = RegExp(r'\[NAV:([a-zA-Z0-9_]+)\]').firstMatch(displayText);
+    if (navMatch != null) {
+      final key = navMatch.group(1);
+      if (key != null) {
+        try {
+          navTab = NavigationTab.values.firstWhere(
+            (t) => t.name.toLowerCase() == key.toLowerCase(),
+          );
+        } catch (_) {}
+      }
+      displayText = displayText.replaceAll(navMatch.group(0)!, '').trim();
+    }
+    
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 8),
       child: Row(
@@ -499,14 +516,54 @@ class _AssistantViewState extends ConsumerState<AssistantView> with TickerProvid
                   ),
                 ],
               ),
-              child: SelectableText(
-                message.text,
-                style: GoogleFonts.poppins(
-                  color: isUser ? Colors.white : AppTheme.textPrimary,
-                  fontSize: 14,
-                  height: 1.5,
-                  fontWeight: FontWeight.w400,
-                ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  SelectableText(
+                    displayText,
+                    style: GoogleFonts.poppins(
+                      color: isUser ? Colors.white : AppTheme.textPrimary,
+                      fontSize: 14,
+                      height: 1.5,
+                      fontWeight: FontWeight.w400,
+                    ),
+                  ),
+                  if (navTab != null && !isUser) ...[
+                    const SizedBox(height: 12),
+                    Material(
+                      color: Colors.transparent,
+                      child: InkWell(
+                        onTap: () {
+                          ref.read(selectedTabProvider.notifier).state = navTab!;
+                        },
+                        borderRadius: BorderRadius.circular(10),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                          decoration: BoxDecoration(
+                            color: AppTheme.primarySoft,
+                            borderRadius: BorderRadius.circular(10),
+                            border: Border.all(color: AppTheme.primaryPurple.withValues(alpha: 0.3)),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const Icon(Icons.open_in_new_rounded, size: 16, color: AppTheme.primaryPurple),
+                              const SizedBox(width: 8),
+                              Text(
+                                'Open ${navTab.title}',
+                                style: GoogleFonts.poppins(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w600,
+                                  color: AppTheme.primaryPurple,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ],
               ),
             ),
           ),
