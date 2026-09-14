@@ -14,8 +14,8 @@ class AdminLoginView extends ConsumerStatefulWidget {
 }
 
 class _AdminLoginViewState extends ConsumerState<AdminLoginView> {
-  final _usernameController = TextEditingController(text: 'admin');
-  final _passwordController = TextEditingController(text: 'admin');
+  final _usernameController = TextEditingController();
+  final _passwordController = TextEditingController();
   final _formKey = GlobalKey<FormState>();
   
   bool _obscurePassword = true;
@@ -105,60 +105,7 @@ class _AdminLoginViewState extends ConsumerState<AdminLoginView> {
                       ),
                     ),
 
-                    const SizedBox(height: 24),
-
-                    // Default Credentials Info Box
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFF0FDF4),
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: const Color(0xFFBBF7D0)),
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            children: [
-                              const Icon(Icons.key_rounded, color: Color(0xFF16A34A), size: 18),
-                              const SizedBox(width: 8),
-                              Text(
-                                'Default Admin Login',
-                                style: GoogleFonts.poppins(
-                                  fontWeight: FontWeight.w600,
-                                  fontSize: 12.5,
-                                  color: const Color(0xFF15803D),
-                                ),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 6),
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              Text(
-                                'Username: admin',
-                                style: GoogleFonts.poppins(
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w500,
-                                  color: const Color(0xFF166534),
-                                ),
-                              ),
-                              Text(
-                                'Password: admin',
-                                style: GoogleFonts.poppins(
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w500,
-                                  color: const Color(0xFF166534),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ],
-                      ),
-                    ),
-
-                    const SizedBox(height: 20),
+                    const SizedBox(height: 32),
 
                     if (authState.errorMessage != null) ...[
                       Container(
