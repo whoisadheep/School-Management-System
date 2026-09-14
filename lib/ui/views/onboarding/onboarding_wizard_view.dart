@@ -8,6 +8,7 @@ import '../../../services/settings_service.dart';
 import '../../../services/auth_service.dart';
 import '../../../services/database_service.dart';
 import '../../../models/academic_year.dart';
+import '../../../providers/services_provider.dart';
 
 class OnboardingWizardView extends ConsumerStatefulWidget {
   const OnboardingWizardView({super.key});
@@ -208,6 +209,7 @@ class _OnboardingWizardViewState extends ConsumerState<OnboardingWizardView>
 
       // 4. Mark Onboarding as Completed
       await settings.setSetting('is_onboarding_completed', '1');
+      ref.invalidate(schoolNameProvider);
 
       // Hold celebration for 1.4s so the user enjoys the cute animation
       await Future.delayed(const Duration(milliseconds: 1400));
@@ -847,7 +849,7 @@ class _OnboardingWizardViewState extends ConsumerState<OnboardingWizardView>
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
               elevation: 2,
             ),
-            onPressed: isLast ? _finishOnboarding : _nextStep,
+            onPressed: _isFinishing ? null : (isLast ? _finishOnboarding : _nextStep),
           ),
         ],
       ),
@@ -880,18 +882,21 @@ class _OnboardingWizardViewState extends ConsumerState<OnboardingWizardView>
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Container(
-                  width: 80,
-                  height: 80,
-                  decoration: const BoxDecoration(
-                    color: Color(0xFFDCFCE7),
-                    shape: BoxShape.circle,
-                  ),
-                  child: const Center(
-                    child: Icon(
-                      Icons.celebration_rounded,
-                      color: Color(0xFF16A34A),
-                      size: 44,
+                ScaleTransition(
+                  scale: _pulseAnimation,
+                  child: Container(
+                    width: 80,
+                    height: 80,
+                    decoration: const BoxDecoration(
+                      color: Color(0xFFDCFCE7),
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Center(
+                      child: Icon(
+                        Icons.celebration_rounded,
+                        color: Color(0xFF16A34A),
+                        size: 44,
+                      ),
                     ),
                   ),
                 ),

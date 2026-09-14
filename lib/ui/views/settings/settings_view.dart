@@ -1625,6 +1625,7 @@ class _SettingsViewState extends ConsumerState<SettingsView>
           'school_motto', _schoolMottoController.text.trim());
       await _settingsService.setSetting(
           'school_principal', _schoolPrincipalController.text.trim());
+      ref.invalidate(schoolNameProvider);
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(

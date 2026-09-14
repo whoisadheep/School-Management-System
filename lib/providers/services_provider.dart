@@ -24,6 +24,17 @@ final currentAcademicYearProvider = FutureProvider<AcademicYear?>((ref) async {
   return years.firstWhere((y) => y.isCurrent, orElse: () => years.first);
 });
 
+/// School Name Provider
+final schoolNameProvider = FutureProvider<String>((ref) async {
+  final dbService = ref.watch(databaseServiceProvider);
+  final settingsService = SettingsService(dbService: dbService);
+  final name = await settingsService.getSetting('school_name');
+  if (name != null && name.trim().isNotEmpty) {
+    return name.trim();
+  }
+  return 'Eduvia';
+});
+
 /// InvoiceService Provider
 final invoiceServiceProvider = Provider<InvoiceService>((ref) {
   final dbService = ref.watch(databaseServiceProvider);

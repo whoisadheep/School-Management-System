@@ -6,7 +6,6 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:intl/intl.dart';
 
 import '../../../services/ai_message_service.dart';
-import '../../../providers/auth_provider.dart';
 import '../../../providers/dashboard_provider.dart';
 import '../../../providers/navigation_provider.dart';
 import '../../../providers/services_provider.dart';
@@ -107,8 +106,7 @@ class _DashboardViewState extends ConsumerState<DashboardView> {
   }
 
   Widget _buildWelcomeBanner() {
-    final user = ref.watch(authProvider).currentUser;
-    final userName = user?.fullName ?? user?.username ?? 'Robert';
+    final schoolName = ref.watch(schoolNameProvider).value ?? 'Eduvia';
 
     return Container(
       decoration: BoxDecoration(
@@ -128,7 +126,7 @@ class _DashboardViewState extends ConsumerState<DashboardView> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'Hello $userName,',
+                  'Hello $schoolName,',
                   style: GoogleFonts.poppins(
                     fontSize: 28,
                     fontWeight: FontWeight.bold,
@@ -149,7 +147,7 @@ class _DashboardViewState extends ConsumerState<DashboardView> {
                     showDialog(
                       context: context,
                       builder: (context) => AlertDialog(
-                        title: Text('Welcome to Antigravity SMS',
+                        title: Text('Welcome to $schoolName',
                             style: GoogleFonts.poppins(
                                 fontWeight: FontWeight.bold)),
                         content: Text(
