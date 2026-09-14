@@ -40,6 +40,17 @@ jobs:
       - name: Build Windows release
         run: flutter build windows --release
 
+      - name: Bundle Visual C++ Redistributable and Runtime DLLs
+        run: |
+          # 1. Download official Visual C++ 2015-2022 Redistributable for Inno Setup bundling
+          if (-not (Test-Path "windows\redist")) { New-Item -ItemType Directory -Path "windows\redist" }
+          curl.exe -sL "https://aka.ms/vs/17/release/vc_redist.x64.exe" -o "windows\redist\vc_redist.x64.exe"
+
+          # 2. Copy MSVCP140 and VCRUNTIME140 DLLs to application release folder for app-local fallback
+          Copy-Item -Path "C:\Windows\System32\msvcp140*.dll" -Destination "build\windows\x64\runner\Release\" -ErrorAction SilentlyContinue
+          Copy-Item -Path "C:\Windows\System32\vcruntime140*.dll" -Destination "build\windows\x64\runner\Release\" -ErrorAction SilentlyContinue
+          Copy-Item -Path "C:\Windows\System32\vcomp140*.dll" -Destination "build\windows\x64\runner\Release\" -ErrorAction SilentlyContinue
+
       - name: Build Inno Setup Installer
         run: |
           # Use Inno Setup command line compiler to build the installer.iss script
