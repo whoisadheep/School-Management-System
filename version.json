@@ -1,7 +1,7 @@
 {
-  "latest_version": "1.0.18",
-  "download_url": "https://github.com/whoisadheep/School-Management-System/releases/download/v1.0.18/Eduvia-Installer.exe",
+  "latest_version": "1.0.19",
+  "download_url": "https://github.com/whoisadheep/School-Management-System/releases/download/v1.0.19/Eduvia-Installer.exe",
   "sha256": "",
-  "changelog": "Personalized dashboard banner with school name, added first-run onboarding setup wizard, 2026-2027 default session, white-labeled Eduvia AI Support Agent, and VC++ runtime auto-bundling.",
+  "changelog": "School logo upload and automatic branding across fee receipts, progress report cards, student ID cards, and transfer certificates. Enhanced AI column mapper with real-time success notifications and student directory quick-actions.",
   "mandatory_update": false
 }
