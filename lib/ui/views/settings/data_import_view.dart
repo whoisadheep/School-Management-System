@@ -6,6 +6,8 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:school_management_system/core/theme/app_theme.dart';
 import 'package:school_management_system/providers/services_provider.dart';
+import 'package:school_management_system/providers/navigation_provider.dart';
+import 'package:school_management_system/providers/dashboard_provider.dart';
 import 'package:school_management_system/services/import_service.dart';
 import 'package:school_management_system/services/column_mapping_service.dart';
 import 'package:school_management_system/ui/widgets/ai_column_mapping_dialog.dart';
@@ -135,17 +137,110 @@ class _DataImportViewState extends ConsumerState<DataImportView> {
       );
 
       ref.invalidate(studentsListProvider);
+      ref.invalidate(dashboardMetricsProvider);
 
       setState(() {
-        _importResult = '✅ Import Complete!\nSuccess: ${res.successCount}\nFailed: ${res.failureCount}';
+        _importResult = '✅ Import Complete! Successfully imported ${res.successCount} student${res.successCount == 1 ? '' : 's'}.\nFailed: ${res.failureCount}';
         if (res.errors.isNotEmpty) {
           _importResult += '\n\nErrors (Showing top 5):\n${res.errors.take(5).join('\n')}';
         }
       });
+
+      if (mounted) {
+        if (res.successCount > 0) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Row(
+                children: [
+                  const Icon(Icons.check_circle_rounded, color: Colors.white, size: 24),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Students Imported Successfully!',
+                          style: GoogleFonts.poppins(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 13.5,
+                            color: Colors.white,
+                          ),
+                        ),
+                        Text(
+                          '${res.successCount} student${res.successCount == 1 ? '' : 's'} imported through AI Mapper.${res.failureCount > 0 ? " (${res.failureCount} failed)" : ""}',
+                          style: GoogleFonts.poppins(
+                            fontSize: 12,
+                            color: Colors.white.withValues(alpha: 0.95),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              backgroundColor: AppTheme.success,
+              behavior: SnackBarBehavior.floating,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              duration: const Duration(seconds: 4),
+            ),
+          );
+
+          _showImportSuccessDialog(
+            title: 'Students Imported Successfully',
+            successCount: res.successCount,
+            failureCount: res.failureCount,
+            entityName: 'student',
+            targetTab: NavigationTab.students,
+            targetTabName: 'View Student Directory',
+          );
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Row(
+                children: [
+                  const Icon(Icons.error_outline_rounded, color: Colors.white, size: 24),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      'No students imported. ${res.failureCount} record(s) failed validation.',
+                      style: GoogleFonts.poppins(fontSize: 13, color: Colors.white),
+                    ),
+                  ),
+                ],
+              ),
+              backgroundColor: AppTheme.error,
+              behavior: SnackBarBehavior.floating,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            ),
+          );
+        }
+      }
     } catch (e) {
       setState(() {
         _importResult = 'Error during import: $e';
       });
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Row(
+              children: [
+                const Icon(Icons.error_outline_rounded, color: Colors.white, size: 22),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    'Failed to import students: $e',
+                    style: GoogleFonts.poppins(fontSize: 12.5, color: Colors.white),
+                  ),
+                ),
+              ],
+            ),
+            backgroundColor: AppTheme.error,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+          ),
+        );
+      }
     } finally {
       setState(() {
         _isImporting = false;
@@ -173,22 +268,187 @@ class _DataImportViewState extends ConsumerState<DataImportView> {
       final importService = ImportService(dbService: ref.read(databaseServiceProvider));
       final res = await importService.importStaff(file);
       ref.invalidate(staffListProvider);
+      ref.invalidate(dashboardMetricsProvider);
 
       setState(() {
-        _importResult = '✅ Import Complete!\nSuccess: ${res.successCount}\nFailed: ${res.failureCount}';
+        _importResult = '✅ Import Complete! Successfully imported ${res.successCount} staff record${res.successCount == 1 ? '' : 's'}.\nFailed: ${res.failureCount}';
         if (res.errors.isNotEmpty) {
           _importResult += '\n\nErrors (Showing top 5):\n${res.errors.take(5).join('\n')}';
         }
       });
+
+      if (mounted) {
+        if (res.successCount > 0) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Row(
+                children: [
+                  const Icon(Icons.check_circle_rounded, color: Colors.white, size: 24),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Staff Imported Successfully!',
+                          style: GoogleFonts.poppins(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 13.5,
+                            color: Colors.white,
+                          ),
+                        ),
+                        Text(
+                          '${res.successCount} staff record${res.successCount == 1 ? '' : 's'} imported.${res.failureCount > 0 ? " (${res.failureCount} failed)" : ""}',
+                          style: GoogleFonts.poppins(
+                            fontSize: 12,
+                            color: Colors.white.withValues(alpha: 0.95),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              backgroundColor: AppTheme.success,
+              behavior: SnackBarBehavior.floating,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              duration: const Duration(seconds: 4),
+            ),
+          );
+
+          _showImportSuccessDialog(
+            title: 'Staff Imported Successfully',
+            successCount: res.successCount,
+            failureCount: res.failureCount,
+            entityName: 'staff member',
+            targetTab: NavigationTab.staff,
+            targetTabName: 'View Staff Directory',
+          );
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Row(
+                children: [
+                  const Icon(Icons.error_outline_rounded, color: Colors.white, size: 24),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      'No staff records imported. ${res.failureCount} failed validation.',
+                      style: GoogleFonts.poppins(fontSize: 13, color: Colors.white),
+                    ),
+                  ),
+                ],
+              ),
+              backgroundColor: AppTheme.error,
+              behavior: SnackBarBehavior.floating,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            ),
+          );
+        }
+      }
     } catch (e) {
       setState(() {
         _importResult = 'Error during import: $e';
       });
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Row(
+              children: [
+                const Icon(Icons.error_outline_rounded, color: Colors.white, size: 22),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    'Failed to import staff: $e',
+                    style: GoogleFonts.poppins(fontSize: 12.5, color: Colors.white),
+                  ),
+                ),
+              ],
+            ),
+            backgroundColor: AppTheme.error,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+          ),
+        );
+      }
     } finally {
       setState(() {
         _isImporting = false;
       });
     }
+  }
+
+  void _showImportSuccessDialog({
+    required String title,
+    required int successCount,
+    required int failureCount,
+    required String entityName,
+    NavigationTab? targetTab,
+    String? targetTabName,
+  }) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: const BoxDecoration(
+                color: AppTheme.successLight,
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(Icons.check_circle_rounded, color: AppTheme.success, size: 28),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                title,
+                style: GoogleFonts.poppins(fontWeight: FontWeight.bold, fontSize: 17),
+              ),
+            ),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Successfully imported $successCount $entityName${successCount == 1 ? '' : 's'} into the database.',
+              style: GoogleFonts.poppins(fontSize: 13.5, color: AppTheme.textPrimary),
+            ),
+            if (failureCount > 0) ...[
+              const SizedBox(height: 10),
+              Text(
+                '⚠️ $failureCount record${failureCount == 1 ? '' : 's'} failed to import. Check the error log below for details.',
+                style: GoogleFonts.poppins(fontSize: 12, color: AppTheme.warning, fontWeight: FontWeight.w500),
+              ),
+            ],
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: Text('Dismiss', style: GoogleFonts.poppins(color: AppTheme.textSecondary)),
+          ),
+          if (targetTab != null && targetTabName != null)
+            ElevatedButton.icon(
+              onPressed: () {
+                Navigator.of(ctx).pop();
+                ref.read(selectedTabProvider.notifier).state = targetTab;
+              },
+              icon: const Icon(Icons.arrow_forward_rounded, size: 16),
+              label: Text(targetTabName, style: GoogleFonts.poppins(fontWeight: FontWeight.w600, fontSize: 13)),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppTheme.primaryPurple,
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+              ),
+            ),
+        ],
+      ),
+    );
   }
 
   Widget _buildStudentImportCard() {
