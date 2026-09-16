@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'dart:typed_data';
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -37,6 +39,8 @@ class _SettingsViewState extends ConsumerState<SettingsView>
   final _schoolPrincipalController = TextEditingController();
   final _receiptPathController = TextEditingController();
   final _backupPathController = TextEditingController();
+  Uint8List? _logoBytes;
+  String? _logoPath;
 
   final SettingsService _settingsService = SettingsService();
   final BackupService _backupService = BackupService();
@@ -82,6 +86,13 @@ class _SettingsViewState extends ConsumerState<SettingsView>
             'Inspiring Excellence, Building Futures';
     final schoolPrincipal =
         await _settingsService.getSetting('school_principal') ?? '';
+    
+    final logoPath = await _settingsService.getSchoolLogoPath();
+    if (logoPath != null) {
+      final logoBytes = await _settingsService.getSchoolLogoBytes();
+      _logoPath = logoPath;
+      _logoBytes = logoBytes;
+    }
 
     if (mounted) {
       setState(() {
@@ -554,22 +565,61 @@ class _SettingsViewState extends ConsumerState<SettingsView>
                 ),
                 child: Column(
                   children: [
-                    Container(
-                      width: 52,
-                      height: 52,
-                      decoration: BoxDecoration(
-                        gradient: LinearGradient(
-                          colors: [
-                            AppTheme.primaryPurple,
-                            AppTheme.primaryLight
-                          ],
+                    Column(
+                      children: [
+                        GestureDetector(
+                          onTap: () async {
+                            final result = await FilePicker.platform.pickFiles(type: FileType.image, allowedExtensions: ['png', 'jpg', 'jpeg']);
+                            if (result != null && result.files.single.path != null) {
+                              final path = result.files.single.path!;
+                              await _settingsService.saveSchoolLogo(path);
+                              await _loadSettings();
+                            }
+                          },
+                          child: _logoBytes != null
+                              ? Container(
+                                  width: 70,
+                                  height: 70,
+                                  decoration: BoxDecoration(
+                                    shape: BoxShape.circle,
+                                    image: DecorationImage(
+                                      image: MemoryImage(_logoBytes!),
+                                      fit: BoxFit.cover,
+                                    ),
+                                    border: Border.all(color: AppTheme.primaryPurple, width: 2),
+                                  ),
+                                )
+                              : Container(
+                                  width: 52,
+                                  height: 52,
+                                  decoration: BoxDecoration(
+                                    gradient: LinearGradient(
+                                      colors: [
+                                        AppTheme.primaryPurple,
+                                        AppTheme.primaryLight
+                                      ],
+                                    ),
+                                    borderRadius: BorderRadius.circular(14),
+                                  ),
+                                  child: const Icon(Icons.add_a_photo_rounded,
+                                      color: Colors.white, size: 26),
+                                ),
                         ),
-                        borderRadius: BorderRadius.circular(14),
-                      ),
-                      child: const Icon(Icons.school_rounded,
-                          color: Colors.white, size: 26),
+                        if (_logoBytes != null)
+                          TextButton(
+                            onPressed: () async {
+                              await _settingsService.removeSchoolLogo();
+                              setState(() {
+                                _logoBytes = null;
+                                _logoPath = null;
+                              });
+                            },
+                            child: Text('Remove Logo', style: TextStyle(fontSize: 10, color: AppTheme.error)),
+                          )
+                        else
+                          const SizedBox(height: 14),
+                      ],
                     ),
-                    const SizedBox(height: 14),
                     Text(
                       _schoolNameController.text.isNotEmpty
                           ? _schoolNameController.text.toUpperCase()
@@ -1626,6 +1676,7 @@ class _SettingsViewState extends ConsumerState<SettingsView>
       await _settingsService.setSetting(
           'school_principal', _schoolPrincipalController.text.trim());
       ref.invalidate(schoolNameProvider);
+      ref.invalidate(schoolLogoProvider);
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(

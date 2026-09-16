@@ -1,3 +1,4 @@
+import 'dart:typed_data';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'auth_provider.dart';
 import '../services/services.dart';
@@ -33,6 +34,13 @@ final schoolNameProvider = FutureProvider<String>((ref) async {
     return name.trim();
   }
   return 'Eduvia';
+});
+
+/// School Logo Provider — loads logo bytes from persisted file
+final schoolLogoProvider = FutureProvider<Uint8List?>((ref) async {
+  final dbService = ref.watch(databaseServiceProvider);
+  final settingsService = SettingsService(dbService: dbService);
+  return await settingsService.getSchoolLogoBytes();
 });
 
 /// InvoiceService Provider

@@ -1,3 +1,4 @@
+import "dart:typed_data";
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
@@ -63,6 +64,7 @@ class _PaymentReceiptDialogState extends State<PaymentReceiptDialog> {
   String _schoolName = 'Eduvia Public School';
   String _schoolAddress = '123 Education Boulevard, Academic District';
   String _schoolContact = 'Phone: +91 9876543210';
+  Uint8List? _logoBytes;
 
   @override
   void initState() {
@@ -75,12 +77,14 @@ class _PaymentReceiptDialogState extends State<PaymentReceiptDialog> {
     final addr = await _settingsService.getSetting('school_address');
     final phone = await _settingsService.getSetting('school_phone') ??
         await _settingsService.getSetting('school_contact');
+    final logoBytes = await _settingsService.getSchoolLogoBytes();
 
     if (mounted) {
       setState(() {
         if (name != null && name.isNotEmpty) _schoolName = name;
         if (addr != null && addr.isNotEmpty) _schoolAddress = addr;
         if (phone != null && phone.isNotEmpty) _schoolContact = phone;
+        _logoBytes = logoBytes;
       });
     }
   }
@@ -191,7 +195,8 @@ class _PaymentReceiptDialogState extends State<PaymentReceiptDialog> {
       referenceNumber: widget.referenceNumber,
       receiptNumber: widget.receiptNumber,
       academicYear: widget.academicYear,
-      schoolName: _schoolName,
+      schoolLogo: _logoBytes,
+        schoolName: _schoolName,
       schoolAddress: _schoolAddress,
       schoolContact: _schoolContact,
     );

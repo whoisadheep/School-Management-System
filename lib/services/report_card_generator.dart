@@ -11,6 +11,7 @@ import '../models/models.dart';
 class ReportCardGenerator {
   /// Generate a clean A4 PDF Student Progress Report Card as bytes (for preview, print, or saving)
   static Future<Uint8List> generateReportCardPdfBytes({
+    Uint8List? schoolLogo,
     required ExamResultData examResult,
     int? rankInClass,
     String schoolName = 'Eduvia',
@@ -45,7 +46,26 @@ class ReportCardGenerator {
                 child: pw.Row(
                   mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
                   children: [
-                    pw.Column(
+                    pw.Row(
+                      crossAxisAlignment: pw.CrossAxisAlignment.center,
+                      children: [
+                        if (schoolLogo != null) ...[
+                          pw.Container(
+                            width: 48,
+                            height: 48,
+                            decoration: pw.BoxDecoration(
+                              color: PdfColors.white,
+                              borderRadius: const pw.BorderRadius.all(pw.Radius.circular(8)),
+                            ),
+                            padding: const pw.EdgeInsets.all(4),
+                            child: pw.Image(
+                              pw.MemoryImage(schoolLogo),
+                              fit: pw.BoxFit.contain,
+                            ),
+                          ),
+                          pw.SizedBox(width: 12),
+                        ],
+                        pw.Column(
                       crossAxisAlignment: pw.CrossAxisAlignment.start,
                       children: [
                         pw.Text(
@@ -65,6 +85,8 @@ class ReportCardGenerator {
                           schoolContact,
                           style: const pw.TextStyle(color: PdfColors.white, fontSize: 9),
                         ),
+                      ],
+                    ),
                       ],
                     ),
                     pw.Container(
@@ -244,6 +266,7 @@ class ReportCardGenerator {
 
   /// Generate a clean A4 PDF Student Progress Report Card and save to file
   static Future<File> generateReportCard({
+    Uint8List? schoolLogo,
     required ExamResultData examResult,
     int? rankInClass,
     String schoolName = 'Eduvia',
@@ -253,6 +276,7 @@ class ReportCardGenerator {
     final bytes = await generateReportCardPdfBytes(
       examResult: examResult,
       rankInClass: rankInClass,
+      schoolLogo: schoolLogo,
       schoolName: schoolName,
       schoolAddress: schoolAddress,
       schoolContact: schoolContact,

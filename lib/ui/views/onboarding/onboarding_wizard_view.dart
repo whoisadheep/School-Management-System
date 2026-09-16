@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'dart:typed_data';
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../../core/theme/app_theme.dart';
@@ -29,6 +31,8 @@ class _OnboardingWizardViewState extends ConsumerState<OnboardingWizardView>
   final _schoolAddressController = TextEditingController(text: '123 Education Boulevard, City Campus');
   final _schoolContactController = TextEditingController(text: '+91 98765 43210 | info@school.edu');
   final _schoolMottoController = TextEditingController(text: 'Inspiring Excellence, Building Futures');
+  String? _logoPath;
+  Uint8List? _logoBytes;
 
   // Step 2: Academic & Finance
   final _academicYearController = TextEditingController(text: '2026-2027');
@@ -172,6 +176,7 @@ class _OnboardingWizardViewState extends ConsumerState<OnboardingWizardView>
       await settings.setSetting('school_address', _schoolAddressController.text.trim());
       await settings.setSetting('school_contact', _schoolContactController.text.trim());
       await settings.setSetting('school_motto', _schoolMottoController.text.trim());
+      if (_logoPath != null) await settings.saveSchoolLogo(_logoPath!);
       await settings.setSetting('currency_symbol', _selectedCurrency);
       await settings.setSetting('fee_billing_cycle', _selectedFeeCycle);
 
@@ -210,6 +215,7 @@ class _OnboardingWizardViewState extends ConsumerState<OnboardingWizardView>
       // 4. Mark Onboarding as Completed
       await settings.setSetting('is_onboarding_completed', '1');
       ref.invalidate(schoolNameProvider);
+      ref.invalidate(schoolLogoProvider);
 
       // Hold celebration for 1.4s so the user enjoys the cute animation
       await Future.delayed(const Duration(milliseconds: 1400));
@@ -556,6 +562,54 @@ class _OnboardingWizardViewState extends ConsumerState<OnboardingWizardView>
                 border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
               ),
             ),
+            const SizedBox(height: 24),
+            Text('School Logo', style: GoogleFonts.poppins(fontSize: 14, fontWeight: FontWeight.w600)),
+            const SizedBox(height: 12),
+            GestureDetector(
+              onTap: () async {
+                final result = await FilePicker.platform.pickFiles(type: FileType.image, allowedExtensions: ['png', 'jpg', 'jpeg']);
+                if (result != null && result.files.single.path != null) {
+                  final path = result.files.single.path!;
+                  final bytes = await result.files.single.xFile.readAsBytes();
+                  setState(() {
+                    _logoPath = path;
+                    _logoBytes = bytes;
+                  });
+                }
+              },
+              child: _logoBytes != null
+                  ? Container(
+                      width: 80,
+                      height: 80,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        image: DecorationImage(image: MemoryImage(_logoBytes!), fit: BoxFit.cover),
+                        border: Border.all(color: AppTheme.primaryPurple, width: 2),
+                      ),
+                    )
+                  : Container(
+                      width: 80,
+                      height: 80,
+                      decoration: BoxDecoration(
+                        color: AppTheme.bgSurface,
+                        shape: BoxShape.circle,
+                        border: Border.all(color: AppTheme.borderLight, width: 1),
+                      ),
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(Icons.add_a_photo, color: AppTheme.textSecondary, size: 24),
+                          const SizedBox(height: 4),
+                          Text('Upload', style: TextStyle(color: AppTheme.textSecondary, fontSize: 12)),
+                        ],
+                      ),
+                    ),
+            ),
+            if (_logoBytes != null)
+              TextButton(
+                onPressed: () => setState(() { _logoBytes = null; _logoPath = null; }),
+                child: Text('Remove Logo', style: TextStyle(color: AppTheme.error)),
+              ),
           ],
         ),
       ),

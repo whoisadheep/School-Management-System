@@ -15,6 +15,7 @@ class ReportGenerator {
   /// Returns the saved [File] object pointing to the generated PDF.
   /// Build raw PDF bytes for a payment receipt (for preview).
   static Future<Uint8List> buildPaymentReceiptPdfBytes({
+    Uint8List? schoolLogo,
     required Transaction transaction,
     required Invoice invoice,
     required Student student,
@@ -55,7 +56,26 @@ class ReportGenerator {
                   mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
                   crossAxisAlignment: pw.CrossAxisAlignment.center,
                   children: [
-                    pw.Column(
+                    pw.Row(
+                      crossAxisAlignment: pw.CrossAxisAlignment.center,
+                      children: [
+                        if (schoolLogo != null) ...[
+                          pw.Container(
+                            width: 36,
+                            height: 36,
+                            decoration: pw.BoxDecoration(
+                              color: PdfColors.white,
+                              borderRadius: const pw.BorderRadius.all(pw.Radius.circular(6)),
+                            ),
+                            padding: const pw.EdgeInsets.all(2),
+                            child: pw.Image(
+                              pw.MemoryImage(schoolLogo),
+                              fit: pw.BoxFit.contain,
+                            ),
+                          ),
+                          pw.SizedBox(width: 8),
+                        ],
+                        pw.Column(
                       crossAxisAlignment: pw.CrossAxisAlignment.start,
                       children: [
                         pw.Text(
@@ -81,6 +101,8 @@ class ReportGenerator {
                             fontSize: 7.5,
                           ),
                         ),
+                      ],
+                    ),
                       ],
                     ),
                     pw.Container(
@@ -356,6 +378,7 @@ class ReportGenerator {
 
   /// Build raw PDF bytes for a unified batch payment receipt (supporting multiple fees/months).
   static Future<Uint8List> buildBatchPaymentReceiptPdfBytes({
+    Uint8List? schoolLogo,
     required List<StudentFeeLedger> paidLedgers,
     required Student student,
     required double totalAmountPaid,
@@ -397,7 +420,26 @@ class ReportGenerator {
                   mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
                   crossAxisAlignment: pw.CrossAxisAlignment.center,
                   children: [
-                    pw.Column(
+                    pw.Row(
+                      crossAxisAlignment: pw.CrossAxisAlignment.center,
+                      children: [
+                        if (schoolLogo != null) ...[
+                          pw.Container(
+                            width: 36,
+                            height: 36,
+                            decoration: pw.BoxDecoration(
+                              color: PdfColors.white,
+                              borderRadius: const pw.BorderRadius.all(pw.Radius.circular(6)),
+                            ),
+                            padding: const pw.EdgeInsets.all(2),
+                            child: pw.Image(
+                              pw.MemoryImage(schoolLogo),
+                              fit: pw.BoxFit.contain,
+                            ),
+                          ),
+                          pw.SizedBox(width: 8),
+                        ],
+                        pw.Column(
                       crossAxisAlignment: pw.CrossAxisAlignment.start,
                       children: [
                         pw.Text(
@@ -423,6 +465,8 @@ class ReportGenerator {
                             fontSize: 7.5,
                           ),
                         ),
+                      ],
+                    ),
                       ],
                     ),
                     pw.Container(
@@ -728,6 +772,7 @@ class ReportGenerator {
   ///
   /// Returns the saved [File] object pointing to the generated PDF.
   static Future<File> generatePaymentReceipt({
+    Uint8List? schoolLogo,
     required Transaction transaction,
     required Invoice invoice,
     required Student student,
@@ -744,6 +789,7 @@ class ReportGenerator {
       student: student,
       receiptNumber: receiptNumber,
       feeHeadName: feeHeadName,
+      schoolLogo: schoolLogo,
       schoolName: schoolName,
       schoolAddress: schoolAddress,
       schoolContact: schoolContact,
@@ -772,6 +818,7 @@ class ReportGenerator {
 
   /// Build raw PDF bytes for a Student ID Card (for preview).
   static Future<Uint8List> buildStudentIdCardPdfBytes({
+    Uint8List? schoolLogo,
     required Student student,
     String schoolName = 'Eduvia',
     String schoolAddress = '123 Education Boulevard, Academic District',
@@ -812,6 +859,22 @@ class ReportGenerator {
                     ),
                     child: pw.Column(
                       children: [
+                        if (schoolLogo != null) ...[
+                          pw.Container(
+                            width: 32,
+                            height: 32,
+                            decoration: pw.BoxDecoration(
+                              color: PdfColors.white,
+                              shape: pw.BoxShape.circle,
+                            ),
+                            padding: const pw.EdgeInsets.all(2),
+                            child: pw.Image(
+                              pw.MemoryImage(schoolLogo),
+                              fit: pw.BoxFit.contain,
+                            ),
+                          ),
+                          pw.SizedBox(height: 6),
+                        ],
                         pw.Text(
                           schoolName,
                           style: pw.TextStyle(color: PdfColors.white, fontSize: 11, fontWeight: pw.FontWeight.bold),
@@ -917,6 +980,7 @@ class ReportGenerator {
 
   /// Generate a printable PDF Student ID Card and save to Documents.
   static Future<File> generateStudentIdCard({
+    Uint8List? schoolLogo,
     required Student student,
     String schoolName = 'Eduvia',
     String schoolAddress = '123 Education Boulevard, Academic District',
@@ -924,6 +988,7 @@ class ReportGenerator {
   }) async {
     final bytes = await buildStudentIdCardPdfBytes(
       student: student,
+      schoolLogo: schoolLogo,
       schoolName: schoolName,
       schoolAddress: schoolAddress,
       schoolContact: schoolContact,
@@ -958,6 +1023,7 @@ class ReportGenerator {
 
   /// Build raw PDF bytes for a Transfer Certificate (for preview).
   static Future<Uint8List> buildTransferCertificatePdfBytes({
+    Uint8List? schoolLogo,
     required Student student,
     required String tcNumber,
     required String tcDate,
@@ -991,6 +1057,17 @@ class ReportGenerator {
                 ),
                 child: pw.Column(
                   children: [
+                    if (schoolLogo != null) ...[
+                      pw.Container(
+                        width: 48,
+                        height: 48,
+                        child: pw.Image(
+                          pw.MemoryImage(schoolLogo),
+                          fit: pw.BoxFit.contain,
+                        ),
+                      ),
+                      pw.SizedBox(height: 8),
+                    ],
                     pw.Text(
                       schoolName,
                       style: pw.TextStyle(fontSize: 22, fontWeight: pw.FontWeight.bold, color: primaryColor),
@@ -1110,6 +1187,7 @@ class ReportGenerator {
 
   /// Generate a formal PDF Transfer Certificate and save to Documents.
   static Future<File> generateTransferCertificate({
+    Uint8List? schoolLogo,
     required Student student,
     required String tcNumber,
     required String tcDate,
@@ -1123,6 +1201,7 @@ class ReportGenerator {
       tcNumber: tcNumber,
       tcDate: tcDate,
       reasonForLeaving: reasonForLeaving,
+      schoolLogo: schoolLogo,
       schoolName: schoolName,
       schoolAddress: schoolAddress,
       affiliationNo: affiliationNo,

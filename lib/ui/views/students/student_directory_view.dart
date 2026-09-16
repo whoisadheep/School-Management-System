@@ -13,6 +13,7 @@ import '../../../providers/dashboard_provider.dart';
 import '../../../services/csv_export_service.dart';
 import '../../../services/file_storage_service.dart';
 import '../../../services/report_generator.dart';
+import '../../../services/settings_service.dart';
 import '../../widgets/pdf_preview_dialog.dart';
 import '../../../services/app_logger.dart';
 import '../../layout/widgets/glass_card.dart';
@@ -2009,7 +2010,8 @@ class _StudentDirectoryViewState extends ConsumerState<StudentDirectoryView>
   }
   Future<void> _generateStudentIdCard(BuildContext context, Student student) async {
     try {
-      final pdfBytes = await ReportGenerator.buildStudentIdCardPdfBytes(student: student);
+      final logoBytes = await SettingsService().getSchoolLogoBytes();
+      final pdfBytes = await ReportGenerator.buildStudentIdCardPdfBytes(schoolLogo: logoBytes, student: student);
       if (context.mounted) {
         final savedFile = await PdfPreviewDialog.show(
           context: context,
@@ -2098,7 +2100,9 @@ class _StudentDirectoryViewState extends ConsumerState<StudentDirectoryView>
                   tcDate: tcDate,
                 );
 
+                final logoBytes = await SettingsService().getSchoolLogoBytes();
                 final pdfBytes = await ReportGenerator.buildTransferCertificatePdfBytes(
+                  schoolLogo: logoBytes,
                   student: student,
                   tcNumber: tcNum,
                   tcDate: tcDate,

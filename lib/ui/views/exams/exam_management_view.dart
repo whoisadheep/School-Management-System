@@ -9,6 +9,7 @@ import '../../../providers/services_provider.dart';
 import '../../../providers/auth_provider.dart';
 import '../../../core/auth/permission_helper.dart';
 import '../../../services/report_card_generator.dart';
+import '../../../services/settings_service.dart';
 import '../../widgets/pdf_preview_dialog.dart';
 
 /// Examination & Reports Management View — Exams Setup, Marks Entry,
@@ -895,7 +896,9 @@ class _ExamManagementViewState extends ConsumerState<ExamManagementView> with Si
                                   ElevatedButton.icon(
                                     onPressed: () async {
                                       try {
+                                        final logoBytes = await SettingsService().getSchoolLogoBytes();
                                         final bytes = await ReportCardGenerator.generateReportCardPdfBytes(
+                                          schoolLogo: logoBytes,
                                           examResult: examRes,
                                           rankInClass: rank,
                                         );

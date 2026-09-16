@@ -1,3 +1,5 @@
+import 'dart:io';
+import 'dart:typed_data';
 import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
@@ -61,5 +63,47 @@ class SettingsService {
   /// Update receipt export path to user-chosen custom folder or shared network drive
   Future<void> setReceiptExportPath(String path) async {
     await setSetting('receipt_export_path', path);
+  }
+
+  /// Get school logo path
+  Future<String?> getSchoolLogoPath() async {
+    return await getSetting('school_logo_path');
+  }
+
+  /// Save school logo
+  Future<String> saveSchoolLogo(String sourceFilePath) async {
+    final docsDir = await getApplicationDocumentsDirectory();
+    final eduviaDir = Directory(p.join(docsDir.path, 'Eduvia'));
+    if (!await eduviaDir.exists()) {
+      await eduviaDir.create(recursive: true);
+    }
+    final destPath = p.join(eduviaDir.path, 'school_logo.png');
+    final sourceFile = File(sourceFilePath);
+    await sourceFile.copy(destPath);
+    await setSetting('school_logo_path', destPath);
+    return destPath;
+  }
+
+  /// Get school logo bytes
+  Future<Uint8List?> getSchoolLogoBytes() async {
+    final path = await getSchoolLogoPath();
+    if (path == null) return null;
+    final file = File(path);
+    if (await file.exists()) {
+      return await file.readAsBytes();
+    }
+    return null;
+  }
+
+  /// Remove school logo
+  Future<void> removeSchoolLogo() async {
+    final path = await getSchoolLogoPath();
+    if (path != null) {
+      final file = File(path);
+      if (await file.exists()) {
+        await file.delete();
+      }
+      await setSetting('school_logo_path', '');
+    }
   }
 }
