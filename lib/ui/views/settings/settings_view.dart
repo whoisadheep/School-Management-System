@@ -593,7 +593,7 @@ class _SettingsViewState extends ConsumerState<SettingsView>
                                   width: 52,
                                   height: 52,
                                   decoration: BoxDecoration(
-                                    gradient: LinearGradient(
+                                    gradient: const LinearGradient(
                                       colors: [
                                         AppTheme.primaryPurple,
                                         AppTheme.primaryLight
@@ -614,7 +614,7 @@ class _SettingsViewState extends ConsumerState<SettingsView>
                                 _logoPath = null;
                               });
                             },
-                            child: Text('Remove Logo', style: TextStyle(fontSize: 10, color: AppTheme.error)),
+                            child: const Text('Remove Logo', style: TextStyle(fontSize: 10, color: AppTheme.error)),
                           )
                         else
                           const SizedBox(height: 14),

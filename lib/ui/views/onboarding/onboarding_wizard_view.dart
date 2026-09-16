@@ -593,13 +593,13 @@ class _OnboardingWizardViewState extends ConsumerState<OnboardingWizardView>
                       decoration: BoxDecoration(
                         color: AppTheme.bgSurface,
                         shape: BoxShape.circle,
-                        border: Border.all(color: AppTheme.borderLight, width: 1),
+                        border: Border.all(color: AppTheme.divider, width: 1),
                       ),
-                      child: Column(
+                      child: const Column(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
                           Icon(Icons.add_a_photo, color: AppTheme.textSecondary, size: 24),
-                          const SizedBox(height: 4),
+                          SizedBox(height: 4),
                           Text('Upload', style: TextStyle(color: AppTheme.textSecondary, fontSize: 12)),
                         ],
                       ),
@@ -608,7 +608,7 @@ class _OnboardingWizardViewState extends ConsumerState<OnboardingWizardView>
             if (_logoBytes != null)
               TextButton(
                 onPressed: () => setState(() { _logoBytes = null; _logoPath = null; }),
-                child: Text('Remove Logo', style: TextStyle(color: AppTheme.error)),
+                child: const Text('Remove Logo', style: TextStyle(color: AppTheme.error)),
               ),
           ],
         ),

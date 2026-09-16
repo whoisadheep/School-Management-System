@@ -25,6 +25,7 @@ class AppTheme {
   static const Color surface = bgSurface;
   static const Color surfaceVariant = Color(0xFFF0ECFF);
   static const Color divider = Color(0xFFE8E4FF);
+  static const Color borderLight = Color(0xFFE8E4FF);
 
   // ── Status Colors ──
   static const Color success = Color(0xFF22C55E);
