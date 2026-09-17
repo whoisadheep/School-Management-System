@@ -391,12 +391,16 @@ class _FeeStructureSetupViewState extends ConsumerState<FeeStructureSetupView> {
                 if (amt <= 0) return;
 
                 final dbService = ref.read(databaseServiceProvider);
+                final yearsList = ref.read(academicYearsProvider).value ?? [];
+                final matchingYear = yearsList.where((y) => y.name == _selectedAcademicYear || y.id == _selectedAcademicYear).firstOrNull;
+
                 final fs = FeeStructure(
                   id: existingStructure?.id ?? const Uuid().v4(),
                   feeHeadId: selectedHeadId,
                   feeCategoryId: selectedHeadId,
                   className: _selectedClass,
                   academicYear: _selectedAcademicYear,
+                  academicYearId: matchingYear?.id ?? existingStructure?.academicYearId,
                   amount: amt,
                   dueDayOfMonth: dueDay,
                   createdAt: existingStructure?.createdAt ?? DateTime.now(),

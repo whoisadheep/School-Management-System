@@ -9,6 +9,7 @@ class FeeStructure {
   final String className;
   final String? sectionName;
   final String academicYear;
+  final String? academicYearId;
   final double amount;
   final int? dueDayOfMonth;
   final DateTime createdAt;
@@ -21,6 +22,7 @@ class FeeStructure {
     required this.className,
     this.sectionName,
     required this.academicYear,
+    this.academicYearId,
     required this.amount,
     this.dueDayOfMonth,
     required this.createdAt,
@@ -32,6 +34,7 @@ class FeeStructure {
     required String className,
     String? sectionName,
     required String academicYear,
+    String? academicYearId,
     required double amount,
     int? dueDayOfMonth,
   }) {
@@ -43,6 +46,7 @@ class FeeStructure {
       className: className,
       sectionName: sectionName,
       academicYear: academicYear,
+      academicYearId: academicYearId,
       amount: amount,
       dueDayOfMonth: dueDayOfMonth,
       createdAt: now,
@@ -57,6 +61,7 @@ class FeeStructure {
     String? className,
     String? sectionName,
     String? academicYear,
+    String? academicYearId,
     double? amount,
     int? dueDayOfMonth,
     DateTime? createdAt,
@@ -69,6 +74,7 @@ class FeeStructure {
       className: className ?? this.className,
       sectionName: sectionName ?? this.sectionName,
       academicYear: academicYear ?? this.academicYear,
+      academicYearId: academicYearId ?? this.academicYearId,
       amount: amount ?? this.amount,
       dueDayOfMonth: dueDayOfMonth ?? this.dueDayOfMonth,
       createdAt: createdAt ?? this.createdAt,
@@ -84,6 +90,7 @@ class FeeStructure {
       className: (map['class'] as String?) ?? (map['grade_level'] as String?) ?? '',
       sectionName: map['section'] as String?,
       academicYear: (map['academic_year'] as String?) ?? (map['academic_year_id'] as String?) ?? '2026-2027',
+      academicYearId: map['academic_year_id'] as String?,
       amount: (map['amount'] as num).toDouble(),
       dueDayOfMonth: map['due_day_of_month'] as int?,
       createdAt: map['created_at'] != null
@@ -104,7 +111,7 @@ class FeeStructure {
       'grade_level': className,
       'section': sectionName,
       'academic_year': academicYear,
-      'academic_year_id': academicYear.startsWith('ay-') ? academicYear : 'ay-$academicYear',
+      'academic_year_id': academicYearId ?? (academicYear.startsWith('ay-') ? academicYear : 'ay-$academicYear'),
       'amount': amount,
       'due_day_of_month': dueDayOfMonth,
       'created_at': createdAt.toIso8601String(),
@@ -119,7 +126,6 @@ class FeeStructure {
 
   // Legacy getters for backward compatibility
   String get gradeLevel => className;
-  String get academicYearId => academicYear;
 }
 
 /// Breakdown of net payable fee for a student per fee head after applying discounts

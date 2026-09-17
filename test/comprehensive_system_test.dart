@@ -93,22 +93,42 @@ void main() {
       expect(partiallyPaid.netAmount, equals(10500.0));
     });
 
-    test('FeeStructure calculation logic', () {
+    test('FeeStructure serialization and academicYearId resolution', () {
+      final now = DateTime(2026, 9, 17, 10, 0, 0);
       final structure = FeeStructure(
         id: 'fee-str-1',
         academicYear: '2026-2027',
-        feeCategoryId: 'cat-tuition',
-        className: 'Grade 10',
-        feeHeadId: 'tuition-head',
-        amount: 24000.0,
+        academicYearId: '16ac5bca-7191-4bae-86fc-e2733422bb3b',
+        feeCategoryId: 'fh-admission',
+        className: 'Grade 1',
+        feeHeadId: 'fh-admission',
+        amount: 1500.0,
         dueDayOfMonth: 10,
-        createdAt: DateTime.now(),
-        updatedAt: DateTime.now(),
+        createdAt: now,
+        updatedAt: now,
       );
 
-      expect(structure.className, 'Grade 10');
-      expect(structure.amount, 24000.0);
+      expect(structure.className, 'Grade 1');
+      expect(structure.academicYear, '2026-2027');
+      expect(structure.academicYearId, '16ac5bca-7191-4bae-86fc-e2733422bb3b');
+      expect(structure.amount, 1500.0);
       expect(structure.dueDayOfMonth, 10);
+
+      final map = structure.toMap();
+      expect(map['academic_year_id'], '16ac5bca-7191-4bae-86fc-e2733422bb3b');
+      expect(map['academic_year'], '2026-2027');
+      expect(map['fee_category_id'], 'fh-admission');
+
+      final fromMap = FeeStructure.fromMap(map);
+      expect(fromMap.id, structure.id);
+      expect(fromMap.academicYearId, '16ac5bca-7191-4bae-86fc-e2733422bb3b');
+      expect(fromMap.academicYear, '2026-2027');
+      expect(fromMap.className, 'Grade 1');
+      expect(fromMap.amount, 1500.0);
+
+      final updated = structure.copyWith(amount: 1800.0, academicYearId: 'ay-new-id');
+      expect(updated.amount, 1800.0);
+      expect(updated.academicYearId, 'ay-new-id');
     });
 
     test('Exam result and grade boundary calculations', () {

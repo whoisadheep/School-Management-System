@@ -596,9 +596,13 @@ class DatabaseService {
           throw ArgumentError(
               'Student with ID "${invoice.studentId}" not found.');
         }
+        final map = invoice.toMap();
+        if (invoice.academicYearId != null && invoice.academicYearId!.isNotEmpty) {
+          map['academic_year_id'] = await resolveAcademicYearId(txn, invoice.academicYearId!);
+        }
         await _insertLogged(txn, 
           'invoices',
-          invoice.toMap(),
+          map,
           conflictAlgorithm: ConflictAlgorithm.abort,
         );
         await txn.rawUpdate(
@@ -1655,16 +1659,162 @@ class DatabaseService {
   }
 
   /// Get fee structures for class and academic year (with grade alias support)
+  /// Resolves the actual `academic_years.id` for a given academic year name or ID.
+  /// If no matching academic year exists in the database, inserts one and returns its ID.
+  Future<String> resolveAcademicYearId(DatabaseExecutor db, String academicYear) async {
+    final cleanYearName = academicYear.startsWith('ay-')
+        ? academicYear.substring(3)
+        : academicYear;
+
+    final ayRows = await db.query(
+      'academic_years',
+      where: 'id = ? OR name = ? OR name = ?',
+      whereArgs: [academicYear, academicYear, cleanYearName],
+      limit: 1,
+    );
+
+    if (ayRows.isNotEmpty) {
+      return ayRows.first['id'] as String;
+    }
+
+    final resolvedAyId = academicYear.startsWith('ay-') ? academicYear : 'ay-$academicYear';
+    final parts = cleanYearName.split('-');
+    final startYear = parts.isNotEmpty ? parts[0] : '2026';
+    final endYear = parts.length > 1 ? parts[1] : '2027';
+
+    await db.insert(
+      'academic_years',
+      {
+        'id': resolvedAyId,
+        'name': cleanYearName,
+        'start_date': '$startYear-06-01',
+        'end_date': '$endYear-04-30',
+        'is_current': 1,
+      },
+      conflictAlgorithm: ConflictAlgorithm.ignore,
+    );
+
+    // If ignored due to unique constraint on name, fetch the existing row by name
+    final recheck = await db.query(
+      'academic_years',
+      where: 'id = ? OR name = ?',
+      whereArgs: [resolvedAyId, cleanYearName],
+      limit: 1,
+    );
+    if (recheck.isNotEmpty) {
+      return recheck.first['id'] as String;
+    }
+
+    return resolvedAyId;
+  }
+
+  /// Resolves or ensures a valid `fee_categories.id` for foreign key integrity.
+  Future<String> resolveFeeCategoryId(
+    DatabaseExecutor db,
+    String categoryOrHeadId, {
+    String? categoryName,
+    double defaultAmount = 0.0,
+  }) async {
+    // 1. Check if category exists by ID
+    final catById = await db.query(
+      'fee_categories',
+      where: 'id = ?',
+      whereArgs: [categoryOrHeadId],
+      limit: 1,
+    );
+    if (catById.isNotEmpty) {
+      return catById.first['id'] as String;
+    }
+
+    // 2. Check if category exists by name
+    final nameToSearch = categoryName ?? categoryOrHeadId;
+    final catByName = await db.query(
+      'fee_categories',
+      where: 'name = ?',
+      whereArgs: [nameToSearch],
+      limit: 1,
+    );
+    if (catByName.isNotEmpty) {
+      return catByName.first['id'] as String;
+    }
+
+    // 3. Look up fee_heads to find a friendly name if available
+    String finalName = nameToSearch;
+    final fhRows = await db.query(
+      'fee_heads',
+      where: 'id = ?',
+      whereArgs: [categoryOrHeadId],
+      limit: 1,
+    );
+    if (fhRows.isNotEmpty && fhRows.first['name'] != null) {
+      final candidateName = fhRows.first['name'] as String;
+      final existingName = await db.query(
+        'fee_categories',
+        where: 'name = ?',
+        whereArgs: [candidateName],
+        limit: 1,
+      );
+      if (existingName.isEmpty) {
+        finalName = candidateName;
+      }
+    }
+
+    await db.insert(
+      'fee_categories',
+      {
+        'id': categoryOrHeadId,
+        'name': finalName,
+        'default_amount': defaultAmount,
+        'cycle': 'monthly',
+        'is_active': 1,
+      },
+      conflictAlgorithm: ConflictAlgorithm.ignore,
+    );
+
+    final check = await db.query(
+      'fee_categories',
+      where: 'id = ? OR name = ?',
+      whereArgs: [categoryOrHeadId, finalName],
+      limit: 1,
+    );
+    if (check.isNotEmpty) {
+      return check.first['id'] as String;
+    }
+
+    return categoryOrHeadId;
+  }
+
+  /// Get fee structures for class and academic year (with grade alias support)
   Future<List<FeeStructure>> getFeeStructuresForClass(String className, String academicYear) async {
     final db = await _db;
     final aliases = getGradeAliases(className);
     if (aliases.isEmpty) return [];
 
-    final placeholders = List.filled(aliases.length, '?').join(', ');
+    final cleanAy = academicYear.startsWith('ay-') ? academicYear.substring(3) : academicYear;
+    final ayWithPrefix = academicYear.startsWith('ay-') ? academicYear : 'ay-$academicYear';
+
+    final ayRows = await db.query(
+      'academic_years',
+      where: 'id = ? OR name = ? OR name = ?',
+      whereArgs: [academicYear, academicYear, cleanAy],
+      limit: 1,
+    );
+
+    final Set<String> ayCandidates = {academicYear, cleanAy, ayWithPrefix};
+    if (ayRows.isNotEmpty) {
+      ayCandidates.add(ayRows.first['id'] as String);
+      if (ayRows.first['name'] != null) {
+        ayCandidates.add(ayRows.first['name'] as String);
+      }
+    }
+
+    final classPlaceholders = List.filled(aliases.length, '?').join(', ');
+    final ayPlaceholders = List.filled(ayCandidates.length, '?').join(', ');
+
     final results = await db.query(
       'fee_structures',
-      where: '(class IN ($placeholders) OR grade_level IN ($placeholders)) AND (academic_year = ? OR academic_year_id = ?)',
-      whereArgs: [...aliases, ...aliases, academicYear, academicYear],
+      where: '(class IN ($classPlaceholders) OR grade_level IN ($classPlaceholders)) AND (academic_year IN ($ayPlaceholders) OR academic_year_id IN ($ayPlaceholders))',
+      whereArgs: [...aliases, ...aliases, ...ayCandidates, ...ayCandidates],
     );
     return results.map((m) => FeeStructure.fromMap(m)).toList();
   }
@@ -1673,25 +1823,32 @@ class DatabaseService {
   Future<int> saveFeeStructureRow(FeeStructure fs) async {
     final db = await _db;
     
-    final ayId = fs.academicYear.startsWith('ay-') ? fs.academicYear : 'ay-${fs.academicYear}';
-    final parts = fs.academicYear.split('-');
-    final startYear = parts.isNotEmpty ? parts[0] : '2026';
-    final endYear = parts.length > 1 ? parts[1] : '2027';
-    
-    await db.execute(
-      'INSERT OR IGNORE INTO academic_years (id, name, start_date, end_date) VALUES (?, ?, ?, ?)',
-      [ayId, fs.academicYear, '$startYear-06-01', '$endYear-04-30']
+    final resolvedAyId = await resolveAcademicYearId(db, fs.academicYearId ?? fs.academicYear);
+    final resolvedCatId = await resolveFeeCategoryId(
+      db,
+      fs.feeCategoryId,
+      defaultAmount: fs.amount,
     );
 
-    await db.execute(
-      'INSERT OR IGNORE INTO fee_categories (id, name, default_amount, cycle) VALUES (?, ?, ?, ?)',
-      [fs.feeCategoryId, fs.feeCategoryId, 0.0, 'monthly']
+    final cleanAcademicYear = fs.academicYear.startsWith('ay-')
+        ? fs.academicYear.substring(3)
+        : fs.academicYear;
+
+    final fsToInsert = fs.copyWith(
+      feeCategoryId: resolvedCatId,
+      academicYear: cleanAcademicYear,
+      academicYearId: resolvedAyId,
     );
 
-    final inserted = await _insertLogged(db, 'fee_structures', fs.toMap(), conflictAlgorithm: ConflictAlgorithm.replace);
+    final map = fsToInsert.toMap();
+    map['academic_year_id'] = resolvedAyId;
+    map['academic_year'] = cleanAcademicYear;
+    map['fee_category_id'] = resolvedCatId;
+
+    final inserted = await _insertLogged(db, 'fee_structures', map, conflictAlgorithm: ConflictAlgorithm.replace);
     
     // Sync unpaid ledger amounts for all students in this class
-    await syncLedgerAmountsForFeeStructure(fs);
+    await syncLedgerAmountsForFeeStructure(fsToInsert);
     
     return inserted;
   }
@@ -1724,20 +1881,28 @@ class DatabaseService {
     final existing = await db.query('fee_structures', where: 'id = ?', whereArgs: [id]);
     if (existing.isNotEmpty) {
       final fs = FeeStructure.fromMap(existing.first);
+      final aliases = getGradeAliases(fs.className);
+      final placeholders = aliases.isEmpty ? '?' : List.filled(aliases.length, '?').join(', ');
+      final whereArgs = aliases.isEmpty ? [fs.className] : aliases;
       
       // Delete unpaid ledger rows for this fee head in this academic year for all students in this class
       final students = await db.query(
         'students',
-        where: 'grade_level = ?',
-        whereArgs: [fs.className],
+        where: 'grade_level IN ($placeholders) AND is_active = 1 AND is_alumni = 0',
+        whereArgs: whereArgs,
       );
       
+      final feeHeadId = fs.feeHeadId ?? fs.feeCategoryId;
+      final cleanAy = fs.academicYear.startsWith('ay-') ? fs.academicYear.substring(3) : fs.academicYear;
+      final ayCandidates = [fs.academicYear, cleanAy, 'ay-$cleanAy'];
+      final ayPh = List.filled(ayCandidates.length, '?').join(', ');
+
       for (final s in students) {
         final studentId = s['id'] as String;
         await db.delete(
           'student_fee_ledger',
-          where: 'student_id = ? AND fee_head_id = ? AND academic_year = ? AND status = ?',
-          whereArgs: [studentId, fs.feeHeadId ?? fs.feeCategoryId, fs.academicYear, 'pending'],
+          where: 'student_id = ? AND fee_head_id = ? AND academic_year IN ($ayPh) AND status IN (\'pending\', \'overdue\') AND amount_paid = 0',
+          whereArgs: [studentId, feeHeadId, ...ayCandidates],
         );
       }
     }
@@ -2284,9 +2449,8 @@ class DatabaseService {
   }) async {
     final db = await _db;
     final updatedEntries = <StudentFeeLedger>[];
-    final ayId = academicYear.startsWith('ay-') ? academicYear : 'ay-$academicYear';
-
     await db.transaction((txn) async {
+      final ayId = await resolveAcademicYearId(txn, academicYear);
       // Get the specific open ledger entries ordered by due date (oldest first)
       final placeholders = List.filled(ledgerIds.length, '?').join(',');
       final openRows = await txn.rawQuery('''
@@ -2438,7 +2602,7 @@ class DatabaseService {
           WHERE id = ?
         ''', [newPaid, newStatus.name, nowIso, entry.id]);
 
-        final ayId = academicYear.startsWith('ay-') ? academicYear : 'ay-$academicYear';
+        final ayId = await resolveAcademicYearId(txn, academicYear);
         
         // Create a matching invoice linked to this ledger entry
         final invoiceId = const Uuid().v4();
@@ -2725,10 +2889,14 @@ class DatabaseService {
       WHERE t.timestamp >= ? AND t.timestamp <= ?
     ''';
 
-    // Invoices might use 'ay-2026-2027' or '2026-2027'
+    // Invoices might use UUID, 'ay-2026-2027', or '2026-2027'
+    final resolvedAyId = await resolveAcademicYearId(db, academicYear);
     final ayStr = academicYear.startsWith('ay-') ? academicYear : 'ay-$academicYear';
-    query += ' AND (i.academic_year_id = ? OR i.academic_year_id = ?)';
-    args.addAll([academicYear, ayStr]);
+    final ayClean = academicYear.startsWith('ay-') ? academicYear.substring(3) : academicYear;
+    final Set<String> candidates = {academicYear, ayStr, ayClean, resolvedAyId};
+    final placeholders = List.filled(candidates.length, '?').join(', ');
+    query += ' AND i.academic_year_id IN ($placeholders)';
+    args.addAll(candidates);
 
     if (classId != null && classId.isNotEmpty) {
       query += ' AND (s.class_id = ? OR s.grade_level = (SELECT name FROM classes WHERE id = ?))';
