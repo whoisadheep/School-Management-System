@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../models/models.dart';
 import '../../../providers/dashboard_provider.dart';
@@ -34,6 +36,27 @@ class _FeeCollectionViewState extends ConsumerState<FeeCollectionView> with Sing
   final TextEditingController _invoiceSearchController = TextEditingController();
   Student? _selectedStudent;
 
+  // Rapid Express Counter State & Controllers
+  final TextEditingController _rapidSearchController = TextEditingController();
+  final FocusNode _rapidSearchFocusNode = FocusNode();
+  final TextEditingController _rapidPaidAmountController = TextEditingController();
+  final FocusNode _rapidPaidFocusNode = FocusNode();
+  final TextEditingController _rapidTenderedController = TextEditingController();
+  final FocusNode _rapidTenderedFocusNode = FocusNode();
+  final TextEditingController _rapidReferenceController = TextEditingController();
+  PaymentMethod _rapidPaymentMethod = PaymentMethod.cash;
+  Student? _rapidStudent;
+  List<StudentFeeLedger> _rapidStudentDues = [];
+  final Set<String> _rapidSelectedLedgerIds = {};
+  bool _rapidIsProcessing = false;
+
+  // Last receipt tracker for quick re-print & WhatsApp
+  String? _lastReceiptNumber;
+  Student? _lastReceiptStudent;
+  double? _lastReceiptAmount;
+  PaymentMethod? _lastReceiptMethod;
+  List<StudentFeeLedger>? _lastReceiptLedgers;
+
   // Session & Month Range
   String? _selectedAcademicYear;
   String? _fromMonth;
@@ -60,7 +83,7 @@ class _FeeCollectionViewState extends ConsumerState<FeeCollectionView> with Sing
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 3, vsync: this);
+    _tabController = TabController(length: 4, vsync: this);
   }
 
   @override
@@ -71,6 +94,13 @@ class _FeeCollectionViewState extends ConsumerState<FeeCollectionView> with Sing
     _paidAmountController.dispose();
     _referenceController.dispose();
     _notesController.dispose();
+    _rapidSearchController.dispose();
+    _rapidSearchFocusNode.dispose();
+    _rapidPaidAmountController.dispose();
+    _rapidPaidFocusNode.dispose();
+    _rapidTenderedController.dispose();
+    _rapidTenderedFocusNode.dispose();
+    _rapidReferenceController.dispose();
     super.dispose();
   }
 
@@ -213,6 +243,16 @@ class _FeeCollectionViewState extends ConsumerState<FeeCollectionView> with Sing
               labelStyle: GoogleFonts.poppins(fontWeight: FontWeight.w600, fontSize: 13),
               unselectedLabelStyle: GoogleFonts.poppins(fontWeight: FontWeight.w500, fontSize: 13),
               tabs: const [
+                Tab(
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.bolt_rounded, size: 18, color: Colors.amber),
+                      SizedBox(width: 6),
+                      Text('Rapid Express Counter'),
+                    ],
+                  ),
+                ),
                 Tab(text: 'Fee Collection Form'),
                 Tab(text: 'Invoices & Payment Records'),
                 Tab(text: 'Batch Fee Invoicing'),
@@ -225,6 +265,7 @@ class _FeeCollectionViewState extends ConsumerState<FeeCollectionView> with Sing
             child: TabBarView(
               controller: _tabController,
               children: [
+                _buildRapidCounterTab(),
                 _buildCollectionFormTab(),
                 _buildInvoicesRecordTab(),
                 _buildBatchInvoicingTab(),
@@ -233,6 +274,1166 @@ class _FeeCollectionViewState extends ConsumerState<FeeCollectionView> with Sing
           ),
         ],
       ),
+    );
+  }
+
+  // ============================================================================
+  // TAB 0: RAPID EXPRESS FEE COUNTER (HIGH-SPEED KEYBOARD WORKFLOW)
+  // ============================================================================
+
+  Widget _buildRapidCounterTab() {
+    final studentsAsync = ref.watch(studentsListProvider);
+    final metricsAsync = ref.watch(dashboardMetricsProvider);
+    final allStudents = studentsAsync.value ?? <Student>[];
+
+    return CallbackShortcuts(
+      bindings: {
+        const SingleActivator(LogicalKeyboardKey.escape): _resetRapidCounter,
+        const SingleActivator(LogicalKeyboardKey.digit1, alt: true): () => setState(() => _rapidPaymentMethod = PaymentMethod.cash),
+        const SingleActivator(LogicalKeyboardKey.digit2, alt: true): () => setState(() => _rapidPaymentMethod = PaymentMethod.online),
+        const SingleActivator(LogicalKeyboardKey.digit3, alt: true): () => setState(() => _rapidPaymentMethod = PaymentMethod.cheque),
+        const SingleActivator(LogicalKeyboardKey.digit4, alt: true): () => setState(() => _rapidPaymentMethod = PaymentMethod.bankTransfer),
+        const SingleActivator(LogicalKeyboardKey.f2): _shareLastReceiptWhatsApp,
+      },
+      child: Focus(
+        autofocus: true,
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(24),
+          child: Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 1200),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  _buildRapidCounterHeader(metricsAsync),
+                  const SizedBox(height: 20),
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // Left Column: Search, Student Snapshot, Payment Mode
+                      Expanded(
+                        flex: 5,
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            _buildRapidSearchCard(allStudents),
+                            const SizedBox(height: 16),
+                            _buildRapidStudentCard(),
+                            const SizedBox(height: 16),
+                            _buildRapidPaymentMethodCard(),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: 20),
+                      // Right Column: Outstanding Dues & Tendered / Change Checkout
+                      Expanded(
+                        flex: 7,
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            _buildRapidDuesCard(),
+                            const SizedBox(height: 16),
+                            _buildRapidCheckoutCard(),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+                  _buildRapidKeyboardHintsFooter(),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildRapidCounterHeader(AsyncValue<DashboardMetrics> metricsAsync) {
+    final metrics = metricsAsync.value;
+    final todaysColl = metrics?.todaysCollections ?? 0.0;
+    final todaysCount = metrics?.todaysTransactionCount ?? 0;
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          colors: [AppTheme.primaryPurple, Color(0xFF6C5CE7)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: AppTheme.primaryPurple.withValues(alpha: 0.25),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.2),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: const Icon(Icons.bolt_rounded, size: 28, color: Colors.amberAccent),
+          ),
+          const SizedBox(width: 16),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Text(
+                      'RAPID EXPRESS FEE COUNTER',
+                      style: GoogleFonts.poppins(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white,
+                        letterSpacing: 0.5,
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: Colors.amberAccent.withValues(alpha: 0.3),
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: Text(
+                        '10-Sec POS Mode',
+                        style: GoogleFonts.poppins(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.amberAccent),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  'Scan/Enter roll or admission number ➔ Verify dues ➔ Hit [Enter] to collect & issue dual 2-in-1 A4 receipt.',
+                  style: GoogleFonts.poppins(fontSize: 12, color: Colors.white70),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 16),
+          // Today's Counter Tally
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.15),
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: Colors.white24),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                Text(
+                  'TODAY COLLECTED',
+                  style: GoogleFonts.poppins(fontSize: 9, fontWeight: FontWeight.bold, color: Colors.white70, letterSpacing: 0.5),
+                ),
+                Text(
+                  _currencyFormat.format(todaysColl),
+                  style: GoogleFonts.poppins(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white),
+                ),
+                Text(
+                  '$todaysCount receipts issued',
+                  style: GoogleFonts.poppins(fontSize: 10, color: Colors.white60),
+                ),
+              ],
+            ),
+          ),
+          if (_lastReceiptNumber != null) ...[
+            const SizedBox(width: 12),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Row(
+                children: [
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('LAST RECEIPT', style: GoogleFonts.poppins(fontSize: 9, fontWeight: FontWeight.bold, color: AppTheme.textSecondary)),
+                      Text(_lastReceiptNumber!, style: GoogleFonts.poppins(fontSize: 12, fontWeight: FontWeight.bold, color: AppTheme.primaryPurple)),
+                    ],
+                  ),
+                  const SizedBox(width: 8),
+                  IconButton(
+                    icon: const Icon(Icons.print_rounded, size: 18, color: AppTheme.primaryPurple),
+                    tooltip: 'Reprint Last Receipt',
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
+                    onPressed: _reprintLastReceipt,
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.share_rounded, size: 18, color: Color(0xFF25D366)),
+                    tooltip: 'Share on WhatsApp',
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
+                    onPressed: _shareLastReceiptWhatsApp,
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildRapidSearchCard(List<Student> allStudents) {
+    final query = _rapidSearchController.text.trim().toLowerCase();
+    final suggestions = query.isNotEmpty && _rapidStudent == null
+        ? allStudents.where((s) {
+            final adm = s.admissionNumber?.toLowerCase() ?? '';
+            final roll = s.rollNumber?.toLowerCase() ?? '';
+            final name = s.name.toLowerCase();
+            return adm.contains(query) || roll.contains(query) || name.contains(query);
+          }).take(4).toList()
+        : <Student>[];
+
+    return Container(
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: _rapidStudent != null ? AppTheme.success.withValues(alpha: 0.5) : AppTheme.divider),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                '1. QUICK LOOKUP / SCAN',
+                style: GoogleFonts.poppins(fontSize: 11, fontWeight: FontWeight.bold, color: AppTheme.primaryPurple, letterSpacing: 0.5),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                decoration: BoxDecoration(color: AppTheme.bgSurface, borderRadius: BorderRadius.circular(6)),
+                child: Text('Press [Enter] to Lock', style: GoogleFonts.poppins(fontSize: 10, color: AppTheme.textSecondary)),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          TextField(
+            controller: _rapidSearchController,
+            focusNode: _rapidSearchFocusNode,
+            autofocus: true,
+            onChanged: (_) => setState(() {}),
+            onSubmitted: (val) => _handleRapidSearchSubmit(val, allStudents),
+            decoration: InputDecoration(
+              prefixIcon: Icon(Icons.flash_on_rounded, color: Colors.amber[700]),
+              suffixIcon: _rapidSearchController.text.isNotEmpty
+                  ? IconButton(
+                      icon: const Icon(Icons.clear, size: 18),
+                      onPressed: () {
+                        _rapidSearchController.clear();
+                        setState(() {});
+                      },
+                    )
+                  : null,
+              hintText: 'Type Roll No, Adm No, or Student Name...',
+              hintStyle: GoogleFonts.poppins(fontSize: 13, color: AppTheme.textHint),
+              filled: true,
+              fillColor: AppTheme.bgSurface,
+              contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(10),
+                borderSide: BorderSide.none,
+              ),
+            ),
+            style: GoogleFonts.poppins(fontSize: 13, fontWeight: FontWeight.w600),
+          ),
+          // Suggestions dropdown list
+          if (suggestions.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            Container(
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: AppTheme.divider),
+                boxShadow: [
+                  BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 8, offset: const Offset(0, 3)),
+                ],
+              ),
+              child: ListView.separated(
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                itemCount: suggestions.length,
+                separatorBuilder: (_, __) => const Divider(height: 1, color: AppTheme.divider),
+                itemBuilder: (context, idx) {
+                  final s = suggestions[idx];
+                  return InkWell(
+                    onTap: () => _selectRapidStudent(s),
+                    borderRadius: BorderRadius.circular(10),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                      child: Row(
+                        children: [
+                          CircleAvatar(
+                            radius: 14,
+                            backgroundColor: AppTheme.primaryPurple.withValues(alpha: 0.1),
+                            child: Text(
+                              s.name.isNotEmpty ? s.name[0].toUpperCase() : '?',
+                              style: GoogleFonts.poppins(fontSize: 12, fontWeight: FontWeight.bold, color: AppTheme.primaryPurple),
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(s.name, style: GoogleFonts.poppins(fontSize: 12, fontWeight: FontWeight.w600, color: AppTheme.textPrimary)),
+                                Text(
+                                  'Adm: ${s.admissionNumber ?? 'N/A'} • Roll: ${s.rollNumber ?? 'N/A'} • ${s.gradeLevel}',
+                                  style: GoogleFonts.poppins(fontSize: 10, color: AppTheme.textSecondary),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const Icon(Icons.arrow_forward_rounded, size: 14, color: AppTheme.textSecondary),
+                        ],
+                      ),
+                    ),
+                  );
+                },
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildRapidStudentCard() {
+    if (_rapidStudent == null) {
+      return Container(
+        padding: const EdgeInsets.all(24),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: AppTheme.divider),
+        ),
+        child: Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.person_search_rounded, size: 36, color: AppTheme.textHint.withValues(alpha: 0.5)),
+              const SizedBox(height: 8),
+              Text('No Student Selected', style: GoogleFonts.poppins(fontSize: 13, fontWeight: FontWeight.w600, color: AppTheme.textSecondary)),
+              Text(
+                'Type roll/adm number above or select from suggestions.',
+                style: GoogleFonts.poppins(fontSize: 11, color: AppTheme.textHint),
+                textAlign: TextAlign.center,
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    final s = _rapidStudent!;
+    return Container(
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: AppTheme.primaryPurple.withValues(alpha: 0.4), width: 1.5),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              CircleAvatar(
+                radius: 24,
+                backgroundColor: AppTheme.primaryPurple,
+                child: Text(
+                  s.name.isNotEmpty ? s.name[0].toUpperCase() : 'S',
+                  style: GoogleFonts.poppins(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.white),
+                ),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      s.name,
+                      style: GoogleFonts.poppins(fontSize: 16, fontWeight: FontWeight.bold, color: AppTheme.textPrimary),
+                    ),
+                    const SizedBox(height: 4),
+                    Wrap(
+                      spacing: 6,
+                      runSpacing: 4,
+                      children: [
+                        _buildBadge(s.gradeLevel, AppTheme.primaryPurple.withValues(alpha: 0.1), AppTheme.primaryPurple),
+                        if (s.rollNumber != null && s.rollNumber!.isNotEmpty)
+                          _buildBadge('Roll: ${s.rollNumber}', Colors.blue.withValues(alpha: 0.1), Colors.blue[800]!),
+                        if (s.admissionNumber != null && s.admissionNumber!.isNotEmpty)
+                          _buildBadge('Adm: ${s.admissionNumber}', Colors.grey.withValues(alpha: 0.15), AppTheme.textPrimary),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+              IconButton(
+                icon: const Icon(Icons.close_rounded, size: 18, color: AppTheme.textSecondary),
+                tooltip: 'Clear Student [Esc]',
+                onPressed: _resetRapidCounter,
+              ),
+            ],
+          ),
+          const Divider(height: 20, color: AppTheme.divider),
+          Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('FATHER / GUARDIAN', style: GoogleFonts.poppins(fontSize: 9, fontWeight: FontWeight.bold, color: AppTheme.textSecondary)),
+                    Text(s.fatherName ?? s.motherName ?? 'Not Specified', style: GoogleFonts.poppins(fontSize: 12, fontWeight: FontWeight.w500)),
+                  ],
+                ),
+              ),
+              if (s.fatherPhone != null || s.guardianPhone != null) ...[
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('MOBILE NUMBER', style: GoogleFonts.poppins(fontSize: 9, fontWeight: FontWeight.bold, color: AppTheme.textSecondary)),
+                      Row(
+                        children: [
+                          const Icon(Icons.phone_android_rounded, size: 12, color: AppTheme.textSecondary),
+                          const SizedBox(width: 4),
+                          Text(s.fatherPhone ?? s.guardianPhone ?? '', style: GoogleFonts.poppins(fontSize: 12, fontWeight: FontWeight.w500)),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildRapidPaymentMethodCard() {
+    return Container(
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: AppTheme.divider),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                '2. PAYMENT METHOD',
+                style: GoogleFonts.poppins(fontSize: 11, fontWeight: FontWeight.bold, color: AppTheme.primaryPurple, letterSpacing: 0.5),
+              ),
+              Text(
+                'Alt + [1-4]',
+                style: GoogleFonts.poppins(fontSize: 10, color: AppTheme.textSecondary),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              _buildModeOption(PaymentMethod.cash, 'Cash', Icons.money_rounded, 'Alt+1'),
+              const SizedBox(width: 8),
+              _buildModeOption(PaymentMethod.online, 'UPI / QR', Icons.qr_code_scanner_rounded, 'Alt+2'),
+              const SizedBox(width: 8),
+              _buildModeOption(PaymentMethod.cheque, 'Cheque', Icons.receipt_long_rounded, 'Alt+3'),
+              const SizedBox(width: 8),
+              _buildModeOption(PaymentMethod.bankTransfer, 'Bank', Icons.account_balance_rounded, 'Alt+4'),
+            ],
+          ),
+          const SizedBox(height: 12),
+          TextFormField(
+            controller: _rapidReferenceController,
+            decoration: InputDecoration(
+              hintText: 'Reference / Cheque / UTR # (Optional)',
+              hintStyle: GoogleFonts.poppins(fontSize: 12, color: AppTheme.textHint),
+              isDense: true,
+              filled: true,
+              fillColor: AppTheme.bgSurface,
+              contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+              border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide.none),
+            ),
+            style: GoogleFonts.poppins(fontSize: 12),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildModeOption(PaymentMethod method, String label, IconData icon, String shortcut) {
+    final isSelected = _rapidPaymentMethod == method;
+    return Expanded(
+      child: InkWell(
+        onTap: () => setState(() => _rapidPaymentMethod = method),
+        borderRadius: BorderRadius.circular(10),
+        child: Container(
+          padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 4),
+          decoration: BoxDecoration(
+            color: isSelected ? AppTheme.primaryPurple : AppTheme.bgSurface,
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(color: isSelected ? AppTheme.primaryPurple : AppTheme.divider),
+          ),
+          child: Column(
+            children: [
+              Icon(icon, size: 18, color: isSelected ? Colors.white : AppTheme.textSecondary),
+              const SizedBox(height: 4),
+              Text(
+                label,
+                style: GoogleFonts.poppins(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600,
+                  color: isSelected ? Colors.white : AppTheme.textPrimary,
+                ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+              Text(
+                shortcut,
+                style: GoogleFonts.poppins(
+                  fontSize: 9,
+                  color: isSelected ? Colors.white70 : AppTheme.textHint,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildRapidDuesCard() {
+    return Container(
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: AppTheme.divider),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                '3. OUTSTANDING DUES & BREAKDOWN',
+                style: GoogleFonts.poppins(fontSize: 11, fontWeight: FontWeight.bold, color: AppTheme.primaryPurple, letterSpacing: 0.5),
+              ),
+              if (_rapidStudentDues.isNotEmpty)
+                Text(
+                  '${_rapidSelectedLedgerIds.length} of ${_rapidStudentDues.length} selected',
+                  style: GoogleFonts.poppins(fontSize: 11, fontWeight: FontWeight.w600, color: AppTheme.textSecondary),
+                ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          if (_rapidStudent == null)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 36),
+              child: Center(
+                child: Column(
+                  children: [
+                    Icon(Icons.receipt_outlined, size: 40, color: AppTheme.textHint.withValues(alpha: 0.4)),
+                    const SizedBox(height: 8),
+                    Text('No dues loaded', style: GoogleFonts.poppins(fontSize: 13, fontWeight: FontWeight.w600, color: AppTheme.textSecondary)),
+                    Text('Select a student on the left to pull live dues.', style: GoogleFonts.poppins(fontSize: 11, color: AppTheme.textHint)),
+                  ],
+                ),
+              ),
+            )
+          else if (_rapidStudentDues.isEmpty)
+            Container(
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                color: AppTheme.successLight,
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.check_circle_rounded, color: AppTheme.success, size: 28),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('All Fees Fully Cleared!', style: GoogleFonts.poppins(fontSize: 13, fontWeight: FontWeight.bold, color: AppTheme.success)),
+                        Text('There are no outstanding fee dues for this student in $_selectedAcademicYear.', style: GoogleFonts.poppins(fontSize: 11, color: AppTheme.textSecondary)),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            )
+          else
+            ListView.separated(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              itemCount: _rapidStudentDues.length,
+              separatorBuilder: (_, __) => const Divider(height: 1, color: AppTheme.divider),
+              itemBuilder: (context, idx) {
+                final l = _rapidStudentDues[idx];
+                final isSelected = _rapidSelectedLedgerIds.contains(l.id);
+                final isOverdue = l.dueDate.isBefore(DateTime.now()) && l.status != LedgerStatus.paid;
+
+                return InkWell(
+                  onTap: () {
+                    setState(() {
+                      if (isSelected) {
+                        _rapidSelectedLedgerIds.remove(l.id);
+                      } else {
+                        _rapidSelectedLedgerIds.add(l.id);
+                      }
+                      _updateRapidCalculations();
+                    });
+                  },
+                  borderRadius: BorderRadius.circular(8),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
+                    child: Row(
+                      children: [
+                        Checkbox(
+                          value: isSelected,
+                          activeColor: AppTheme.primaryPurple,
+                          onChanged: (v) {
+                            setState(() {
+                              if (v == true) {
+                                _rapidSelectedLedgerIds.add(l.id);
+                              } else {
+                                _rapidSelectedLedgerIds.remove(l.id);
+                              }
+                              _updateRapidCalculations();
+                            });
+                          },
+                        ),
+                        Expanded(
+                          flex: 4,
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(l.feeHeadName ?? l.feeHeadId, style: GoogleFonts.poppins(fontSize: 12, fontWeight: FontWeight.w600, color: AppTheme.textPrimary)),
+                              Text(
+                                '${l.monthLabel ?? "Annual"} • Due: ${_dateFormat.format(l.dueDate)}',
+                                style: GoogleFonts.poppins(fontSize: 10, color: isOverdue ? AppTheme.error : AppTheme.textSecondary),
+                              ),
+                            ],
+                          ),
+                        ),
+                        if (isOverdue)
+                          Container(
+                            margin: const EdgeInsets.only(right: 12),
+                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                            decoration: BoxDecoration(color: AppTheme.error.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(4)),
+                            child: Text('OVERDUE', style: GoogleFonts.poppins(fontSize: 9, fontWeight: FontWeight.bold, color: AppTheme.error)),
+                          ),
+                        Expanded(
+                          flex: 2,
+                          child: Text(
+                            _currencyFormat.format(l.remainingAmount),
+                            style: GoogleFonts.poppins(fontSize: 13, fontWeight: FontWeight.bold, color: AppTheme.textPrimary),
+                            textAlign: TextAlign.end,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                );
+              },
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildRapidCheckoutCard() {
+    final paid = double.tryParse(_rapidPaidAmountController.text.trim()) ?? 0.0;
+    final tendered = double.tryParse(_rapidTenderedController.text.trim()) ?? 0.0;
+    final change = (tendered > paid) ? (tendered - paid) : 0.0;
+    final isCash = _rapidPaymentMethod == PaymentMethod.cash;
+
+    return Container(
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: AppTheme.divider),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            '4. TENDERED & CHANGE CHECKOUT',
+            style: GoogleFonts.poppins(fontSize: 11, fontWeight: FontWeight.bold, color: AppTheme.primaryPurple, letterSpacing: 0.5),
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('AMOUNT TO PAY', style: GoogleFonts.poppins(fontSize: 10, fontWeight: FontWeight.bold, color: AppTheme.textSecondary)),
+                    const SizedBox(height: 4),
+                    TextField(
+                      controller: _rapidPaidAmountController,
+                      focusNode: _rapidPaidFocusNode,
+                      keyboardType: TextInputType.number,
+                      onChanged: (_) => setState(() {}),
+                      onSubmitted: (_) {
+                        if (!isCash || _rapidTenderedController.text.trim().isNotEmpty) {
+                          _executeRapidPayment();
+                        } else {
+                          _rapidTenderedFocusNode.requestFocus();
+                        }
+                      },
+                      decoration: InputDecoration(
+                        prefixIcon: const Icon(Icons.currency_rupee_rounded, size: 16),
+                        isDense: true,
+                        filled: true,
+                        fillColor: AppTheme.bgSurface,
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide.none),
+                      ),
+                      style: GoogleFonts.poppins(fontSize: 16, fontWeight: FontWeight.bold, color: AppTheme.textPrimary),
+                    ),
+                  ],
+                ),
+              ),
+              if (isCash) ...[
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('CASH TENDERED (RECEIVED)', style: GoogleFonts.poppins(fontSize: 10, fontWeight: FontWeight.bold, color: AppTheme.textSecondary)),
+                      const SizedBox(height: 4),
+                      TextField(
+                        controller: _rapidTenderedController,
+                        focusNode: _rapidTenderedFocusNode,
+                        keyboardType: TextInputType.number,
+                        onChanged: (_) => setState(() {}),
+                        onSubmitted: (_) => _executeRapidPayment(),
+                        decoration: InputDecoration(
+                          prefixIcon: const Icon(Icons.payments_rounded, size: 16, color: Colors.green),
+                          hintText: 'e.g. 2000',
+                          hintStyle: GoogleFonts.poppins(fontSize: 13, color: AppTheme.textHint),
+                          isDense: true,
+                          filled: true,
+                          fillColor: AppTheme.bgSurface,
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide.none),
+                        ),
+                        style: GoogleFonts.poppins(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.green[800]),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ],
+          ),
+          const SizedBox(height: 12),
+          // Return Change Banner
+          if (isCash && change > 0)
+            Container(
+              margin: const EdgeInsets.only(bottom: 12),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              decoration: BoxDecoration(
+                color: Colors.green[50],
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: Colors.green[400]!),
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Row(
+                    children: [
+                      Icon(Icons.change_circle_rounded, color: Colors.green[700], size: 24),
+                      const SizedBox(width: 8),
+                      Text(
+                        'RETURN CHANGE TO PARENT:',
+                        style: GoogleFonts.poppins(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.green[800]),
+                      ),
+                    ],
+                  ),
+                  Text(
+                    _currencyFormat.format(change),
+                    style: GoogleFonts.poppins(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.green[900]),
+                  ),
+                ],
+              ),
+            )
+          else if (isCash && tendered > 0 && tendered < paid)
+            Container(
+              margin: const EdgeInsets.only(bottom: 12),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+              decoration: BoxDecoration(
+                color: Colors.amber[50],
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: Colors.amber[400]!),
+              ),
+              child: Row(
+                children: [
+                  Icon(Icons.info_outline_rounded, color: Colors.amber[800], size: 20),
+                  const SizedBox(width: 8),
+                  Text(
+                    'Short payment: ${_currencyFormat.format(paid - tendered)} balance will remain in student ledger.',
+                    style: GoogleFonts.poppins(fontSize: 12, fontWeight: FontWeight.w600, color: Colors.amber[900]),
+                  ),
+                ],
+              ),
+            ),
+          // Primary Instant Action Button
+          SizedBox(
+            width: double.infinity,
+            height: 50,
+            child: ElevatedButton.icon(
+              onPressed: (_rapidStudent == null || paid <= 0 || _rapidIsProcessing)
+                  ? null
+                  : _executeRapidPayment,
+              icon: _rapidIsProcessing
+                  ? const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                    )
+                  : const Icon(Icons.print_rounded, size: 20),
+              label: Text(
+                _rapidIsProcessing
+                    ? 'Processing Payment...'
+                    : 'ENTER ➔ RECORD & ISSUE 2-IN-1 RECEIPT',
+                style: GoogleFonts.poppins(fontSize: 13, fontWeight: FontWeight.bold, letterSpacing: 0.5),
+              ),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppTheme.primaryPurple,
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                elevation: 2,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildRapidKeyboardHintsFooter() {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+      decoration: BoxDecoration(
+        color: AppTheme.bgSurface,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: AppTheme.divider),
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          _buildShortcutPill('[Enter]', 'Confirm & Issue Receipt'),
+          const SizedBox(width: 16),
+          _buildShortcutPill('[Alt + 1..4]', 'Payment Mode'),
+          const SizedBox(width: 16),
+          _buildShortcutPill('[Esc]', 'Clear / New Student'),
+          const SizedBox(width: 16),
+          _buildShortcutPill('[F2]', 'WhatsApp Share'),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildShortcutPill(String keyLabel, String desc) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(4),
+            border: Border.all(color: AppTheme.divider),
+          ),
+          child: Text(keyLabel, style: GoogleFonts.poppins(fontSize: 10, fontWeight: FontWeight.bold, color: AppTheme.primaryPurple)),
+        ),
+        const SizedBox(width: 6),
+        Text(desc, style: GoogleFonts.poppins(fontSize: 11, color: AppTheme.textSecondary)),
+      ],
+    );
+  }
+
+  Widget _buildBadge(String text, Color bgColor, Color textColor) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+      decoration: BoxDecoration(color: bgColor, borderRadius: BorderRadius.circular(6)),
+      child: Text(text, style: GoogleFonts.poppins(fontSize: 10, fontWeight: FontWeight.bold, color: textColor)),
+    );
+  }
+
+  Future<void> _handleRapidSearchSubmit(String query, List<Student> allStudents) async {
+    final q = query.trim().toLowerCase();
+    if (q.isEmpty) return;
+
+    Student? matched;
+    // 1. Exact match on Admission Number
+    final exactAdm = allStudents.where((s) => s.admissionNumber?.toLowerCase() == q).toList();
+    if (exactAdm.isNotEmpty) {
+      matched = exactAdm.first;
+    } else {
+      // 2. Exact match on Roll Number
+      final exactRoll = allStudents.where((s) => s.rollNumber?.toLowerCase() == q).toList();
+      if (exactRoll.isNotEmpty) {
+        matched = exactRoll.first;
+      } else {
+        // 3. Partial match
+        final matches = allStudents.where((s) {
+          final adm = s.admissionNumber?.toLowerCase() ?? '';
+          final roll = s.rollNumber?.toLowerCase() ?? '';
+          final name = s.name.toLowerCase();
+          return adm.contains(q) || roll.contains(q) || name.contains(q);
+        }).toList();
+
+        if (matches.isNotEmpty) {
+          matched = matches.first;
+        }
+      }
+    }
+
+    if (matched != null) {
+      await _selectRapidStudent(matched);
+    } else {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('No student found matching "$query"', style: GoogleFonts.poppins()),
+            backgroundColor: AppTheme.error,
+            duration: const Duration(seconds: 2),
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _selectRapidStudent(Student student) async {
+    setState(() {
+      _rapidStudent = student;
+      _rapidStudentDues = [];
+      _rapidSelectedLedgerIds.clear();
+      _rapidPaidAmountController.clear();
+      _rapidTenderedController.clear();
+      _rapidReferenceController.clear();
+    });
+
+    final dbService = ref.read(databaseServiceProvider);
+    final ledgers = await dbService.getStudentFeeLedger(
+      student.id,
+      _selectedAcademicYear ?? '2026-2027',
+    );
+
+    final unpaid = ledgers.where((l) => l.status != LedgerStatus.paid && l.remainingAmount > 0).toList();
+    unpaid.sort((a, b) => a.dueDate.compareTo(b.dueDate));
+
+    double totalDue = 0.0;
+    final selectedIds = <String>{};
+    for (final l in unpaid) {
+      selectedIds.add(l.id);
+      totalDue += l.remainingAmount;
+    }
+
+    if (mounted) {
+      setState(() {
+        _rapidStudentDues = unpaid;
+        _rapidSelectedLedgerIds.addAll(selectedIds);
+        _rapidPaidAmountController.text = totalDue > 0 ? totalDue.toStringAsFixed(0) : '0';
+      });
+
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (_rapidTenderedFocusNode.canRequestFocus) {
+          _rapidTenderedFocusNode.requestFocus();
+        }
+      });
+    }
+  }
+
+  void _updateRapidCalculations() {
+    double total = 0.0;
+    for (final l in _rapidStudentDues) {
+      if (_rapidSelectedLedgerIds.contains(l.id)) {
+        total += l.remainingAmount;
+      }
+    }
+    _rapidPaidAmountController.text = total > 0 ? total.toStringAsFixed(0) : '0';
+    setState(() {});
+  }
+
+  Future<void> _executeRapidPayment() async {
+    if (_rapidStudent == null) return;
+    if (_rapidIsProcessing) return;
+
+    final licenseState = ref.read(licenseStateProvider).value;
+    if (licenseState?.status.isReadOnly ?? false) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Action blocked: Eduvia is currently in Read-Only mode due to license status.'),
+            backgroundColor: AppTheme.error,
+          ),
+        );
+      }
+      return;
+    }
+
+    final paidAmount = double.tryParse(_rapidPaidAmountController.text.trim()) ?? 0.0;
+    if (paidAmount <= 0) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Please enter a valid payment amount.', style: GoogleFonts.poppins()), backgroundColor: AppTheme.error),
+        );
+      }
+      return;
+    }
+
+    final selectedLedgers = _rapidStudentDues.where((l) => _rapidSelectedLedgerIds.contains(l.id)).toList();
+    if (selectedLedgers.isEmpty) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('No fee dues selected to pay.', style: GoogleFonts.poppins()), backgroundColor: AppTheme.error),
+        );
+      }
+      return;
+    }
+
+    setState(() => _rapidIsProcessing = true);
+    final dbService = ref.read(databaseServiceProvider);
+    final student = _rapidStudent!;
+    final acadYear = _selectedAcademicYear ?? '2026-2027';
+
+    try {
+      final updatedLedgers = await dbService.recordMultiMonthPayment(
+        studentId: student.id,
+        academicYear: acadYear,
+        ledgerIds: selectedLedgers.map((l) => l.id).toList(),
+        paymentMethod: _rapidPaymentMethod,
+        paidAmount: paidAmount,
+        referenceNumber: _rapidReferenceController.text.trim().isNotEmpty ? _rapidReferenceController.text.trim() : null,
+      );
+
+      final receiptNumber = await dbService.getNextReceiptNumber();
+
+      _lastReceiptNumber = receiptNumber;
+      _lastReceiptStudent = student;
+      _lastReceiptAmount = paidAmount;
+      _lastReceiptMethod = _rapidPaymentMethod;
+      _lastReceiptLedgers = updatedLedgers;
+
+      ref.invalidate(studentsListProvider);
+      ref.invalidate(studentFeeLedgerProvider);
+      ref.invalidate(studentPaymentHistoryProvider);
+      ref.invalidate(invoicesListProvider);
+      ref.invalidate(dashboardMetricsProvider);
+
+      if (mounted) {
+        await PaymentReceiptDialog.show(
+          context: context,
+          student: student,
+          paidLedgers: updatedLedgers,
+          totalAmount: paidAmount,
+          paymentMethod: _rapidPaymentMethod,
+          referenceNumber: _rapidReferenceController.text.trim().isNotEmpty ? _rapidReferenceController.text.trim() : null,
+          academicYear: acadYear,
+          receiptNumber: receiptNumber,
+        );
+
+        _resetRapidCounter();
+      }
+    } catch (e, stack) {
+      AppLogger.instance.error('Rapid payment processing failed', e, stack);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Payment error: $e', style: GoogleFonts.poppins()), backgroundColor: AppTheme.error),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _rapidIsProcessing = false);
+      }
+    }
+  }
+
+  void _resetRapidCounter() {
+    setState(() {
+      _rapidSearchController.clear();
+      _rapidPaidAmountController.clear();
+      _rapidTenderedController.clear();
+      _rapidReferenceController.clear();
+      _rapidStudent = null;
+      _rapidStudentDues = [];
+      _rapidSelectedLedgerIds.clear();
+      _rapidPaymentMethod = PaymentMethod.cash;
+    });
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (_rapidSearchFocusNode.canRequestFocus) {
+        _rapidSearchFocusNode.requestFocus();
+      }
+    });
+  }
+
+  Future<void> _shareLastReceiptWhatsApp() async {
+    if (_lastReceiptStudent == null || _lastReceiptNumber == null) return;
+    final phone = _lastReceiptStudent!.guardianPhone ??
+        _lastReceiptStudent!.fatherPhone ??
+        _lastReceiptStudent!.motherPhone ??
+        '';
+    final cleanPhone = phone.replaceAll(RegExp(r'\D'), '');
+    final dateStr = DateFormat('dd MMM yyyy, hh:mm a').format(DateTime.now());
+    final msg = '''*FEE PAYMENT RECEIPT*
+Student: ${_lastReceiptStudent!.name} (${_lastReceiptStudent!.gradeLevel})
+Receipt No: $_lastReceiptNumber
+Amount Paid: ${_currencyFormat.format(_lastReceiptAmount ?? 0)}
+Payment Mode: ${_lastReceiptMethod?.displayName ?? 'Cash'}
+Date: $dateStr
+
+Thank you for your payment!''';
+
+    final encoded = Uri.encodeComponent(msg);
+    final url = cleanPhone.isNotEmpty
+        ? Uri.parse('https://wa.me/$cleanPhone?text=$encoded')
+        : Uri.parse('https://wa.me/?text=$encoded');
+
+    if (await canLaunchUrl(url)) {
+      await launchUrl(url, mode: LaunchMode.externalApplication);
+    }
+  }
+
+  Future<void> _reprintLastReceipt() async {
+    if (_lastReceiptStudent == null || _lastReceiptNumber == null) return;
+    await PaymentReceiptDialog.show(
+      context: context,
+      student: _lastReceiptStudent!,
+      paidLedgers: _lastReceiptLedgers ?? [],
+      totalAmount: _lastReceiptAmount ?? 0,
+      paymentMethod: _lastReceiptMethod ?? PaymentMethod.cash,
+      academicYear: _selectedAcademicYear,
+      receiptNumber: _lastReceiptNumber!,
     );
   }
 
