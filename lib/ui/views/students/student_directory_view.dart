@@ -1087,51 +1087,58 @@ class _StudentDirectoryViewState extends ConsumerState<StudentDirectoryView>
                               ],
                             ),
                             const SizedBox(height: 24),
-                            Container(
-                              padding: const EdgeInsets.all(20),
-                              decoration: BoxDecoration(
-                                color: student.currentBalance > 0 ? AppTheme.error.withValues(alpha: 0.05) : AppTheme.success.withValues(alpha: 0.05),
-                                borderRadius: BorderRadius.circular(16),
-                                border: Border.all(color: student.currentBalance > 0 ? AppTheme.error.withValues(alpha: 0.3) : AppTheme.success.withValues(alpha: 0.3)),
-                              ),
-                              child: Row(
-                                children: [
-                                  Container(
-                                    padding: const EdgeInsets.all(12),
-                                    decoration: BoxDecoration(
-                                      color: student.currentBalance > 0 ? AppTheme.error.withValues(alpha: 0.1) : AppTheme.success.withValues(alpha: 0.1),
-                                      shape: BoxShape.circle,
-                                    ),
-                                    child: Icon(
-                                      student.currentBalance > 0 ? Icons.account_balance_wallet_rounded : Icons.check_circle_rounded,
-                                      color: student.currentBalance > 0 ? AppTheme.error : AppTheme.success,
-                                    ),
+                            Consumer(
+                              builder: (context, ref, _) {
+                                final studentsAsync = ref.watch(studentsListProvider);
+                                final freshStudent = studentsAsync.value?.where((s) => s.id == student.id).firstOrNull ?? student;
+                                final bal = freshStudent.currentBalance;
+                                return Container(
+                                  padding: const EdgeInsets.all(20),
+                                  decoration: BoxDecoration(
+                                    color: bal > 0 ? AppTheme.error.withValues(alpha: 0.05) : AppTheme.success.withValues(alpha: 0.05),
+                                    borderRadius: BorderRadius.circular(16),
+                                    border: Border.all(color: bal > 0 ? AppTheme.error.withValues(alpha: 0.3) : AppTheme.success.withValues(alpha: 0.3)),
                                   ),
-                                  const SizedBox(width: 16),
-                                  Expanded(
-                                    child: Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
-                                      children: [
-                                        Text(
-                                          'Outstanding Balance',
-                                          style: GoogleFonts.poppins(
-                                            fontSize: 12,
-                                            color: AppTheme.textSecondary,
-                                          ),
+                                  child: Row(
+                                    children: [
+                                      Container(
+                                        padding: const EdgeInsets.all(12),
+                                        decoration: BoxDecoration(
+                                          color: bal > 0 ? AppTheme.error.withValues(alpha: 0.1) : AppTheme.success.withValues(alpha: 0.1),
+                                          shape: BoxShape.circle,
                                         ),
-                                        Text(
-                                          '₹${student.currentBalance.toStringAsFixed(2)}',
-                                          style: GoogleFonts.poppins(
-                                            fontSize: 24,
-                                            fontWeight: FontWeight.bold,
-                                            color: student.currentBalance > 0 ? AppTheme.error : AppTheme.success,
-                                          ),
+                                        child: Icon(
+                                          bal > 0 ? Icons.account_balance_wallet_rounded : Icons.check_circle_rounded,
+                                          color: bal > 0 ? AppTheme.error : AppTheme.success,
                                         ),
-                                      ],
-                                    ),
+                                      ),
+                                      const SizedBox(width: 16),
+                                      Expanded(
+                                        child: Column(
+                                          crossAxisAlignment: CrossAxisAlignment.start,
+                                          children: [
+                                            Text(
+                                              'Outstanding Balance',
+                                              style: GoogleFonts.poppins(
+                                                fontSize: 12,
+                                                color: AppTheme.textSecondary,
+                                              ),
+                                            ),
+                                            Text(
+                                              '₹${bal.toStringAsFixed(2)}',
+                                              style: GoogleFonts.poppins(
+                                                fontSize: 24,
+                                                fontWeight: FontWeight.bold,
+                                                color: bal > 0 ? AppTheme.error : AppTheme.success,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    ],
                                   ),
-                                ],
-                              ),
+                                );
+                              },
                             ),
                             _buildStudentDiscountsAndNetFeeCard(context, student),
                             const SizedBox(height: 16),
@@ -2690,18 +2697,30 @@ class _StudentDirectoryViewState extends ConsumerState<StudentDirectoryView>
                     runSpacing: 8,
                     children: discounts.map((sd) {
                       final dt = typeMap[sd.discountTypeId];
-                      final valStr = dt?.discountKind == 'percentage' ? '${dt?.value}%' : '₹${dt?.value}';
+                      final name = sd.customName ?? dt?.name ?? "Discount";
+                      final kind = sd.customKind ?? dt?.discountKind ?? 'percentage';
+                      final val = sd.customValue ?? dt?.value ?? 0.0;
+                      final valStr = kind == 'percentage'
+                          ? '${val.toStringAsFixed(val.truncateToDouble() == val ? 0 : 1)}%'
+                          : '₹${val.toStringAsFixed(val.truncateToDouble() == val ? 0 : 2)}';
+                      final modeStr = kind == 'flat'
+                          ? (sd.flatMode == 'earliest' ? ' • Earliest' : ' • Monthly')
+                          : '';
+
                       return Chip(
                         backgroundColor: AppTheme.primaryPurple.withValues(alpha: 0.08),
                         side: const BorderSide(color: AppTheme.primaryPurple),
                         avatar: const Icon(Icons.card_giftcard_rounded, size: 14, color: AppTheme.primaryPurple),
-                        label: Text('${dt?.name ?? "Discount"} ($valStr)',
+                        label: Text('$name ($valStr$modeStr)',
                             style: GoogleFonts.poppins(fontSize: 11, fontWeight: FontWeight.bold, color: AppTheme.primaryPurple)),
                         onDeleted: () async {
                           final dbService = ref.read(databaseServiceProvider);
                           await dbService.removeStudentDiscount(sd.id);
                           ref.invalidate(studentDiscountsProvider(studentYearParam));
                           ref.invalidate(studentNetFeeBreakdownProvider(studentClassYearParam));
+                          ref.invalidate(studentsListProvider);
+                          ref.invalidate(studentFeeLedgerProvider);
+                          ref.invalidate(dashboardMetricsProvider);
                         },
                         deleteIconColor: AppTheme.error,
                       );
@@ -2721,8 +2740,11 @@ class _StudentDirectoryViewState extends ConsumerState<StudentDirectoryView>
               netFeeBreakdownAsync.when(
                 data: (List<StudentNetFeeBreakdown> breakdownList) {
                   if (breakdownList.isEmpty) {
-                    return Text('No fee structure configured for ${student.gradeLevel}.',
-                        style: GoogleFonts.poppins(fontSize: 12, color: AppTheme.textHint, fontStyle: FontStyle.italic));
+                    return Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 6.0),
+                      child: Text('No fee structure configured for ${student.gradeLevel}. Once fee heads are defined in Fee Structure setup, net dues will auto-calculate here.',
+                          style: GoogleFonts.poppins(fontSize: 11.5, color: AppTheme.textHint, fontStyle: FontStyle.italic)),
+                    );
                   }
 
                   double totalNetPayable = 0.0;
@@ -2778,80 +2800,333 @@ class _StudentDirectoryViewState extends ConsumerState<StudentDirectoryView>
   void _showApplyDiscountModal(BuildContext context, WidgetRef ref, Student student) {
     final discountTypesAsync = ref.read(discountTypesProvider);
     final types = discountTypesAsync.value ?? [];
-    if (types.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('No discount types configured in the system.'), backgroundColor: AppTheme.error),
-      );
-      return;
-    }
 
-    String selectedTypeId = types.first.id;
+    bool isCustom = types.isEmpty;
+    String selectedTypeId = types.isNotEmpty ? types.first.id : 'custom';
+    String customKind = 'percentage';
+    String flatMode = 'evenly'; // 'evenly' or 'earliest'
+
+    final customNameController = TextEditingController();
+    final customValueController = TextEditingController();
     final remarksController = TextEditingController();
 
     showDialog(
       context: context,
       builder: (context) => StatefulBuilder(
-        builder: (context, setDialogState) => AlertDialog(
-          backgroundColor: Colors.white,
-          title: Text('Apply Discount / Scholarship', style: GoogleFonts.poppins(fontWeight: FontWeight.bold, fontSize: 16)),
-          content: SizedBox(
-            width: 400,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
+        builder: (context, setDialogState) {
+          final currentPreset = types.where((t) => t.id == selectedTypeId).firstOrNull;
+          final isFlat = isCustom ? customKind == 'flat' : currentPreset?.discountKind == 'flat';
+
+          return AlertDialog(
+            backgroundColor: Colors.white,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+            title: Row(
               children: [
-                DropdownButtonFormField<String>(
-                  value: selectedTypeId,
-                  style: GoogleFonts.poppins(color: AppTheme.textPrimary),
-                  decoration: const InputDecoration(labelText: 'Select Discount Type *'),
-                  items: types.map((dt) {
-                    final valStr = dt.discountKind == 'percentage' ? '${dt.value}%' : '₹${dt.value}';
-                    return DropdownMenuItem(value: dt.id, child: Text('${dt.name} ($valStr)'));
-                  }).toList(),
-                  onChanged: (val) {
-                    if (val != null) setDialogState(() => selectedTypeId = val);
-                  },
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: AppTheme.primaryPurple.withValues(alpha: 0.1),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(Icons.card_giftcard_rounded, color: AppTheme.primaryPurple, size: 20),
                 ),
-                const SizedBox(height: 12),
-                TextField(
-                  controller: remarksController,
-                  style: GoogleFonts.poppins(color: AppTheme.textPrimary),
-                  decoration: const InputDecoration(labelText: 'Remarks / Approval Note (Optional)'),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    'Apply Discount / Scholarship',
+                    style: GoogleFonts.poppins(fontWeight: FontWeight.bold, fontSize: 16, color: AppTheme.textPrimary),
+                  ),
                 ),
               ],
             ),
-          ),
-          actions: [
-            TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
-            ElevatedButton(
-              onPressed: () async {
-                const academicYear = '2026-2027';
-                final sd = StudentDiscount.create(
-                  studentId: student.id,
-                  discountTypeId: selectedTypeId,
-                  academicYear: academicYear,
-                  remarks: remarksController.text.trim().isNotEmpty ? remarksController.text.trim() : null,
-                );
+            content: SizedBox(
+              width: 440,
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Preset vs Custom Selector
+                    Container(
+                      padding: const EdgeInsets.all(4),
+                      decoration: BoxDecoration(
+                        color: AppTheme.bgMain,
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: GestureDetector(
+                              onTap: () {
+                                if (types.isNotEmpty) {
+                                  setDialogState(() => isCustom = false);
+                                }
+                              },
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(vertical: 8),
+                                decoration: BoxDecoration(
+                                  color: !isCustom ? Colors.white : Colors.transparent,
+                                  borderRadius: BorderRadius.circular(8),
+                                  boxShadow: !isCustom
+                                      ? [BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 4)]
+                                      : null,
+                                ),
+                                alignment: Alignment.center,
+                                child: Text(
+                                  'Standard Presets',
+                                  style: GoogleFonts.poppins(
+                                    fontSize: 12,
+                                    fontWeight: !isCustom ? FontWeight.bold : FontWeight.w500,
+                                    color: !isCustom ? AppTheme.primaryPurple : AppTheme.textSecondary,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                          Expanded(
+                            child: GestureDetector(
+                              onTap: () => setDialogState(() => isCustom = true),
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(vertical: 8),
+                                decoration: BoxDecoration(
+                                  color: isCustom ? Colors.white : Colors.transparent,
+                                  borderRadius: BorderRadius.circular(8),
+                                  boxShadow: isCustom
+                                      ? [BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 4)]
+                                      : null,
+                                ),
+                                alignment: Alignment.center,
+                                child: Text(
+                                  'Custom Discount',
+                                  style: GoogleFonts.poppins(
+                                    fontSize: 12,
+                                    fontWeight: isCustom ? FontWeight.bold : FontWeight.w500,
+                                    color: isCustom ? AppTheme.primaryPurple : AppTheme.textSecondary,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 16),
 
-                final dbService = ref.read(databaseServiceProvider);
-                await dbService.applyStudentDiscount(sd);
+                    if (!isCustom) ...[
+                      DropdownButtonFormField<String>(
+                        value: selectedTypeId,
+                        style: GoogleFonts.poppins(color: AppTheme.textPrimary, fontSize: 13),
+                        decoration: const InputDecoration(
+                          labelText: 'Select Discount Type *',
+                          border: OutlineInputBorder(),
+                        ),
+                        items: types.map((dt) {
+                          final valStr = dt.discountKind == 'percentage' ? '${dt.value}%' : '₹${dt.value}';
+                          return DropdownMenuItem(value: dt.id, child: Text('${dt.name} ($valStr)'));
+                        }).toList(),
+                        onChanged: (val) {
+                          if (val != null) setDialogState(() => selectedTypeId = val);
+                        },
+                      ),
+                    ] else ...[
+                      TextField(
+                        controller: customNameController,
+                        style: GoogleFonts.poppins(color: AppTheme.textPrimary, fontSize: 13),
+                        decoration: const InputDecoration(
+                          labelText: 'Scholarship / Discount Title *',
+                          hintText: 'e.g. Sports Concession, Special Waiver',
+                          border: OutlineInputBorder(),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: ChoiceChip(
+                              label: const Text('Percentage (%)'),
+                              selected: customKind == 'percentage',
+                              onSelected: (sel) {
+                                if (sel) setDialogState(() => customKind = 'percentage');
+                              },
+                              selectedColor: AppTheme.primaryPurple.withValues(alpha: 0.15),
+                              labelStyle: GoogleFonts.poppins(
+                                fontSize: 12,
+                                fontWeight: customKind == 'percentage' ? FontWeight.bold : FontWeight.normal,
+                                color: customKind == 'percentage' ? AppTheme.primaryPurple : AppTheme.textPrimary,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: ChoiceChip(
+                              label: const Text('Flat Amount (₹)'),
+                              selected: customKind == 'flat',
+                              onSelected: (sel) {
+                                if (sel) setDialogState(() => customKind = 'flat');
+                              },
+                              selectedColor: AppTheme.primaryPurple.withValues(alpha: 0.15),
+                              labelStyle: GoogleFonts.poppins(
+                                fontSize: 12,
+                                fontWeight: customKind == 'flat' ? FontWeight.bold : FontWeight.normal,
+                                color: customKind == 'flat' ? AppTheme.primaryPurple : AppTheme.textPrimary,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+                      TextField(
+                        controller: customValueController,
+                        keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                        style: GoogleFonts.poppins(color: AppTheme.textPrimary, fontSize: 13),
+                        decoration: InputDecoration(
+                          labelText: customKind == 'percentage' ? 'Percentage (e.g. 15 for 15%) *' : 'Flat Amount in ₹ (e.g. 5000) *',
+                          border: const OutlineInputBorder(),
+                          prefixText: customKind == 'flat' ? '₹ ' : null,
+                          suffixText: customKind == 'percentage' ? '%' : null,
+                        ),
+                      ),
+                    ],
 
-                final studentYearParam = StudentYearParam(studentId: student.id, academicYear: academicYear);
-                final studentClassYearParam = StudentClassYearParam(studentId: student.id, className: student.gradeLevel, academicYear: academicYear);
-                ref.invalidate(studentDiscountsProvider(studentYearParam));
-                ref.invalidate(studentNetFeeBreakdownProvider(studentClassYearParam));
+                    // Flat Mode Choice (if flat discount)
+                    if (isFlat) ...[
+                      const SizedBox(height: 16),
+                      Text('How should this flat discount be applied?',
+                          style: GoogleFonts.poppins(fontSize: 12, fontWeight: FontWeight.w600, color: AppTheme.textPrimary)),
+                      const SizedBox(height: 8),
+                      Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: AppTheme.bgMain,
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(color: AppTheme.divider),
+                        ),
+                        child: Column(
+                          children: [
+                            RadioListTile<String>(
+                              dense: true,
+                              contentPadding: EdgeInsets.zero,
+                              title: Text('Distribute evenly across months',
+                                  style: GoogleFonts.poppins(fontSize: 12, fontWeight: FontWeight.w600)),
+                              subtitle: Text('Divides discount equally each cycle (e.g. ₹6,000 ÷ 12 = ₹500 off each month)',
+                                  style: GoogleFonts.poppins(fontSize: 11, color: AppTheme.textSecondary)),
+                              value: 'evenly',
+                              groupValue: flatMode,
+                              onChanged: (val) {
+                                if (val != null) setDialogState(() => flatMode = val);
+                              },
+                            ),
+                            const Divider(height: 12),
+                            RadioListTile<String>(
+                              dense: true,
+                              contentPadding: EdgeInsets.zero,
+                              title: Text('Deduct from earliest dues first',
+                                  style: GoogleFonts.poppins(fontSize: 12, fontWeight: FontWeight.w600)),
+                              subtitle: Text('Waives earliest months fully until the discount pool is exhausted',
+                                  style: GoogleFonts.poppins(fontSize: 11, color: AppTheme.textSecondary)),
+                              value: 'earliest',
+                              groupValue: flatMode,
+                              onChanged: (val) {
+                                if (val != null) setDialogState(() => flatMode = val);
+                              },
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
 
-                if (context.mounted) {
-                  Navigator.pop(context);
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Discount applied!'), backgroundColor: AppTheme.primaryPurple),
-                  );
-                }
-              },
-              style: ElevatedButton.styleFrom(backgroundColor: AppTheme.primaryPurple, foregroundColor: Colors.white),
-              child: const Text('Apply Discount'),
+                    const SizedBox(height: 14),
+                    TextField(
+                      controller: remarksController,
+                      style: GoogleFonts.poppins(color: AppTheme.textPrimary, fontSize: 13),
+                      decoration: const InputDecoration(
+                        labelText: 'Remarks / Approval Note (Optional)',
+                        hintText: 'e.g. Approved by Principal on 10 Aug',
+                        border: OutlineInputBorder(),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
             ),
-          ],
-        ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: Text('Cancel', style: GoogleFonts.poppins(color: AppTheme.textSecondary)),
+              ),
+              ElevatedButton(
+                onPressed: () async {
+                  if (isCustom) {
+                    if (customNameController.text.trim().isEmpty) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('Please enter a scholarship / discount name.'), backgroundColor: AppTheme.error),
+                      );
+                      return;
+                    }
+                    final val = double.tryParse(customValueController.text.trim());
+                    if (val == null || val <= 0) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('Please enter a valid positive discount amount/percentage.'), backgroundColor: AppTheme.error),
+                      );
+                      return;
+                    }
+                    if (customKind == 'percentage' && val > 100) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('Percentage cannot exceed 100%.'), backgroundColor: AppTheme.error),
+                      );
+                      return;
+                    }
+                  }
+
+                  const academicYear = '2026-2027';
+                  final sd = StudentDiscount.create(
+                    studentId: student.id,
+                    discountTypeId: isCustom ? 'custom' : selectedTypeId,
+                    academicYear: academicYear,
+                    customName: isCustom ? customNameController.text.trim() : null,
+                    customKind: isCustom ? customKind : null,
+                    customValue: isCustom ? double.tryParse(customValueController.text.trim()) : null,
+                    flatMode: flatMode,
+                    remarks: remarksController.text.trim().isNotEmpty ? remarksController.text.trim() : null,
+                  );
+
+                  final dbService = ref.read(databaseServiceProvider);
+                  await dbService.applyStudentDiscount(sd);
+
+                  final studentYearParam = StudentYearParam(studentId: student.id, academicYear: academicYear);
+                  final studentClassYearParam = StudentClassYearParam(studentId: student.id, className: student.gradeLevel, academicYear: academicYear);
+                  ref.invalidate(studentDiscountsProvider(studentYearParam));
+                  ref.invalidate(studentNetFeeBreakdownProvider(studentClassYearParam));
+                  ref.invalidate(studentsListProvider);
+                  ref.invalidate(studentFeeLedgerProvider);
+                  ref.invalidate(dashboardMetricsProvider);
+
+                  if (context.mounted) {
+                    Navigator.pop(context);
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Row(
+                          children: [
+                            Icon(Icons.check_circle_rounded, color: Colors.white, size: 20),
+                            SizedBox(width: 8),
+                            Text('Discount applied and dues recalculated!'),
+                          ],
+                        ),
+                        backgroundColor: AppTheme.primaryPurple,
+                      ),
+                    );
+                  }
+                },
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppTheme.primaryPurple,
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                ),
+                child: const Text('Apply Discount'),
+              ),
+            ],
+          );
+        },
       ),
     );
   }

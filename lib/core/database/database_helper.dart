@@ -2446,6 +2446,10 @@ class DatabaseHelper {
           academic_year     TEXT NOT NULL,
           approved_by       TEXT,
           remarks           TEXT,
+          custom_name       TEXT,
+          custom_kind       TEXT,
+          custom_value      REAL,
+          flat_mode         TEXT DEFAULT 'evenly',
           FOREIGN KEY (student_id) REFERENCES students (id) ON DELETE CASCADE,
           FOREIGN KEY (discount_type_id) REFERENCES discount_types (id) ON DELETE CASCADE
         )
@@ -2863,6 +2867,20 @@ class DatabaseHelper {
       } catch (_) {}
       try {
         await db.execute('ALTER TABLE admin_users ADD COLUMN security_answer_hash TEXT');
+      } catch (_) {}
+
+      // Ensure student_discounts custom and flat mode columns exist
+      try {
+        await db.execute("ALTER TABLE student_discounts ADD COLUMN flat_mode TEXT DEFAULT 'evenly'");
+      } catch (_) {}
+      try {
+        await db.execute("ALTER TABLE student_discounts ADD COLUMN custom_value REAL");
+      } catch (_) {}
+      try {
+        await db.execute("ALTER TABLE student_discounts ADD COLUMN custom_kind TEXT");
+      } catch (_) {}
+      try {
+        await db.execute("ALTER TABLE student_discounts ADD COLUMN custom_name TEXT");
       } catch (_) {}
 
       // 8. Default App Settings (only insert if key does not exist yet)

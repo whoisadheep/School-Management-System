@@ -217,5 +217,54 @@ void main() {
       expect(exam2Drafts.any((s) => s.subjectName == 'Environmental Studies'), isTrue);
       expect(exam1Drafts.any((s) => s.subjectName == 'Environmental Studies'), isFalse);
     });
+
+    test('StudentDiscount model serialization and custom fields', () {
+      final discount = StudentDiscount.create(
+        studentId: 'student-abc',
+        discountTypeId: 'custom_discount',
+        academicYear: '2026-2027',
+        customName: 'Merit Scholarship',
+        customKind: 'flat',
+        customValue: 5000.0,
+        flatMode: 'earliest',
+        remarks: 'Top rank in entrance test',
+      );
+
+      final map = discount.toMap();
+      expect(map['student_id'], 'student-abc');
+      expect(map['custom_name'], 'Merit Scholarship');
+      expect(map['custom_kind'], 'flat');
+      expect(map['custom_value'], 5000.0);
+      expect(map['flat_mode'], 'earliest');
+      expect(map['remarks'], 'Top rank in entrance test');
+
+      final restored = StudentDiscount.fromMap(map);
+      expect(restored.studentId, 'student-abc');
+      expect(restored.customName, 'Merit Scholarship');
+      expect(restored.customKind, 'flat');
+      expect(restored.customValue, 5000.0);
+      expect(restored.flatMode, 'earliest');
+      expect(restored.remarks, 'Top rank in entrance test');
+    });
+
+    test('StudentDiscount copyWith supports custom fields and flatMode', () {
+      final discount = StudentDiscount.create(
+        studentId: 'student-xyz',
+        discountTypeId: 'sibling',
+        academicYear: '2026-2027',
+      );
+
+      final modified = discount.copyWith(
+        customName: 'Sibling Concession',
+        customKind: 'percentage',
+        customValue: 25.0,
+        flatMode: 'evenly',
+      );
+
+      expect(modified.customName, 'Sibling Concession');
+      expect(modified.customKind, 'percentage');
+      expect(modified.customValue, 25.0);
+      expect(modified.flatMode, 'evenly');
+    });
   });
 }

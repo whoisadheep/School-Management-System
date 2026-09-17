@@ -430,6 +430,12 @@ class _FeeCollectionViewState extends ConsumerState<FeeCollectionView> with Sing
   Widget _buildSelectedStudentBadge(Student student, String academicYear) {
     final transportParam = StudentYearParam(studentId: student.id, academicYear: academicYear);
     final transportAsync = ref.watch(studentTransportProvider(transportParam));
+    final discountsAsync = ref.watch(studentDiscountsProvider(transportParam));
+    final discountTypesAsync = ref.watch(discountTypesProvider);
+
+    // Watch student from studentsListProvider to keep outstanding balance reactive
+    final allStudents = ref.watch(studentsListProvider).valueOrNull ?? [];
+    final currentStudent = allStudents.firstWhere((s) => s.id == student.id, orElse: () => student);
 
     return Container(
       padding: const EdgeInsets.all(18),
@@ -503,6 +509,60 @@ class _FeeCollectionViewState extends ConsumerState<FeeCollectionView> with Sing
                   loading: () => const SizedBox.shrink(),
                   error: (_, __) => const SizedBox.shrink(),
                 ),
+                // Active Discounts / Scholarships Indicator
+                discountsAsync.when(
+                  data: (discounts) {
+                    if (discounts.isEmpty) return const SizedBox.shrink();
+                    final types = discountTypesAsync.value ?? [];
+                    final typeMap = {for (var t in types) t.id: t};
+
+                    return Padding(
+                      padding: const EdgeInsets.only(top: 6),
+                      child: Wrap(
+                        spacing: 6,
+                        runSpacing: 4,
+                        children: discounts.map((sd) {
+                          final dt = typeMap[sd.discountTypeId];
+                          final name = sd.customName ?? dt?.name ?? "Discount";
+                          final kind = sd.customKind ?? dt?.discountKind ?? 'percentage';
+                          final val = sd.customValue ?? dt?.value ?? 0.0;
+                          final valStr = kind == 'percentage'
+                              ? '${val.toStringAsFixed(val.truncateToDouble() == val ? 0 : 1)}%'
+                              : '₹${val.toStringAsFixed(val.truncateToDouble() == val ? 0 : 2)}';
+                          final modeStr = kind == 'flat'
+                              ? (sd.flatMode == 'earliest' ? ' • Earliest' : ' • Monthly')
+                              : '';
+
+                          return Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                            decoration: BoxDecoration(
+                              color: AppTheme.warning.withValues(alpha: 0.12),
+                              borderRadius: BorderRadius.circular(6),
+                              border: Border.all(color: AppTheme.warning.withValues(alpha: 0.35)),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const Icon(Icons.card_giftcard_rounded, size: 13, color: AppTheme.warning),
+                                const SizedBox(width: 4),
+                                Text(
+                                  '$name ($valStr$modeStr)',
+                                  style: GoogleFonts.poppins(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.bold,
+                                    color: AppTheme.warning,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          );
+                        }).toList(),
+                      ),
+                    );
+                  },
+                  loading: () => const SizedBox.shrink(),
+                  error: (_, __) => const SizedBox.shrink(),
+                ),
               ],
             ),
           ),
@@ -520,11 +580,11 @@ class _FeeCollectionViewState extends ConsumerState<FeeCollectionView> with Sing
                 Text('TOTAL OUTSTANDING', style: GoogleFonts.poppins(fontSize: 9, fontWeight: FontWeight.bold, color: AppTheme.textHint)),
                 const SizedBox(height: 2),
                 Text(
-                  _currencyFormat.format(student.currentBalance),
+                  _currencyFormat.format(currentStudent.currentBalance),
                   style: GoogleFonts.poppins(
                     fontSize: 16,
                     fontWeight: FontWeight.bold,
-                    color: student.currentBalance > 0 ? AppTheme.error : AppTheme.success,
+                    color: currentStudent.currentBalance > 0 ? AppTheme.error : AppTheme.success,
                   ),
                 ),
               ],

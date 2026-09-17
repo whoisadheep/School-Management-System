@@ -1638,13 +1638,33 @@ class DatabaseService {
     return await _deleteLogged(db, 'fee_heads', where: 'id = ?', whereArgs: [id]);
   }
 
-  /// Get fee structures for class and academic year
+  /// Generates equivalent aliases for class / grade matching (e.g. '10', 'Grade 10', 'Class 10')
+  List<String> getGradeAliases(String grade) {
+    final clean = grade.trim();
+    if (clean.isEmpty) return [];
+    final withoutPrefix = clean.replaceAll(RegExp(r'^(Grade|Class)\s*', caseSensitive: false), '').trim();
+    final set = <String>{
+      clean,
+      if (withoutPrefix.isNotEmpty) ...[
+        withoutPrefix,
+        'Grade $withoutPrefix',
+        'Class $withoutPrefix',
+      ]
+    };
+    return set.toList();
+  }
+
+  /// Get fee structures for class and academic year (with grade alias support)
   Future<List<FeeStructure>> getFeeStructuresForClass(String className, String academicYear) async {
     final db = await _db;
+    final aliases = getGradeAliases(className);
+    if (aliases.isEmpty) return [];
+
+    final placeholders = List.filled(aliases.length, '?').join(', ');
     final results = await db.query(
       'fee_structures',
-      where: '(class = ? OR grade_level = ?) AND (academic_year = ? OR academic_year_id = ?)',
-      whereArgs: [className, className, academicYear, academicYear],
+      where: '(class IN ($placeholders) OR grade_level IN ($placeholders)) AND (academic_year = ? OR academic_year_id = ?)',
+      whereArgs: [...aliases, ...aliases, academicYear, academicYear],
     );
     return results.map((m) => FeeStructure.fromMap(m)).toList();
   }
@@ -1679,28 +1699,20 @@ class DatabaseService {
   /// Sync unpaid ledger rows when a fee structure is changed
   Future<void> syncLedgerAmountsForFeeStructure(FeeStructure fs) async {
     final db = await _db;
+    final aliases = getGradeAliases(fs.className);
+    if (aliases.isEmpty) return;
+    final placeholders = List.filled(aliases.length, '?').join(', ');
     
-    // Get all students in this class
+    // Get all students in this class using grade aliases
     final students = await db.query(
       'students',
-      where: 'grade_level = ? AND is_active = 1 AND is_alumni = 0',
-      whereArgs: [fs.className],
+      where: 'grade_level IN ($placeholders) AND is_active = 1 AND is_alumni = 0',
+      whereArgs: aliases,
     );
 
     for (final s in students) {
       final studentId = s['id'] as String;
-      // Re-calculate net fee for this specific fee head (including discounts)
-      final netFees = await getStudentNetPayableFees(studentId, fs.className, fs.academicYear);
-      final item = netFees.where((n) => n.feeHeadId == (fs.feeHeadId ?? fs.feeCategoryId)).firstOrNull;
-      if (item == null) continue;
-
-      // Update unpaid ledger rows for this student, fee head, and academic year
-      await db.update(
-        'student_fee_ledger',
-        {'amount_due': item.netPayable},
-        where: 'student_id = ? AND fee_head_id = ? AND academic_year = ? AND status = ?',
-        whereArgs: [studentId, item.feeHeadId, fs.academicYear, 'pending'],
-      );
+      await syncLedgerAmountsForStudent(studentId, fs.academicYear);
     }
   }
 
@@ -1808,17 +1820,134 @@ class DatabaseService {
     final db = await _db;
     final student = await getStudentById(studentId);
     if (student == null) return;
-    
-    final netFees = await getStudentNetPayableFees(studentId, student.gradeLevel, academicYear);
-    
-    for (final item in netFees) {
-      await db.update(
-        'student_fee_ledger',
-        {'amount_due': item.netPayable},
-        where: 'student_id = ? AND fee_head_id = ? AND academic_year = ? AND status = ?',
-        whereArgs: [studentId, item.feeHeadId, academicYear, 'pending'],
-      );
+
+    // 1. Ensure ledger entries exist for this student (generate if none exist)
+    final countRes = await db.rawQuery(
+      'SELECT COUNT(*) as cnt FROM student_fee_ledger WHERE student_id = ? AND academic_year = ?',
+      [studentId, academicYear],
+    );
+    final existingCount = (countRes.isNotEmpty ? countRes.first['cnt'] as int? : 0) ?? 0;
+
+    if (existingCount == 0) {
+      await generateLedgerForStudent(studentId, student.gradeLevel, academicYear);
     }
+
+    // 2. Fetch all structures, fee heads, and active discounts for the student
+    final structures = await getFeeStructuresForClass(student.gradeLevel, academicYear);
+    final feeHeads = await getAllFeeHeads();
+    final feeHeadMap = {for (var fh in feeHeads) fh.id: fh};
+    final structureMap = {for (var fs in structures) (fs.feeHeadId ?? fs.feeCategoryId): fs};
+
+    final studentDiscounts = await getDiscountsForStudent(studentId, academicYear);
+    final allDiscountTypes = await getAllDiscountTypes();
+    final discountTypeMap = {for (var dt in allDiscountTypes) dt.id: dt};
+
+    double totalPercent = 0.0;
+    double totalFlatEvenly = 0.0;
+    double totalFlatEarliest = 0.0;
+
+    for (final sd in studentDiscounts) {
+      final kind = sd.customKind ?? discountTypeMap[sd.discountTypeId]?.discountKind;
+      final val = sd.customValue ?? discountTypeMap[sd.discountTypeId]?.value ?? 0.0;
+      if (kind == 'percentage') {
+        totalPercent += val;
+      } else if (kind == 'flat') {
+        if (sd.flatMode == 'earliest') {
+          totalFlatEarliest += val;
+        } else {
+          totalFlatEvenly += val;
+        }
+      }
+    }
+    totalPercent = totalPercent.clamp(0.0, 100.0);
+
+    // 3. Load all ledger rows for this student in this year chronologically
+    final rows = await db.rawQuery('''
+      SELECT * FROM student_fee_ledger
+      WHERE student_id = ? AND academic_year = ?
+      ORDER BY due_date ASC, id ASC
+    ''', [studentId, academicYear]);
+
+    double remainingEarliestPool = totalFlatEarliest;
+    final now = DateTime.now();
+
+    await db.transaction((txn) async {
+      for (final map in rows) {
+        final entry = StudentFeeLedger.fromMap(map);
+        final baseFs = structureMap[entry.feeHeadId];
+        // If fee head is not in current structure, keep existing amountDue as base
+        final baseAmount = baseFs?.amount ?? entry.amountDue;
+        final freq = entry.frequency ?? (baseFs != null ? (feeHeadMap[baseFs.feeHeadId ?? baseFs.feeCategoryId]?.frequency ?? 'monthly') : 'monthly');
+        final cycleCount = freq == 'monthly' ? 12 : (freq == 'quarterly' ? 4 : 1);
+
+        // Step A: Percentage discount
+        double discounted = baseAmount * (1.0 - (totalPercent / 100.0));
+
+        // Step B: Evenly distributed flat discount
+        if (totalFlatEvenly > 0) {
+          final count = structures.isNotEmpty ? structures.length : 1;
+          final monthlyEvenly = totalFlatEvenly / (cycleCount * count);
+          discounted = (discounted - monthlyEvenly).clamp(0.0, double.infinity);
+        }
+
+        // Step C: Earliest dues flat discount deduction
+        if (remainingEarliestPool > 0 && discounted > 0) {
+          final unpaidPortion = discounted > entry.amountPaid ? discounted - entry.amountPaid : 0.0;
+          final deduct = remainingEarliestPool >= unpaidPortion ? unpaidPortion : remainingEarliestPool;
+          discounted = (discounted - deduct).clamp(entry.amountPaid, double.infinity);
+          remainingEarliestPool -= deduct;
+        }
+
+        // Round to 2 decimal places
+        discounted = (discounted * 100).roundToDouble() / 100.0;
+
+        // Ensure amountDue is not lower than already paid amount
+        if (entry.amountPaid > discounted) {
+          discounted = entry.amountPaid;
+        }
+
+        // Determine correct status
+        LedgerStatus newStatus;
+        if ((discounted - entry.amountPaid).abs() <= 0.01) {
+          newStatus = LedgerStatus.paid;
+        } else if (entry.amountPaid > 0) {
+          newStatus = LedgerStatus.partial;
+        } else if (entry.dueDate.isBefore(now)) {
+          newStatus = LedgerStatus.overdue;
+        } else {
+          newStatus = LedgerStatus.pending;
+        }
+
+        await txn.update(
+          'student_fee_ledger',
+          {
+            'amount_due': discounted,
+            'status': newStatus.name,
+            'updated_at': now.toIso8601String(),
+          },
+          where: 'id = ?',
+          whereArgs: [entry.id],
+        );
+      }
+
+      // 4. Update students table current_balance to match calculated ledger balance
+      final balRes = await txn.rawQuery('''
+        SELECT COALESCE(SUM(amount_due - amount_paid), 0.0) as bal
+        FROM student_fee_ledger
+        WHERE student_id = ?
+      ''', [studentId]);
+      final newBal = (balRes.first['bal'] as num?)?.toDouble() ?? 0.0;
+
+      await txn.update(
+        'students',
+        {
+          'current_balance': newBal,
+          'updated_at': now.toIso8601String(),
+        },
+        where: 'id = ?',
+        whereArgs: [studentId],
+      );
+    });
   }
 
   /// Compute student net payable fees per fee head for an academic year
@@ -1833,18 +1962,23 @@ class DatabaseService {
 
     // Calculate total discount percentage & flat discount for the student
     double totalPercentDiscount = 0.0;
-    double totalFlatDiscount = 0.0;
+    double totalFlatEvenly = 0.0;
+    double totalFlatEarliest = 0.0;
 
     for (final sd in studentDiscounts) {
-      final dt = discountTypeMap[sd.discountTypeId];
-      if (dt != null) {
-        if (dt.discountKind == 'percentage') {
-          totalPercentDiscount += dt.value;
-        } else if (dt.discountKind == 'flat') {
-          totalFlatDiscount += dt.value;
+      final kind = sd.customKind ?? discountTypeMap[sd.discountTypeId]?.discountKind;
+      final val = sd.customValue ?? discountTypeMap[sd.discountTypeId]?.value ?? 0.0;
+      if (kind == 'percentage') {
+        totalPercentDiscount += val;
+      } else if (kind == 'flat') {
+        if (sd.flatMode == 'earliest') {
+          totalFlatEarliest += val;
+        } else {
+          totalFlatEvenly += val;
         }
       }
     }
+    totalPercentDiscount = totalPercentDiscount.clamp(0.0, 100.0);
 
     final List<StudentNetFeeBreakdown> result = [];
 
@@ -1854,15 +1988,25 @@ class DatabaseService {
       final headName = head?.name ?? 'Fee Head ($headId)';
       final frequency = head?.frequency ?? 'monthly';
       final baseAmt = fs.amount;
+      final cycleCount = frequency == 'monthly' ? 12 : (frequency == 'quarterly' ? 4 : 1);
 
-      // Apply percentage discount first, then distribute flat discount if any
+      // Percentage discount
       double discAmt = baseAmt * (totalPercentDiscount / 100.0);
-      if (totalFlatDiscount > 0 && structures.isNotEmpty) {
-        discAmt += (totalFlatDiscount / structures.length);
-      }
-      if (discAmt > baseAmt) discAmt = baseAmt;
 
-      final netPayable = baseAmt - discAmt;
+      // Flat evenly discount
+      if (totalFlatEvenly > 0 && structures.isNotEmpty) {
+        discAmt += (totalFlatEvenly / (cycleCount * structures.length));
+      }
+
+      // Flat earliest discount: pro-rate for display purposes in net fee breakdown
+      if (totalFlatEarliest > 0 && structures.isNotEmpty) {
+        discAmt += (totalFlatEarliest / (cycleCount * structures.length));
+      }
+
+      if (discAmt > baseAmt) discAmt = baseAmt;
+      discAmt = (discAmt * 100).roundToDouble() / 100.0;
+
+      final netPayable = (baseAmt - discAmt).clamp(0.0, double.infinity);
 
       result.add(StudentNetFeeBreakdown(
         feeHeadId: headId,
