@@ -30,7 +30,6 @@ class ReportGenerator {
     final formattedReceiptNumber = receiptNumber ?? 'RCT-${transaction.timestamp.year}-${transaction.id.substring(0, 4).toUpperCase()}';
     final currencyFormatter = NumberFormat.currency(symbol: 'Rs. ', decimalDigits: 2);
     final dateFormatter = DateFormat('dd MMM yyyy, hh:mm a');
-    final shortDateFormatter = DateFormat('dd MMM yyyy');
 
     final primaryColor = PdfColor.fromHex('#4C3BCF');
     final darkColor = PdfColor.fromHex('#1A1A2E');
@@ -39,43 +38,114 @@ class ReportGenerator {
 
     pdf.addPage(
       pw.Page(
-        pageFormat: PdfPageFormat.a5,
-        margin: const pw.EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        pageFormat: PdfPageFormat.a4,
+        margin: const pw.EdgeInsets.symmetric(horizontal: 20, vertical: 12),
         build: (pw.Context context) {
           return pw.Column(
-            crossAxisAlignment: pw.CrossAxisAlignment.start,
+            mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
             children: [
-              // ── Header Section ──
-              pw.Container(
-                padding: const pw.EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                decoration: pw.BoxDecoration(
-                  color: primaryColor,
-                  borderRadius: const pw.BorderRadius.all(pw.Radius.circular(6)),
-                ),
-                child: pw.Row(
-                  mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+              _buildSingleReceiptHalf(
+                copyTitle: 'STUDENT / PARENT COPY',
+                schoolLogo: schoolLogo,
+                schoolName: schoolName,
+                schoolAddress: schoolAddress,
+                schoolContact: schoolContact,
+                transaction: transaction,
+                invoice: invoice,
+                student: student,
+                formattedReceiptNumber: formattedReceiptNumber,
+                feeHeadName: feeHeadName,
+                dateFormatter: dateFormatter,
+                currencyFormatter: currencyFormatter,
+                primaryColor: primaryColor,
+                darkColor: darkColor,
+                greyColor: greyColor,
+                lightGrey: lightGrey,
+              ),
+              _buildReceiptPerforationDivider(),
+              _buildSingleReceiptHalf(
+                copyTitle: 'OFFICE / SCHOOL RECORD COPY',
+                schoolLogo: schoolLogo,
+                schoolName: schoolName,
+                schoolAddress: schoolAddress,
+                schoolContact: schoolContact,
+                transaction: transaction,
+                invoice: invoice,
+                student: student,
+                formattedReceiptNumber: formattedReceiptNumber,
+                feeHeadName: feeHeadName,
+                dateFormatter: dateFormatter,
+                currencyFormatter: currencyFormatter,
+                primaryColor: primaryColor,
+                darkColor: darkColor,
+                greyColor: greyColor,
+                lightGrey: lightGrey,
+              ),
+            ],
+          );
+        },
+      ),
+    );
+
+    return await pdf.save();
+  }
+
+  static pw.Widget _buildSingleReceiptHalf({
+    required String copyTitle,
+    Uint8List? schoolLogo,
+    required String schoolName,
+    required String schoolAddress,
+    required String schoolContact,
+    required Transaction transaction,
+    required Invoice invoice,
+    required Student student,
+    required String formattedReceiptNumber,
+    String? feeHeadName,
+    required DateFormat dateFormatter,
+    required NumberFormat currencyFormatter,
+    required PdfColor primaryColor,
+    required PdfColor darkColor,
+    required PdfColor greyColor,
+    required PdfColor lightGrey,
+  }) {
+    final shortDateFormatter = DateFormat('dd MMM yyyy');
+
+    return pw.SizedBox(
+      height: 385,
+      child: pw.Column(
+        crossAxisAlignment: pw.CrossAxisAlignment.start,
+        children: [
+          // ── Header Section ──
+          pw.Container(
+            padding: const pw.EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            decoration: pw.BoxDecoration(
+              color: primaryColor,
+              borderRadius: const pw.BorderRadius.all(pw.Radius.circular(6)),
+            ),
+            child: pw.Row(
+              mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+              crossAxisAlignment: pw.CrossAxisAlignment.center,
+              children: [
+                pw.Row(
                   crossAxisAlignment: pw.CrossAxisAlignment.center,
                   children: [
-                    pw.Row(
-                      crossAxisAlignment: pw.CrossAxisAlignment.center,
-                      children: [
-                        if (schoolLogo != null) ...[
-                          pw.Container(
-                            width: 36,
-                            height: 36,
-                            decoration: pw.BoxDecoration(
-                              color: PdfColors.white,
-                              borderRadius: const pw.BorderRadius.all(pw.Radius.circular(6)),
-                            ),
-                            padding: const pw.EdgeInsets.all(2),
-                            child: pw.Image(
-                              pw.MemoryImage(schoolLogo),
-                              fit: pw.BoxFit.contain,
-                            ),
-                          ),
-                          pw.SizedBox(width: 8),
-                        ],
-                        pw.Column(
+                    if (schoolLogo != null) ...[
+                      pw.Container(
+                        width: 36,
+                        height: 36,
+                        decoration: const pw.BoxDecoration(
+                          color: PdfColors.white,
+                          borderRadius: pw.BorderRadius.all(pw.Radius.circular(6)),
+                        ),
+                        padding: const pw.EdgeInsets.all(2),
+                        child: pw.Image(
+                          pw.MemoryImage(schoolLogo),
+                          fit: pw.BoxFit.contain,
+                        ),
+                      ),
+                      pw.SizedBox(width: 8),
+                    ],
+                    pw.Column(
                       crossAxisAlignment: pw.CrossAxisAlignment.start,
                       children: [
                         pw.Text(
@@ -103,280 +173,307 @@ class ReportGenerator {
                         ),
                       ],
                     ),
-                      ],
+                  ],
+                ),
+                pw.Container(
+                  padding: const pw.EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: const pw.BoxDecoration(
+                    color: PdfColors.white,
+                    borderRadius: pw.BorderRadius.all(pw.Radius.circular(4)),
+                  ),
+                  child: pw.Text(
+                    copyTitle,
+                    style: pw.TextStyle(
+                      color: primaryColor,
+                      fontSize: 8,
+                      fontWeight: pw.FontWeight.bold,
                     ),
-                    pw.Container(
-                      padding: const pw.EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                      decoration: pw.BoxDecoration(
-                        color: PdfColors.white,
-                        borderRadius: const pw.BorderRadius.all(pw.Radius.circular(4)),
-                      ),
-                      child: pw.Text(
-                        'OFFICIAL RECEIPT',
+                  ),
+                ),
+              ],
+            ),
+          ),
+
+          pw.SizedBox(height: 6),
+
+          // ── Receipt & Student Meta Data Grid ──
+          pw.Row(
+            crossAxisAlignment: pw.CrossAxisAlignment.start,
+            children: [
+              // Left: Student Info
+              pw.Expanded(
+                child: pw.Container(
+                  padding: const pw.EdgeInsets.all(6),
+                  decoration: pw.BoxDecoration(
+                    color: lightGrey,
+                    borderRadius: const pw.BorderRadius.all(pw.Radius.circular(4)),
+                    border: pw.Border.all(color: PdfColors.grey300, width: 0.5),
+                  ),
+                  child: pw.Column(
+                    crossAxisAlignment: pw.CrossAxisAlignment.start,
+                    children: [
+                      pw.Text(
+                        'STUDENT DETAILS',
                         style: pw.TextStyle(
-                          color: primaryColor,
-                          fontSize: 9,
+                          fontSize: 7,
                           fontWeight: pw.FontWeight.bold,
+                          color: greyColor,
                         ),
                       ),
+                      pw.Divider(thickness: 0.5, color: PdfColors.grey300),
+                      pw.SizedBox(height: 1),
+                      pw.Text(
+                        student.name,
+                        style: pw.TextStyle(
+                          fontSize: 10,
+                          fontWeight: pw.FontWeight.bold,
+                          color: darkColor,
+                        ),
+                      ),
+                      pw.SizedBox(height: 1),
+                      pw.Text('Grade: ${student.gradeLevel}', style: const pw.TextStyle(fontSize: 7.5)),
+                      pw.Text('Student ID: ${student.id}', style: const pw.TextStyle(fontSize: 7, color: PdfColors.grey700)),
+                      if (student.guardianPhone != null)
+                        pw.Text('Guardian Contact: ${student.guardianPhone}', style: const pw.TextStyle(fontSize: 7)),
+                    ],
+                  ),
+                ),
+              ),
+
+              pw.SizedBox(width: 6),
+
+              // Right: Receipt Meta
+              pw.Expanded(
+                child: pw.Container(
+                  padding: const pw.EdgeInsets.all(6),
+                  decoration: pw.BoxDecoration(
+                    color: lightGrey,
+                    borderRadius: const pw.BorderRadius.all(pw.Radius.circular(4)),
+                    border: pw.Border.all(color: PdfColors.grey300, width: 0.5),
+                  ),
+                  child: pw.Column(
+                    crossAxisAlignment: pw.CrossAxisAlignment.start,
+                    children: [
+                      pw.Text(
+                        'RECEIPT INFORMATION',
+                        style: pw.TextStyle(
+                          fontSize: 7,
+                          fontWeight: pw.FontWeight.bold,
+                          color: greyColor,
+                        ),
+                      ),
+                      pw.Divider(thickness: 0.5, color: PdfColors.grey300),
+                      pw.SizedBox(height: 1),
+                      pw.Text(
+                        'Receipt #: $formattedReceiptNumber',
+                        style: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold, color: darkColor),
+                      ),
+                      pw.SizedBox(height: 1),
+                      pw.Text('Date: ${dateFormatter.format(transaction.timestamp)}', style: const pw.TextStyle(fontSize: 7)),
+                      pw.Text('Payment Method: ${transaction.paymentMethod.displayName}', style: const pw.TextStyle(fontSize: 7)),
+                      if (transaction.referenceNumber != null && transaction.referenceNumber!.isNotEmpty)
+                        pw.Text('Ref / Txn No: ${transaction.referenceNumber}', style: const pw.TextStyle(fontSize: 7)),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+
+          pw.SizedBox(height: 6),
+
+          // ── Payment Details Table ──
+          pw.Text(
+            'PAYMENT BREAKDOWN',
+            style: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold, color: darkColor),
+          ),
+          pw.SizedBox(height: 3),
+
+          pw.Table(
+            border: pw.TableBorder.all(color: PdfColors.grey300, width: 0.5),
+            columnWidths: {
+              0: const pw.FlexColumnWidth(2),
+              1: const pw.FlexColumnWidth(4),
+              2: const pw.FlexColumnWidth(2),
+              3: const pw.FlexColumnWidth(2),
+            },
+            children: [
+              // Table Header
+              pw.TableRow(
+                decoration: pw.BoxDecoration(color: primaryColor),
+                children: [
+                  pw.Padding(
+                    padding: const pw.EdgeInsets.symmetric(horizontal: 4, vertical: 3),
+                    child: pw.Text('Invoice ID', style: pw.TextStyle(color: PdfColors.white, fontWeight: pw.FontWeight.bold, fontSize: 7)),
+                  ),
+                  pw.Padding(
+                    padding: const pw.EdgeInsets.symmetric(horizontal: 4, vertical: 3),
+                    child: pw.Text('Description', style: pw.TextStyle(color: PdfColors.white, fontWeight: pw.FontWeight.bold, fontSize: 7)),
+                  ),
+                  pw.Padding(
+                    padding: const pw.EdgeInsets.symmetric(horizontal: 4, vertical: 3),
+                    child: pw.Text('Due Date', style: pw.TextStyle(color: PdfColors.white, fontWeight: pw.FontWeight.bold, fontSize: 7)),
+                  ),
+                  pw.Padding(
+                    padding: const pw.EdgeInsets.symmetric(horizontal: 4, vertical: 3),
+                    child: pw.Text('Amount Paid', style: pw.TextStyle(color: PdfColors.white, fontWeight: pw.FontWeight.bold, fontSize: 7), textAlign: pw.TextAlign.right),
+                  ),
+                ],
+              ),
+              // Table Body Row
+              pw.TableRow(
+                children: [
+                  pw.Padding(
+                    padding: const pw.EdgeInsets.symmetric(horizontal: 4, vertical: 3),
+                    child: pw.Text(invoice.id.substring(0, 8).toUpperCase(), style: const pw.TextStyle(fontSize: 7)),
+                  ),
+                  pw.Padding(
+                    padding: const pw.EdgeInsets.symmetric(horizontal: 4, vertical: 3),
+                    child: pw.Text(invoice.notes ?? 'School Fee Invoice', style: const pw.TextStyle(fontSize: 7)),
+                  ),
+                  pw.Padding(
+                    padding: const pw.EdgeInsets.symmetric(horizontal: 4, vertical: 3),
+                    child: pw.Text(shortDateFormatter.format(invoice.dueDate), style: const pw.TextStyle(fontSize: 7)),
+                  ),
+                  pw.Padding(
+                    padding: const pw.EdgeInsets.symmetric(horizontal: 4, vertical: 3),
+                    child: pw.Text(currencyFormatter.format(transaction.amountPaid), style: pw.TextStyle(fontSize: 7, fontWeight: pw.FontWeight.bold), textAlign: pw.TextAlign.right),
+                  ),
+                ],
+              ),
+            ],
+          ),
+
+          pw.SizedBox(height: 5),
+
+          // ── Summary Table ──
+          pw.Row(
+            mainAxisAlignment: pw.MainAxisAlignment.end,
+            children: [
+              pw.Container(
+                width: 180,
+                padding: const pw.EdgeInsets.all(6),
+                decoration: pw.BoxDecoration(
+                  color: lightGrey,
+                  borderRadius: const pw.BorderRadius.all(pw.Radius.circular(4)),
+                  border: pw.Border.all(color: PdfColors.grey300, width: 0.5),
+                ),
+                child: pw.Column(
+                  children: [
+                    pw.Row(
+                      mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                      children: [
+                        pw.Text('Invoice Total:', style: const pw.TextStyle(fontSize: 7)),
+                        pw.Text(currencyFormatter.format(invoice.totalAmount), style: const pw.TextStyle(fontSize: 7)),
+                      ],
+                    ),
+                    pw.SizedBox(height: 2),
+                    pw.Row(
+                      mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                      children: [
+                        pw.Text('Amount Paid Now:', style: pw.TextStyle(fontSize: 7, fontWeight: pw.FontWeight.bold)),
+                        pw.Text(currencyFormatter.format(transaction.amountPaid), style: pw.TextStyle(fontSize: 7.5, fontWeight: pw.FontWeight.bold, color: primaryColor)),
+                      ],
+                    ),
+                    pw.Divider(thickness: 0.5),
+                    pw.Row(
+                      mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                      children: [
+                        pw.Text('Remaining Balance:', style: pw.TextStyle(fontSize: 7, fontWeight: pw.FontWeight.bold)),
+                        pw.Text(
+                          currencyFormatter.format(student.currentBalance - transaction.amountPaid),
+                          style: pw.TextStyle(
+                            fontSize: 7,
+                            fontWeight: pw.FontWeight.bold,
+                            color: (student.currentBalance - transaction.amountPaid) > 0 ? PdfColors.red800 : PdfColors.green800,
+                          ),
+                        ),
+                      ],
                     ),
                   ],
                 ),
               ),
+            ],
+          ),
 
-              pw.SizedBox(height: 8),
+          pw.Spacer(),
 
-              // ── Receipt & Student Meta Data Grid ──
-              pw.Row(
-                crossAxisAlignment: pw.CrossAxisAlignment.start,
-                children: [
-                  // Left: Student Info
-                  pw.Expanded(
-                    child: pw.Container(
-                      padding: const pw.EdgeInsets.all(7),
-                      decoration: pw.BoxDecoration(
-                        color: lightGrey,
-                        borderRadius: const pw.BorderRadius.all(pw.Radius.circular(4)),
-                        border: pw.Border.all(color: PdfColors.grey300, width: 0.5),
-                      ),
-                      child: pw.Column(
-                        crossAxisAlignment: pw.CrossAxisAlignment.start,
-                        children: [
-                          pw.Text(
-                            'STUDENT DETAILS',
-                            style: pw.TextStyle(
-                              fontSize: 7.5,
-                              fontWeight: pw.FontWeight.bold,
-                              color: greyColor,
-                            ),
-                          ),
-                          pw.Divider(thickness: 0.5, color: PdfColors.grey300),
-                          pw.SizedBox(height: 2),
-                          pw.Text(
-                            student.name,
-                            style: pw.TextStyle(
-                              fontSize: 10.5,
-                              fontWeight: pw.FontWeight.bold,
-                              color: darkColor,
-                            ),
-                          ),
-                          pw.SizedBox(height: 1),
-                          pw.Text('Grade: ${student.gradeLevel}', style: const pw.TextStyle(fontSize: 8)),
-                          pw.Text('Student ID: ${student.id}', style: const pw.TextStyle(fontSize: 7.5, color: PdfColors.grey700)),
-                          if (student.guardianPhone != null)
-                            pw.Text('Guardian Contact: ${student.guardianPhone}', style: const pw.TextStyle(fontSize: 7.5)),
-                        ],
-                      ),
-                    ),
-                  ),
-
-                  pw.SizedBox(width: 8),
-
-                  // Right: Receipt Meta
-                  pw.Expanded(
-                    child: pw.Container(
-                      padding: const pw.EdgeInsets.all(7),
-                      decoration: pw.BoxDecoration(
-                        color: lightGrey,
-                        borderRadius: const pw.BorderRadius.all(pw.Radius.circular(4)),
-                        border: pw.Border.all(color: PdfColors.grey300, width: 0.5),
-                      ),
-                      child: pw.Column(
-                        crossAxisAlignment: pw.CrossAxisAlignment.start,
-                        children: [
-                          pw.Text(
-                            'RECEIPT INFORMATION',
-                            style: pw.TextStyle(
-                              fontSize: 7.5,
-                              fontWeight: pw.FontWeight.bold,
-                              color: greyColor,
-                            ),
-                          ),
-                          pw.Divider(thickness: 0.5, color: PdfColors.grey300),
-                          pw.SizedBox(height: 2),
-                          pw.Text(
-                            'Receipt #: $formattedReceiptNumber',
-                            style: pw.TextStyle(fontSize: 8.5, fontWeight: pw.FontWeight.bold, color: darkColor),
-                          ),
-                          pw.SizedBox(height: 1),
-                          pw.Text('Date: ${dateFormatter.format(transaction.timestamp)}', style: const pw.TextStyle(fontSize: 7.5)),
-                          pw.Text('Payment Method: ${transaction.paymentMethod.displayName}', style: const pw.TextStyle(fontSize: 7.5)),
-                          if (transaction.referenceNumber != null && transaction.referenceNumber!.isNotEmpty)
-                            pw.Text('Ref / Txn No: ${transaction.referenceNumber}', style: const pw.TextStyle(fontSize: 7.5)),
-                        ],
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-
-              pw.SizedBox(height: 8),
-
-              // ── Payment Details Table ──
-              pw.Text(
-                'PAYMENT BREAKDOWN',
-                style: pw.TextStyle(fontSize: 8.5, fontWeight: pw.FontWeight.bold, color: darkColor),
-              ),
-              pw.SizedBox(height: 4),
-
-              pw.Table(
-                border: pw.TableBorder.all(color: PdfColors.grey300, width: 0.5),
-                columnWidths: {
-                  0: const pw.FlexColumnWidth(2),
-                  1: const pw.FlexColumnWidth(4),
-                  2: const pw.FlexColumnWidth(2),
-                  3: const pw.FlexColumnWidth(2),
-                },
-                children: [
-                  // Table Header
-                  pw.TableRow(
-                    decoration: pw.BoxDecoration(color: primaryColor),
-                    children: [
-                      pw.Padding(
-                        padding: const pw.EdgeInsets.symmetric(horizontal: 4, vertical: 3.5),
-                        child: pw.Text('Invoice ID', style: pw.TextStyle(color: PdfColors.white, fontWeight: pw.FontWeight.bold, fontSize: 7.5)),
-                      ),
-                      pw.Padding(
-                        padding: const pw.EdgeInsets.symmetric(horizontal: 4, vertical: 3.5),
-                        child: pw.Text('Description', style: pw.TextStyle(color: PdfColors.white, fontWeight: pw.FontWeight.bold, fontSize: 7.5)),
-                      ),
-                      pw.Padding(
-                        padding: const pw.EdgeInsets.symmetric(horizontal: 4, vertical: 3.5),
-                        child: pw.Text('Due Date', style: pw.TextStyle(color: PdfColors.white, fontWeight: pw.FontWeight.bold, fontSize: 7.5)),
-                      ),
-                      pw.Padding(
-                        padding: const pw.EdgeInsets.symmetric(horizontal: 4, vertical: 3.5),
-                        child: pw.Text('Amount Paid', style: pw.TextStyle(color: PdfColors.white, fontWeight: pw.FontWeight.bold, fontSize: 7.5), textAlign: pw.TextAlign.right),
-                      ),
-                    ],
-                  ),
-                  // Table Body Row
-                  pw.TableRow(
-                    children: [
-                      pw.Padding(
-                        padding: const pw.EdgeInsets.symmetric(horizontal: 4, vertical: 3.5),
-                        child: pw.Text(invoice.id.substring(0, 8).toUpperCase(), style: const pw.TextStyle(fontSize: 7.5)),
-                      ),
-                      pw.Padding(
-                        padding: const pw.EdgeInsets.symmetric(horizontal: 4, vertical: 3.5),
-                        child: pw.Text(invoice.notes ?? 'School Fee Invoice', style: const pw.TextStyle(fontSize: 7.5)),
-                      ),
-                      pw.Padding(
-                        padding: const pw.EdgeInsets.symmetric(horizontal: 4, vertical: 3.5),
-                        child: pw.Text(shortDateFormatter.format(invoice.dueDate), style: const pw.TextStyle(fontSize: 7.5)),
-                      ),
-                      pw.Padding(
-                        padding: const pw.EdgeInsets.symmetric(horizontal: 4, vertical: 3.5),
-                        child: pw.Text(currencyFormatter.format(transaction.amountPaid), style: pw.TextStyle(fontSize: 7.5, fontWeight: pw.FontWeight.bold), textAlign: pw.TextAlign.right),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-
-              pw.SizedBox(height: 6),
-
-              // ── Summary Table ──
-              pw.Row(
-                mainAxisAlignment: pw.MainAxisAlignment.end,
-                children: [
-                  pw.Container(
-                    width: 190,
-                    padding: const pw.EdgeInsets.all(7),
-                    decoration: pw.BoxDecoration(
-                      color: lightGrey,
-                      borderRadius: const pw.BorderRadius.all(pw.Radius.circular(4)),
-                      border: pw.Border.all(color: PdfColors.grey300, width: 0.5),
-                    ),
-                    child: pw.Column(
-                      children: [
-                        pw.Row(
-                          mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-                          children: [
-                            pw.Text('Invoice Total:', style: const pw.TextStyle(fontSize: 7.5)),
-                            pw.Text(currencyFormatter.format(invoice.totalAmount), style: const pw.TextStyle(fontSize: 7.5)),
-                          ],
-                        ),
-                        pw.SizedBox(height: 2),
-                        pw.Row(
-                          mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-                          children: [
-                            pw.Text('Amount Paid Now:', style: pw.TextStyle(fontSize: 7.5, fontWeight: pw.FontWeight.bold)),
-                            pw.Text(currencyFormatter.format(transaction.amountPaid), style: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold, color: primaryColor)),
-                          ],
-                        ),
-                        pw.Divider(thickness: 0.5),
-                        pw.Row(
-                          mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-                          children: [
-                            pw.Text('Remaining Balance:', style: pw.TextStyle(fontSize: 7.5, fontWeight: pw.FontWeight.bold)),
-                            pw.Text(
-                              currencyFormatter.format(student.currentBalance - transaction.amountPaid),
-                              style: pw.TextStyle(
-                                fontSize: 7.5,
-                                fontWeight: pw.FontWeight.bold,
-                                color: (student.currentBalance - transaction.amountPaid) > 0 ? PdfColors.red800 : PdfColors.green800,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-
-              pw.Spacer(),
-
-              // ── Footer & Signatures ──
-              pw.Row(
-                mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+          // ── Footer & Signatures ──
+          pw.Row(
+            mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+            crossAxisAlignment: pw.CrossAxisAlignment.end,
+            children: [
+              pw.Column(
                 crossAxisAlignment: pw.CrossAxisAlignment.end,
                 children: [
-                  pw.Column(
-                    crossAxisAlignment: pw.CrossAxisAlignment.start,
-                    children: [
-                      pw.Container(
-                        width: 100,
-                        height: 0.5,
-                        color: PdfColors.grey500,
-                      ),
-                      pw.SizedBox(height: 2),
-                      pw.Text('Payer Signature', style: pw.TextStyle(fontSize: 7, color: greyColor)),
-                    ],
+                  pw.Container(
+                    width: 90,
+                    height: 0.5,
+                    color: PdfColors.grey500,
                   ),
-                  pw.Column(
-                    crossAxisAlignment: pw.CrossAxisAlignment.end,
-                    children: [
-                      pw.Container(
-                        width: 100,
-                        height: 0.5,
-                        color: PdfColors.grey500,
-                      ),
-                      pw.SizedBox(height: 2),
-                      pw.Text('Authorized Cashier / Stamp', style: pw.TextStyle(fontSize: 7, color: greyColor)),
-                    ],
-                  ),
+                  pw.SizedBox(height: 2),
+                  pw.Text('Authorized Cashier / Stamp', style: pw.TextStyle(fontSize: 6.5, color: greyColor)),
                 ],
               ),
-
-              pw.SizedBox(height: 6),
-              pw.Center(
-                child: pw.Text(
-                  'Thank you for your prompt payment! This is a computer-generated receipt.',
-                  style: pw.TextStyle(fontSize: 6.5, color: greyColor, fontStyle: pw.FontStyle.italic),
-                ),
-              ),
             ],
-          );
-        },
+          ),
+
+          pw.SizedBox(height: 3),
+          pw.Center(
+            child: pw.Text(
+              'Thank you for your payment! This is a computer-generated receipt.',
+              style: pw.TextStyle(fontSize: 5.5, color: greyColor, fontStyle: pw.FontStyle.italic),
+            ),
+          ),
+        ],
       ),
     );
+  }
 
-    return await pdf.save();
+  /// Perforation line dividing the Parent Copy and Office Copy on a single A4 page.
+  static pw.Widget _buildReceiptPerforationDivider() {
+    return pw.Padding(
+      padding: const pw.EdgeInsets.symmetric(vertical: 4),
+      child: pw.Row(
+        children: [
+          pw.Expanded(
+            child: pw.Divider(
+              thickness: 0.8,
+              color: PdfColors.grey400,
+              borderStyle: pw.BorderStyle.dashed,
+            ),
+          ),
+          pw.Container(
+            padding: const pw.EdgeInsets.symmetric(horizontal: 10, vertical: 2),
+            decoration: pw.BoxDecoration(
+              border: pw.Border.all(color: PdfColors.grey400, width: 0.5),
+              borderRadius: const pw.BorderRadius.all(pw.Radius.circular(3)),
+              color: PdfColors.white,
+            ),
+            child: pw.Text(
+              '- - - - - -  CUT / TEAR HERE  (PARENT COPY / OFFICE COPY)  - - - - - -',
+              style: pw.TextStyle(
+                fontSize: 6.5,
+                fontWeight: pw.FontWeight.bold,
+                color: PdfColors.grey700,
+                letterSpacing: 0.8,
+              ),
+            ),
+          ),
+          pw.Expanded(
+            child: pw.Divider(
+              thickness: 0.8,
+              color: PdfColors.grey400,
+              borderStyle: pw.BorderStyle.dashed,
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   /// Build raw PDF bytes for a unified batch payment receipt (supporting multiple fees/months).
+  /// Renders 2 copies on a single A4 page: Top half for Parent, Bottom half for Office.
   static Future<Uint8List> buildBatchPaymentReceiptPdfBytes({
     Uint8List? schoolLogo,
     required List<StudentFeeLedger> paidLedgers,
@@ -403,361 +500,52 @@ class ReportGenerator {
 
     pdf.addPage(
       pw.Page(
-        pageFormat: PdfPageFormat.a5,
-        margin: const pw.EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        pageFormat: PdfPageFormat.a4,
+        margin: const pw.EdgeInsets.symmetric(horizontal: 20, vertical: 12),
         build: (pw.Context context) {
           return pw.Column(
-            crossAxisAlignment: pw.CrossAxisAlignment.start,
+            mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
             children: [
-              // ── Header Section ──
-              pw.Container(
-                padding: const pw.EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                decoration: pw.BoxDecoration(
-                  color: primaryColor,
-                  borderRadius: const pw.BorderRadius.all(pw.Radius.circular(6)),
-                ),
-                child: pw.Row(
-                  mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-                  crossAxisAlignment: pw.CrossAxisAlignment.center,
-                  children: [
-                    pw.Row(
-                      crossAxisAlignment: pw.CrossAxisAlignment.center,
-                      children: [
-                        if (schoolLogo != null) ...[
-                          pw.Container(
-                            width: 36,
-                            height: 36,
-                            decoration: pw.BoxDecoration(
-                              color: PdfColors.white,
-                              borderRadius: const pw.BorderRadius.all(pw.Radius.circular(6)),
-                            ),
-                            padding: const pw.EdgeInsets.all(2),
-                            child: pw.Image(
-                              pw.MemoryImage(schoolLogo),
-                              fit: pw.BoxFit.contain,
-                            ),
-                          ),
-                          pw.SizedBox(width: 8),
-                        ],
-                        pw.Column(
-                      crossAxisAlignment: pw.CrossAxisAlignment.start,
-                      children: [
-                        pw.Text(
-                          schoolName,
-                          style: pw.TextStyle(
-                            color: PdfColors.white,
-                            fontSize: 13,
-                            fontWeight: pw.FontWeight.bold,
-                          ),
-                        ),
-                        pw.SizedBox(height: 2),
-                        pw.Text(
-                          schoolAddress,
-                          style: const pw.TextStyle(
-                            color: PdfColors.white,
-                            fontSize: 7.5,
-                          ),
-                        ),
-                        pw.Text(
-                          schoolContact,
-                          style: const pw.TextStyle(
-                            color: PdfColors.white,
-                            fontSize: 7.5,
-                          ),
-                        ),
-                      ],
-                    ),
-                      ],
-                    ),
-                    pw.Container(
-                      padding: const pw.EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                      decoration: pw.BoxDecoration(
-                        color: PdfColors.white,
-                        borderRadius: const pw.BorderRadius.all(pw.Radius.circular(4)),
-                      ),
-                      child: pw.Column(
-                        children: [
-                          pw.Text(
-                            'FEE RECEIPT',
-                            style: pw.TextStyle(
-                              color: primaryColor,
-                              fontSize: 9.5,
-                              fontWeight: pw.FontWeight.bold,
-                            ),
-                          ),
-                          if (academicYear != null) ...[
-                            pw.SizedBox(height: 1),
-                            pw.Text(
-                              'Session: $academicYear',
-                              style: pw.TextStyle(
-                                color: darkColor,
-                                fontSize: 7,
-                                fontWeight: pw.FontWeight.bold,
-                              ),
-                            ),
-                          ],
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
+              _buildBatchReceiptHalf(
+                copyTitle: 'STUDENT / PARENT COPY',
+                schoolLogo: schoolLogo,
+                schoolName: schoolName,
+                schoolAddress: schoolAddress,
+                schoolContact: schoolContact,
+                academicYear: academicYear,
+                student: student,
+                formattedReceiptNumber: formattedReceiptNumber,
+                dateFormatter: dateFormatter,
+                paymentMethod: paymentMethod,
+                referenceNumber: referenceNumber,
+                paidLedgers: paidLedgers,
+                totalAmountPaid: totalAmountPaid,
+                currencyFormatter: currencyFormatter,
+                primaryColor: primaryColor,
+                darkColor: darkColor,
+                greyColor: greyColor,
+                lightGrey: lightGrey,
               ),
-
-              pw.SizedBox(height: 8),
-
-              // ── Receipt & Student Meta Data Grid ──
-              pw.Row(
-                crossAxisAlignment: pw.CrossAxisAlignment.start,
-                children: [
-                  // Left: Student Info
-                  pw.Expanded(
-                    child: pw.Container(
-                      padding: const pw.EdgeInsets.all(7),
-                      decoration: pw.BoxDecoration(
-                        color: lightGrey,
-                        borderRadius: const pw.BorderRadius.all(pw.Radius.circular(4)),
-                        border: pw.Border.all(color: PdfColors.grey300, width: 0.5),
-                      ),
-                      child: pw.Column(
-                        crossAxisAlignment: pw.CrossAxisAlignment.start,
-                        children: [
-                          pw.Text(
-                            'STUDENT DETAILS',
-                            style: pw.TextStyle(
-                              fontSize: 7.5,
-                              fontWeight: pw.FontWeight.bold,
-                              color: greyColor,
-                            ),
-                          ),
-                          pw.Divider(thickness: 0.5, color: PdfColors.grey300),
-                          pw.SizedBox(height: 2),
-                          pw.Text(
-                            student.name,
-                            style: pw.TextStyle(
-                              fontSize: 10.5,
-                              fontWeight: pw.FontWeight.bold,
-                              color: darkColor,
-                            ),
-                          ),
-                          pw.SizedBox(height: 1),
-                          pw.Text('Class: ${student.gradeLevel} ${student.section != null ? "- Section ${student.section}" : ""}', style: const pw.TextStyle(fontSize: 8)),
-                          if (student.rollNumber != null && student.rollNumber!.isNotEmpty)
-                            pw.Text('Roll No: ${student.rollNumber}', style: const pw.TextStyle(fontSize: 7.5, color: PdfColors.grey700)),
-                          if (student.admissionNumber != null && student.admissionNumber!.isNotEmpty)
-                            pw.Text('Admission No: ${student.admissionNumber}', style: const pw.TextStyle(fontSize: 7.5, color: PdfColors.grey700)),
-                          if (student.guardianPhone != null && student.guardianPhone!.isNotEmpty)
-                            pw.Text('Guardian Phone: ${student.guardianPhone}', style: const pw.TextStyle(fontSize: 7.5)),
-                        ],
-                      ),
-                    ),
-                  ),
-
-                  pw.SizedBox(width: 8),
-
-                  // Right: Receipt Meta
-                  pw.Expanded(
-                    child: pw.Container(
-                      padding: const pw.EdgeInsets.all(7),
-                      decoration: pw.BoxDecoration(
-                        color: lightGrey,
-                        borderRadius: const pw.BorderRadius.all(pw.Radius.circular(4)),
-                        border: pw.Border.all(color: PdfColors.grey300, width: 0.5),
-                      ),
-                      child: pw.Column(
-                        crossAxisAlignment: pw.CrossAxisAlignment.start,
-                        children: [
-                          pw.Text(
-                            'TRANSACTION DETAILS',
-                            style: pw.TextStyle(
-                              fontSize: 7.5,
-                              fontWeight: pw.FontWeight.bold,
-                              color: greyColor,
-                            ),
-                          ),
-                          pw.Divider(thickness: 0.5, color: PdfColors.grey300),
-                          pw.SizedBox(height: 2),
-                          pw.Text(
-                            'Receipt #: $formattedReceiptNumber',
-                            style: pw.TextStyle(fontSize: 8.5, fontWeight: pw.FontWeight.bold, color: darkColor),
-                          ),
-                          pw.SizedBox(height: 1),
-                          pw.Text('Date & Time: ${dateFormatter.format(DateTime.now())}', style: const pw.TextStyle(fontSize: 7.5)),
-                          pw.Text('Payment Mode: ${paymentMethod.displayName}', style: pw.TextStyle(fontSize: 7.5, fontWeight: pw.FontWeight.bold)),
-                          if (referenceNumber != null && referenceNumber.isNotEmpty)
-                            pw.Text('Ref / Txn No: $referenceNumber', style: const pw.TextStyle(fontSize: 7.5)),
-                          pw.Text('Status: FULLY SETTLED', style: pw.TextStyle(fontSize: 7.5, fontWeight: pw.FontWeight.bold, color: PdfColors.green800)),
-                        ],
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-
-              pw.SizedBox(height: 8),
-
-              // ── Payment Details Table ──
-              pw.Text(
-                'ITEMIZED FEE BREAKDOWN',
-                style: pw.TextStyle(fontSize: 8.5, fontWeight: pw.FontWeight.bold, color: darkColor),
-              ),
-              pw.SizedBox(height: 4),
-
-              pw.Table(
-                border: pw.TableBorder.all(color: PdfColors.grey300, width: 0.5),
-                columnWidths: {
-                  0: const pw.FlexColumnWidth(0.8),
-                  1: const pw.FlexColumnWidth(3.8),
-                  2: const pw.FlexColumnWidth(2.8),
-                  3: const pw.FlexColumnWidth(2.2),
-                },
-                children: [
-                  // Table Header
-                  pw.TableRow(
-                    decoration: pw.BoxDecoration(color: primaryColor),
-                    children: [
-                      pw.Padding(
-                        padding: const pw.EdgeInsets.symmetric(horizontal: 4, vertical: 3.5),
-                        child: pw.Text('#', style: pw.TextStyle(color: PdfColors.white, fontWeight: pw.FontWeight.bold, fontSize: 7.5), textAlign: pw.TextAlign.center),
-                      ),
-                      pw.Padding(
-                        padding: const pw.EdgeInsets.symmetric(horizontal: 4, vertical: 3.5),
-                        child: pw.Text('Fee Category / Head', style: pw.TextStyle(color: PdfColors.white, fontWeight: pw.FontWeight.bold, fontSize: 7.5)),
-                      ),
-                      pw.Padding(
-                        padding: const pw.EdgeInsets.symmetric(horizontal: 4, vertical: 3.5),
-                        child: pw.Text('Month / Schedule', style: pw.TextStyle(color: PdfColors.white, fontWeight: pw.FontWeight.bold, fontSize: 7.5)),
-                      ),
-                      pw.Padding(
-                        padding: const pw.EdgeInsets.symmetric(horizontal: 4, vertical: 3.5),
-                        child: pw.Text('Amount Paid', style: pw.TextStyle(color: PdfColors.white, fontWeight: pw.FontWeight.bold, fontSize: 7.5), textAlign: pw.TextAlign.right),
-                      ),
-                    ],
-                  ),
-                  // Table Body Rows
-                  ...paidLedgers.asMap().entries.map((entry) {
-                    final idx = entry.key + 1;
-                    final l = entry.value;
-                    final headName = l.feeHeadName ?? l.feeHeadId;
-                    final month = l.monthLabel ?? 'One-Time Fee';
-                    final isEven = idx % 2 == 0;
-
-                    return pw.TableRow(
-                      decoration: isEven ? pw.BoxDecoration(color: lightGrey) : null,
-                      children: [
-                        pw.Padding(
-                          padding: const pw.EdgeInsets.symmetric(horizontal: 4, vertical: 3.5),
-                          child: pw.Text('$idx', style: const pw.TextStyle(fontSize: 7.5), textAlign: pw.TextAlign.center),
-                        ),
-                        pw.Padding(
-                          padding: const pw.EdgeInsets.symmetric(horizontal: 4, vertical: 3.5),
-                          child: pw.Text(headName, style: pw.TextStyle(fontSize: 7.5, fontWeight: pw.FontWeight.bold)),
-                        ),
-                        pw.Padding(
-                          padding: const pw.EdgeInsets.symmetric(horizontal: 4, vertical: 3.5),
-                          child: pw.Text(month, style: const pw.TextStyle(fontSize: 7.5)),
-                        ),
-                        pw.Padding(
-                          padding: const pw.EdgeInsets.symmetric(horizontal: 4, vertical: 3.5),
-                          child: pw.Text(currencyFormatter.format(l.amountDue > 0 ? l.amountDue : l.amountPaid), style: pw.TextStyle(fontSize: 7.5, fontWeight: pw.FontWeight.bold), textAlign: pw.TextAlign.right),
-                        ),
-                      ],
-                    );
-                  }),
-                ],
-              ),
-
-              pw.SizedBox(height: 6),
-
-              // ── Summary Table ──
-              pw.Row(
-                mainAxisAlignment: pw.MainAxisAlignment.end,
-                children: [
-                  pw.Container(
-                    width: 190,
-                    padding: const pw.EdgeInsets.all(7),
-                    decoration: pw.BoxDecoration(
-                      color: lightGrey,
-                      borderRadius: const pw.BorderRadius.all(pw.Radius.circular(4)),
-                      border: pw.Border.all(color: PdfColors.grey300, width: 0.5),
-                    ),
-                    child: pw.Column(
-                      children: [
-                        pw.Row(
-                          mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-                          children: [
-                            pw.Text('Total Items Paid:', style: const pw.TextStyle(fontSize: 7.5)),
-                            pw.Text('${paidLedgers.length}', style: pw.TextStyle(fontSize: 7.5, fontWeight: pw.FontWeight.bold)),
-                          ],
-                        ),
-                        pw.SizedBox(height: 2),
-                        pw.Row(
-                          mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-                          children: [
-                            pw.Text('Grand Total Paid:', style: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold)),
-                            pw.Text(currencyFormatter.format(totalAmountPaid), style: pw.TextStyle(fontSize: 8.5, fontWeight: pw.FontWeight.bold, color: primaryColor)),
-                          ],
-                        ),
-                        pw.Divider(thickness: 0.5),
-                        pw.Row(
-                          mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-                          children: [
-                            pw.Text('Remaining Balance:', style: pw.TextStyle(fontSize: 7.5, fontWeight: pw.FontWeight.bold)),
-                            pw.Text(
-                              currencyFormatter.format(student.currentBalance - totalAmountPaid),
-                              style: pw.TextStyle(
-                                fontSize: 7.5,
-                                fontWeight: pw.FontWeight.bold,
-                                color: (student.currentBalance - totalAmountPaid) > 0 ? PdfColors.red800 : PdfColors.green800,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-
-              pw.Spacer(),
-
-              // ── Footer & Signatures ──
-              pw.Row(
-                mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-                crossAxisAlignment: pw.CrossAxisAlignment.end,
-                children: [
-                  pw.Column(
-                    crossAxisAlignment: pw.CrossAxisAlignment.start,
-                    children: [
-                      pw.Container(
-                        width: 100,
-                        height: 0.5,
-                        color: PdfColors.grey500,
-                      ),
-                      pw.SizedBox(height: 2),
-                      pw.Text('Parent / Guardian Signature', style: pw.TextStyle(fontSize: 7, color: greyColor)),
-                    ],
-                  ),
-                  pw.Column(
-                    crossAxisAlignment: pw.CrossAxisAlignment.end,
-                    children: [
-                      pw.Container(
-                        width: 100,
-                        height: 0.5,
-                        color: PdfColors.grey500,
-                      ),
-                      pw.SizedBox(height: 2),
-                      pw.Text('Authorized Seal / Cashier', style: pw.TextStyle(fontSize: 7, color: greyColor)),
-                    ],
-                  ),
-                ],
-              ),
-
-              pw.SizedBox(height: 6),
-              pw.Center(
-                child: pw.Text(
-                  'Thank you for your payment! This is a valid computer-generated receipt issued by $schoolName.',
-                  style: pw.TextStyle(fontSize: 6.5, color: greyColor, fontStyle: pw.FontStyle.italic),
-                ),
+              _buildReceiptPerforationDivider(),
+              _buildBatchReceiptHalf(
+                copyTitle: 'OFFICE / SCHOOL RECORD COPY',
+                schoolLogo: schoolLogo,
+                schoolName: schoolName,
+                schoolAddress: schoolAddress,
+                schoolContact: schoolContact,
+                academicYear: academicYear,
+                student: student,
+                formattedReceiptNumber: formattedReceiptNumber,
+                dateFormatter: dateFormatter,
+                paymentMethod: paymentMethod,
+                referenceNumber: referenceNumber,
+                paidLedgers: paidLedgers,
+                totalAmountPaid: totalAmountPaid,
+                currencyFormatter: currencyFormatter,
+                primaryColor: primaryColor,
+                darkColor: darkColor,
+                greyColor: greyColor,
+                lightGrey: lightGrey,
               ),
             ],
           );
@@ -766,6 +554,430 @@ class ReportGenerator {
     );
 
     return await pdf.save();
+  }
+
+  static pw.Widget _buildBatchReceiptHalf({
+    required String copyTitle,
+    Uint8List? schoolLogo,
+    required String schoolName,
+    required String schoolAddress,
+    required String schoolContact,
+    String? academicYear,
+    required Student student,
+    required String formattedReceiptNumber,
+    required DateFormat dateFormatter,
+    required PaymentMethod paymentMethod,
+    String? referenceNumber,
+    required List<StudentFeeLedger> paidLedgers,
+    required double totalAmountPaid,
+    required NumberFormat currencyFormatter,
+    required PdfColor primaryColor,
+    required PdfColor darkColor,
+    required PdfColor greyColor,
+    required PdfColor lightGrey,
+  }) {
+    // Show max 4 rows in table to guarantee fitting 2 copies on 1 A4 page
+    final displayLedgers = paidLedgers.length <= 4
+        ? paidLedgers
+        : paidLedgers.sublist(0, 3);
+    final remainingCount = paidLedgers.length - displayLedgers.length;
+    final remainingSum = remainingCount > 0
+        ? paidLedgers.sublist(3).fold<double>(0.0, (sum, l) => sum + (l.amountDue > 0 ? l.amountDue : l.amountPaid))
+        : 0.0;
+
+    return pw.SizedBox(
+      height: 385,
+      child: pw.Column(
+        crossAxisAlignment: pw.CrossAxisAlignment.start,
+        children: [
+          // ── Header Section ──
+          pw.Container(
+            padding: const pw.EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+            decoration: pw.BoxDecoration(
+              color: primaryColor,
+              borderRadius: const pw.BorderRadius.all(pw.Radius.circular(5)),
+            ),
+            child: pw.Row(
+              mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+              crossAxisAlignment: pw.CrossAxisAlignment.center,
+              children: [
+                pw.Row(
+                  crossAxisAlignment: pw.CrossAxisAlignment.center,
+                  children: [
+                    if (schoolLogo != null) ...[
+                      pw.Container(
+                        width: 30,
+                        height: 30,
+                        decoration: const pw.BoxDecoration(
+                          color: PdfColors.white,
+                          borderRadius: pw.BorderRadius.all(pw.Radius.circular(4)),
+                        ),
+                        padding: const pw.EdgeInsets.all(2),
+                        child: pw.Image(
+                          pw.MemoryImage(schoolLogo),
+                          fit: pw.BoxFit.contain,
+                        ),
+                      ),
+                      pw.SizedBox(width: 8),
+                    ],
+                    pw.Column(
+                      crossAxisAlignment: pw.CrossAxisAlignment.start,
+                      children: [
+                        pw.Text(
+                          schoolName,
+                          style: pw.TextStyle(
+                            color: PdfColors.white,
+                            fontSize: 11,
+                            fontWeight: pw.FontWeight.bold,
+                          ),
+                        ),
+                        pw.SizedBox(height: 1),
+                        pw.Text(
+                          schoolAddress,
+                          style: const pw.TextStyle(
+                            color: PdfColors.white,
+                            fontSize: 6.5,
+                          ),
+                        ),
+                        pw.Text(
+                          schoolContact,
+                          style: const pw.TextStyle(
+                            color: PdfColors.white,
+                            fontSize: 6.5,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+                pw.Container(
+                  padding: const pw.EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: const pw.BoxDecoration(
+                    color: PdfColors.white,
+                    borderRadius: pw.BorderRadius.all(pw.Radius.circular(4)),
+                  ),
+                  child: pw.Column(
+                    crossAxisAlignment: pw.CrossAxisAlignment.end,
+                    children: [
+                      pw.Text(
+                        copyTitle,
+                        style: pw.TextStyle(
+                          color: primaryColor,
+                          fontSize: 8,
+                          fontWeight: pw.FontWeight.bold,
+                        ),
+                      ),
+                      pw.Text(
+                        academicYear != null ? 'FEE RECEIPT - $academicYear' : 'FEE RECEIPT',
+                        style: pw.TextStyle(
+                          color: darkColor,
+                          fontSize: 6.5,
+                          fontWeight: pw.FontWeight.bold,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+
+          pw.SizedBox(height: 5),
+
+          // ── Receipt & Student Meta Data Grid ──
+          pw.Row(
+            crossAxisAlignment: pw.CrossAxisAlignment.start,
+            children: [
+              // Left: Student Info
+              pw.Expanded(
+                child: pw.Container(
+                  padding: const pw.EdgeInsets.all(5),
+                  decoration: pw.BoxDecoration(
+                    color: lightGrey,
+                    borderRadius: const pw.BorderRadius.all(pw.Radius.circular(4)),
+                    border: pw.Border.all(color: PdfColors.grey300, width: 0.5),
+                  ),
+                  child: pw.Column(
+                    crossAxisAlignment: pw.CrossAxisAlignment.start,
+                    children: [
+                      pw.Text(
+                        'STUDENT DETAILS',
+                        style: pw.TextStyle(
+                          fontSize: 6.5,
+                          fontWeight: pw.FontWeight.bold,
+                          color: greyColor,
+                        ),
+                      ),
+                      pw.Divider(thickness: 0.5, color: PdfColors.grey300),
+                      pw.SizedBox(height: 1),
+                      pw.Text(
+                        student.name,
+                        style: pw.TextStyle(
+                          fontSize: 9,
+                          fontWeight: pw.FontWeight.bold,
+                          color: darkColor,
+                        ),
+                      ),
+                      pw.SizedBox(height: 1),
+                      pw.Text(
+                        'Class: ${student.gradeLevel} ${student.section != null ? "- Sec ${student.section}" : ""}',
+                        style: const pw.TextStyle(fontSize: 7),
+                      ),
+                      pw.Text(
+                        'Adm No: ${student.admissionNumber ?? "N/A"}   Roll No: ${student.rollNumber ?? "N/A"}',
+                        style: const pw.TextStyle(fontSize: 6.5, color: PdfColors.grey700),
+                      ),
+                      if (student.guardianPhone != null && student.guardianPhone!.isNotEmpty)
+                        pw.Text(
+                          'Phone: ${student.guardianPhone}',
+                          style: const pw.TextStyle(fontSize: 6.5),
+                        ),
+                    ],
+                  ),
+                ),
+              ),
+
+              pw.SizedBox(width: 6),
+
+              // Right: Receipt Meta
+              pw.Expanded(
+                child: pw.Container(
+                  padding: const pw.EdgeInsets.all(5),
+                  decoration: pw.BoxDecoration(
+                    color: lightGrey,
+                    borderRadius: const pw.BorderRadius.all(pw.Radius.circular(4)),
+                    border: pw.Border.all(color: PdfColors.grey300, width: 0.5),
+                  ),
+                  child: pw.Column(
+                    crossAxisAlignment: pw.CrossAxisAlignment.start,
+                    children: [
+                      pw.Text(
+                        'TRANSACTION DETAILS',
+                        style: pw.TextStyle(
+                          fontSize: 6.5,
+                          fontWeight: pw.FontWeight.bold,
+                          color: greyColor,
+                        ),
+                      ),
+                      pw.Divider(thickness: 0.5, color: PdfColors.grey300),
+                      pw.SizedBox(height: 1),
+                      pw.Text(
+                        'Receipt #: $formattedReceiptNumber',
+                        style: pw.TextStyle(fontSize: 7.5, fontWeight: pw.FontWeight.bold, color: darkColor),
+                      ),
+                      pw.SizedBox(height: 1),
+                      pw.Text('Date: ${dateFormatter.format(DateTime.now())}', style: const pw.TextStyle(fontSize: 6.5)),
+                      pw.Text(
+                        'Payment Mode: ${paymentMethod.displayName}',
+                        style: pw.TextStyle(fontSize: 6.5, fontWeight: pw.FontWeight.bold),
+                      ),
+                      if (referenceNumber != null && referenceNumber.isNotEmpty)
+                        pw.Text('Ref / Txn No: $referenceNumber', style: const pw.TextStyle(fontSize: 6.5)),
+                      pw.Text(
+                        'Status: FULLY SETTLED',
+                        style: pw.TextStyle(fontSize: 6.5, fontWeight: pw.FontWeight.bold, color: PdfColors.green800),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+
+          pw.SizedBox(height: 5),
+
+          // ── Payment Details Table ──
+          pw.Table(
+            border: pw.TableBorder.all(color: PdfColors.grey300, width: 0.5),
+            columnWidths: {
+              0: const pw.FlexColumnWidth(0.7),
+              1: const pw.FlexColumnWidth(3.8),
+              2: const pw.FlexColumnWidth(2.8),
+              3: const pw.FlexColumnWidth(2.2),
+            },
+            children: [
+              // Table Header
+              pw.TableRow(
+                decoration: pw.BoxDecoration(color: primaryColor),
+                children: [
+                  pw.Padding(
+                    padding: const pw.EdgeInsets.symmetric(horizontal: 3, vertical: 2.5),
+                    child: pw.Text('#', style: pw.TextStyle(color: PdfColors.white, fontWeight: pw.FontWeight.bold, fontSize: 6.8), textAlign: pw.TextAlign.center),
+                  ),
+                  pw.Padding(
+                    padding: const pw.EdgeInsets.symmetric(horizontal: 3, vertical: 2.5),
+                    child: pw.Text('Fee Head / Category', style: pw.TextStyle(color: PdfColors.white, fontWeight: pw.FontWeight.bold, fontSize: 6.8)),
+                  ),
+                  pw.Padding(
+                    padding: const pw.EdgeInsets.symmetric(horizontal: 3, vertical: 2.5),
+                    child: pw.Text('Month / Schedule', style: pw.TextStyle(color: PdfColors.white, fontWeight: pw.FontWeight.bold, fontSize: 6.8)),
+                  ),
+                  pw.Padding(
+                    padding: const pw.EdgeInsets.symmetric(horizontal: 3, vertical: 2.5),
+                    child: pw.Text('Amount Paid', style: pw.TextStyle(color: PdfColors.white, fontWeight: pw.FontWeight.bold, fontSize: 6.8), textAlign: pw.TextAlign.right),
+                  ),
+                ],
+              ),
+              // Table Body Rows
+              ...displayLedgers.asMap().entries.map((entry) {
+                final idx = entry.key + 1;
+                final l = entry.value;
+                final headName = l.feeHeadName ?? l.feeHeadId;
+                final month = l.monthLabel ?? 'One-Time Fee';
+                final isEven = idx % 2 == 0;
+
+                return pw.TableRow(
+                  decoration: isEven ? pw.BoxDecoration(color: lightGrey) : null,
+                  children: [
+                    pw.Padding(
+                      padding: const pw.EdgeInsets.symmetric(horizontal: 3, vertical: 2),
+                      child: pw.Text('$idx', style: const pw.TextStyle(fontSize: 6.5), textAlign: pw.TextAlign.center),
+                    ),
+                    pw.Padding(
+                      padding: const pw.EdgeInsets.symmetric(horizontal: 3, vertical: 2),
+                      child: pw.Text(headName, style: pw.TextStyle(fontSize: 6.5, fontWeight: pw.FontWeight.bold)),
+                    ),
+                    pw.Padding(
+                      padding: const pw.EdgeInsets.symmetric(horizontal: 3, vertical: 2),
+                      child: pw.Text(month, style: const pw.TextStyle(fontSize: 6.5)),
+                    ),
+                    pw.Padding(
+                      padding: const pw.EdgeInsets.symmetric(horizontal: 3, vertical: 2),
+                      child: pw.Text(
+                        currencyFormatter.format(l.amountDue > 0 ? l.amountDue : l.amountPaid),
+                        style: pw.TextStyle(fontSize: 6.5, fontWeight: pw.FontWeight.bold),
+                        textAlign: pw.TextAlign.right,
+                      ),
+                    ),
+                  ],
+                );
+              }),
+              if (remainingCount > 0) ...[
+                pw.TableRow(
+                  decoration: pw.BoxDecoration(color: lightGrey),
+                  children: [
+                    pw.Padding(
+                      padding: const pw.EdgeInsets.symmetric(horizontal: 3, vertical: 2),
+                      child: pw.Text('+', style: const pw.TextStyle(fontSize: 6.5), textAlign: pw.TextAlign.center),
+                    ),
+                    pw.Padding(
+                      padding: const pw.EdgeInsets.symmetric(horizontal: 3, vertical: 2),
+                      child: pw.Text('Other ($remainingCount fees/months)', style: pw.TextStyle(fontSize: 6.5, fontWeight: pw.FontWeight.bold)),
+                    ),
+                    pw.Padding(
+                      padding: const pw.EdgeInsets.symmetric(horizontal: 3, vertical: 2),
+                      child: pw.Text('Multiple schedules', style: const pw.TextStyle(fontSize: 6.5)),
+                    ),
+                    pw.Padding(
+                      padding: const pw.EdgeInsets.symmetric(horizontal: 3, vertical: 2),
+                      child: pw.Text(
+                        currencyFormatter.format(remainingSum),
+                        style: pw.TextStyle(fontSize: 6.5, fontWeight: pw.FontWeight.bold),
+                        textAlign: pw.TextAlign.right,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ],
+          ),
+
+          pw.SizedBox(height: 4),
+
+          // ── Summary Table ──
+          pw.Row(
+            mainAxisAlignment: pw.MainAxisAlignment.end,
+            children: [
+              pw.Container(
+                width: 175,
+                padding: const pw.EdgeInsets.all(5),
+                decoration: pw.BoxDecoration(
+                  color: lightGrey,
+                  borderRadius: const pw.BorderRadius.all(pw.Radius.circular(4)),
+                  border: pw.Border.all(color: PdfColors.grey300, width: 0.5),
+                ),
+                child: pw.Column(
+                  children: [
+                    pw.Row(
+                      mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                      children: [
+                        pw.Text('Total Items Paid:', style: const pw.TextStyle(fontSize: 6.5)),
+                        pw.Text('${paidLedgers.length}', style: pw.TextStyle(fontSize: 6.5, fontWeight: pw.FontWeight.bold)),
+                      ],
+                    ),
+                    pw.SizedBox(height: 1),
+                    pw.Row(
+                      mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                      children: [
+                        pw.Text('Grand Total Paid:', style: pw.TextStyle(fontSize: 7.2, fontWeight: pw.FontWeight.bold)),
+                        pw.Text(currencyFormatter.format(totalAmountPaid), style: pw.TextStyle(fontSize: 7.5, fontWeight: pw.FontWeight.bold, color: primaryColor)),
+                      ],
+                    ),
+                    pw.Divider(thickness: 0.5),
+                    pw.Row(
+                      mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                      children: [
+                        pw.Text('Remaining Balance:', style: pw.TextStyle(fontSize: 6.5, fontWeight: pw.FontWeight.bold)),
+                        pw.Text(
+                          currencyFormatter.format(student.currentBalance - totalAmountPaid),
+                          style: pw.TextStyle(
+                            fontSize: 6.5,
+                            fontWeight: pw.FontWeight.bold,
+                            color: (student.currentBalance - totalAmountPaid) > 0 ? PdfColors.red800 : PdfColors.green800,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+
+          pw.Spacer(),
+
+          // ── Footer & Signatures ──
+          pw.Row(
+            mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+            crossAxisAlignment: pw.CrossAxisAlignment.end,
+            children: [
+              pw.Column(
+                crossAxisAlignment: pw.CrossAxisAlignment.start,
+                children: [
+                  pw.Container(
+                    width: 90,
+                    height: 0.5,
+                    color: PdfColors.grey500,
+                  ),
+                  pw.SizedBox(height: 2),
+                  pw.Text('Parent / Guardian Signature', style: pw.TextStyle(fontSize: 6, color: greyColor)),
+                ],
+              ),
+              pw.Column(
+                crossAxisAlignment: pw.CrossAxisAlignment.end,
+                children: [
+                  pw.Container(
+                    width: 90,
+                    height: 0.5,
+                    color: PdfColors.grey500,
+                  ),
+                  pw.SizedBox(height: 2),
+                  pw.Text('Authorized Seal / Cashier', style: pw.TextStyle(fontSize: 6, color: greyColor)),
+                ],
+              ),
+            ],
+          ),
+
+          pw.SizedBox(height: 3),
+          pw.Center(
+            child: pw.Text(
+              'Thank you for your payment! This is a valid computer-generated receipt issued by $schoolName.',
+              style: pw.TextStyle(fontSize: 5.5, color: greyColor, fontStyle: pw.FontStyle.italic),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   /// Generate an A4-sized PDF receipt and save to Documents directory.

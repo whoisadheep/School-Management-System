@@ -1,6 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:school_management_system/models/models.dart';
 import 'package:school_management_system/core/auth/permission_helper.dart';
+import 'package:school_management_system/services/report_generator.dart';
 
 void main() {
   group('Comprehensive System & Model Tests', () {
@@ -265,6 +266,101 @@ void main() {
       expect(modified.customKind, 'percentage');
       expect(modified.customValue, 25.0);
       expect(modified.flatMode, 'evenly');
+    });
+
+    test('buildBatchPaymentReceiptPdfBytes generates 2-in-1 A4 receipt PDF bytes', () async {
+      final now = DateTime.now();
+      final student = Student(
+        id: 'std-batch-test',
+        name: 'Aarav Sharma',
+        gradeLevel: 'Grade 5',
+        section: 'B',
+        admissionNumber: 'ADM-1001',
+        rollNumber: '12',
+        guardianPhone: '9876543210',
+        currentBalance: 0.0,
+        createdAt: now,
+        updatedAt: now,
+      );
+
+      final List<StudentFeeLedger> ledgers = [
+        StudentFeeLedger.create(
+          studentId: student.id,
+          feeHeadId: 'fh-tuition',
+          academicYear: '2026-2027',
+          amountDue: 2500.0,
+          dueDate: DateTime(2026, 4, 10),
+          feeHeadName: 'Tuition Fee',
+          monthLabel: 'April 2026',
+        ),
+        StudentFeeLedger.create(
+          studentId: student.id,
+          feeHeadId: 'fh-transport',
+          academicYear: '2026-2027',
+          amountDue: 1200.0,
+          dueDate: DateTime(2026, 4, 10),
+          feeHeadName: 'Transport Fee',
+          monthLabel: 'April 2026',
+        ),
+      ];
+
+      final pdfBytes = await ReportGenerator.buildBatchPaymentReceiptPdfBytes(
+        paidLedgers: ledgers,
+        student: student,
+        totalAmountPaid: 3700.0,
+        paymentMethod: PaymentMethod.online,
+        receiptNumber: 'RCT-2026-0001',
+        academicYear: '2026-2027',
+        schoolName: 'Greenwood High',
+      );
+
+      expect(pdfBytes, isNotNull);
+      expect(pdfBytes.isNotEmpty, isTrue);
+      expect(pdfBytes.length, greaterThan(1000));
+    });
+
+    test('buildPaymentReceiptPdfBytes generates 2-in-1 A4 single-invoice receipt PDF bytes', () async {
+      final now = DateTime.now();
+      final student = Student(
+        id: 'std-single-test',
+        name: 'Diya Patel',
+        gradeLevel: 'Grade 8',
+        admissionNumber: 'ADM-2002',
+        currentBalance: 500.0,
+        createdAt: now,
+        updatedAt: now,
+      );
+
+      final invoice = Invoice.create(
+        studentId: student.id,
+        academicYearId: '2026-2027',
+        totalAmount: 3000.0,
+        discountAmount: 300.0,
+        dueDate: DateTime(2026, 9, 30),
+      );
+
+      final transaction = Transaction(
+        id: 'txn-single-test',
+        invoiceId: invoice.id,
+        amountPaid: 2700.0,
+        paymentMethod: PaymentMethod.cash,
+        timestamp: now,
+        createdAt: now,
+        updatedAt: now,
+      );
+
+      final pdfBytes = await ReportGenerator.buildPaymentReceiptPdfBytes(
+        transaction: transaction,
+        invoice: invoice,
+        student: student,
+        receiptNumber: 'RCT-2026-0002',
+        feeHeadName: 'Quarterly Composite Fee',
+        schoolName: 'Greenwood High',
+      );
+
+      expect(pdfBytes, isNotNull);
+      expect(pdfBytes.isNotEmpty, isTrue);
+      expect(pdfBytes.length, greaterThan(1000));
     });
   });
 }
