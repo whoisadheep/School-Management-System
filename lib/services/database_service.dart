@@ -2957,6 +2957,234 @@ class DatabaseService {
     return nextSeq.toString().padLeft(4, '0');
   }
 
+  /// Retrieves chronological payment and receipt history for a student.
+  /// Batched fee payments are grouped under the same receipt/reference number.
+  Future<List<StudentPaymentRecord>> getStudentPaymentHistory(
+    String studentId, {
+    String? academicYear,
+  }) async {
+    final db = await _db;
+
+    String query = '''
+      SELECT 
+        t.id AS transaction_id,
+        t.invoice_id,
+        t.amount_paid,
+        t.payment_method,
+        t.reference_number,
+        t.timestamp,
+        i.id AS inv_id,
+        i.notes AS invoice_notes,
+        i.academic_year_id,
+        i.ledger_id,
+        sfl.id AS sfl_id,
+        sfl.fee_head_id,
+        sfl.academic_year AS sfl_academic_year,
+        sfl.amount_due,
+        sfl.amount_paid AS sfl_amount_paid,
+        sfl.due_date,
+        sfl.status AS sfl_status,
+        sfl.month_label,
+        sfl.created_at AS sfl_created_at,
+        sfl.updated_at AS sfl_updated_at,
+        fh.name AS fee_head_name,
+        fh.frequency
+      FROM transactions t
+      JOIN invoices i ON t.invoice_id = i.id
+      LEFT JOIN student_fee_ledger sfl ON i.ledger_id = sfl.id
+      LEFT JOIN fee_heads fh ON (sfl.fee_head_id = fh.id OR i.fee_head_id = fh.id)
+      WHERE i.student_id = ?
+    ''';
+
+    final args = <Object?>[studentId];
+
+    if (academicYear != null && academicYear.isNotEmpty) {
+      final cleanAy = academicYear.startsWith('ay-') ? academicYear.substring(3) : academicYear;
+      final ayPrefix = academicYear.startsWith('ay-') ? academicYear : 'ay-$academicYear';
+      final resolvedAyId = await resolveAcademicYearId(db, academicYear);
+      final Set<String> candidates = {academicYear, cleanAy, ayPrefix, resolvedAyId};
+      final placeholders = List.filled(candidates.length, '?').join(', ');
+      query += ' AND (i.academic_year_id IN ($placeholders) OR sfl.academic_year IN ($placeholders))';
+      args.addAll(candidates);
+      args.addAll(candidates);
+    }
+
+    query += ' ORDER BY t.timestamp DESC, t.id DESC';
+
+    final rows = await db.rawQuery(query, args);
+    if (rows.isEmpty) return [];
+
+    // Group related rows by reference_number (or timestamp if reference_number is empty)
+    final Map<String, List<Map<String, dynamic>>> grouped = {};
+    for (final r in rows) {
+      final refNum = (r['reference_number'] as String?)?.trim();
+      final ts = (r['timestamp'] as String?) ?? '';
+      final groupKey = (refNum != null && refNum.isNotEmpty) ? refNum : 'TS_$ts';
+      grouped.putIfAbsent(groupKey, () => []).add(r);
+    }
+
+    final List<StudentPaymentRecord> records = [];
+    for (final entry in grouped.entries) {
+      final groupRows = entry.value;
+      final first = groupRows.first;
+
+      final txId = first['transaction_id'] as String;
+      final refNumber = (first['reference_number'] as String?)?.trim();
+      final finalReceiptNum = (refNumber != null && refNumber.isNotEmpty)
+          ? refNumber
+          : 'RCT-${txId.substring(0, txId.length >= 8 ? 8 : txId.length).toUpperCase()}';
+
+      final ts = DateTime.tryParse(first['timestamp'] as String) ?? DateTime.now();
+      final method = PaymentMethod.fromString(first['payment_method'] as String? ?? 'cash');
+      final ay = (first['sfl_academic_year'] as String?) ??
+                 (first['academic_year_id'] as String?) ??
+                 academicYear ??
+                 '2026-2027';
+
+      double totalPaid = 0.0;
+      final List<StudentFeeLedger> ledgers = [];
+      final Set<String> invoiceIds = {};
+      final Set<String> notesSet = {};
+
+      for (final r in groupRows) {
+        totalPaid += (r['amount_paid'] as num?)?.toDouble() ?? 0.0;
+        final invId = r['inv_id'] as String?;
+        if (invId != null) invoiceIds.add(invId);
+
+        final note = r['invoice_notes'] as String?;
+        if (note != null && note.isNotEmpty) notesSet.add(note);
+
+        if (r['sfl_id'] != null) {
+          ledgers.add(StudentFeeLedger(
+            id: r['sfl_id'] as String,
+            studentId: studentId,
+            feeHeadId: (r['fee_head_id'] as String?) ?? '',
+            academicYear: (r['sfl_academic_year'] as String?) ?? ay,
+            amountDue: (r['amount_due'] as num?)?.toDouble() ?? 0.0,
+            amountPaid: (r['sfl_amount_paid'] as num?)?.toDouble() ?? 0.0,
+            dueDate: r['due_date'] != null
+                ? DateTime.tryParse(r['due_date'] as String) ?? ts
+                : ts,
+            status: LedgerStatus.fromString((r['sfl_status'] as String?) ?? 'paid'),
+            feeHeadName: r['fee_head_name'] as String?,
+            frequency: r['frequency'] as String?,
+            monthLabel: r['month_label'] as String?,
+            createdAt: r['sfl_created_at'] != null
+                ? DateTime.tryParse(r['sfl_created_at'] as String) ?? ts
+                : ts,
+            updatedAt: r['sfl_updated_at'] != null
+                ? DateTime.tryParse(r['sfl_updated_at'] as String) ?? ts
+                : ts,
+          ));
+        }
+      }
+
+      records.add(StudentPaymentRecord(
+        transactionId: txId,
+        receiptNumber: finalReceiptNum,
+        timestamp: ts,
+        paymentMethod: method,
+        totalAmountPaid: totalPaid,
+        academicYear: ay,
+        notes: notesSet.isNotEmpty ? notesSet.join(' | ') : null,
+        paidLedgers: ledgers,
+        invoiceIds: invoiceIds.toList(),
+      ));
+    }
+
+    return records;
+  }
+
+  /// Retrieves receipt details for a specific month for a student.
+  /// Combines all paid fee heads for that month (e.g. Tuition, Transport)
+  /// and any matching transaction records.
+  Future<Map<String, dynamic>> getMonthlyReceiptData(
+    String studentId,
+    String academicYear,
+    String monthName,
+  ) async {
+    final student = await getStudentById(studentId);
+    if (student == null) throw ArgumentError('Student not found: $studentId');
+
+    // 1. Fetch all ledger rows for this student in this academic year
+    final allLedgers = await getStudentFeeLedger(studentId, academicYear);
+    final monthLedgers = allLedgers.where((l) {
+      final label = l.monthLabel?.toLowerCase() ?? '';
+      return label.contains(monthName.toLowerCase().substring(0, 3));
+    }).toList();
+
+    // 2. Fetch all payment records for this student
+    final allPayments = await getStudentPaymentHistory(studentId, academicYear: academicYear);
+
+    // 3. Filter payments that covered any ledger in monthLedgers
+    final monthLedgerIds = monthLedgers.map((l) => l.id).toSet();
+    final matchingPayments = allPayments.where((p) {
+      return p.paidLedgers.any((l) => monthLedgerIds.contains(l.id)) ||
+             (p.notes != null && p.notes!.toLowerCase().contains(monthName.toLowerCase().substring(0, 3)));
+    }).toList();
+
+    double totalMonthPaid = 0.0;
+    double totalMonthDue = 0.0;
+    for (final l in monthLedgers) {
+      totalMonthPaid += l.amountPaid;
+      totalMonthDue += l.amountDue;
+    }
+
+    final paidLedgers = monthLedgers.where((l) => l.amountPaid > 0).toList();
+
+    return {
+      'student': student,
+      'month_name': monthName,
+      'academic_year': academicYear,
+      'month_ledgers': monthLedgers,
+      'paid_ledgers': paidLedgers,
+      'matching_payments': matchingPayments,
+      'total_month_paid': totalMonthPaid,
+      'total_month_due': totalMonthDue,
+    };
+  }
+
+  /// Retrieves a payment record linked to a specific ledger entry
+  Future<StudentPaymentRecord?> getPaymentRecordByLedgerId(String ledgerId) async {
+    final db = await _db;
+    final invRows = await db.query(
+      'invoices',
+      where: 'ledger_id = ?',
+      whereArgs: [ledgerId],
+      limit: 1,
+    );
+    if (invRows.isEmpty) return null;
+    final invoiceId = invRows.first['id'] as String;
+    final studentId = invRows.first['student_id'] as String;
+    final history = await getStudentPaymentHistory(studentId);
+    for (final record in history) {
+      if (record.invoiceIds.contains(invoiceId) || record.paidLedgers.any((l) => l.id == ledgerId)) {
+        return record;
+      }
+    }
+    return null;
+  }
+
+  /// Retrieves a payment record by invoice ID
+  Future<StudentPaymentRecord?> getPaymentRecordByInvoiceId(String invoiceId) async {
+    final db = await _db;
+    final invRows = await db.query(
+      'invoices',
+      where: 'id = ?',
+      whereArgs: [invoiceId],
+      limit: 1,
+    );
+    if (invRows.isEmpty) return null;
+    final studentId = invRows.first['student_id'] as String;
+    final history = await getStudentPaymentHistory(studentId);
+    for (final record in history) {
+      if (record.invoiceIds.contains(invoiceId)) {
+        return record;
+      }
+    }
+    return null;
+  }
+
   // ============================================================================
   // TRANSPORT MANAGEMENT OPERATIONS (PHASE 2)
   // ============================================================================

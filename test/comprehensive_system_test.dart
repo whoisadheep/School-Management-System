@@ -382,5 +382,55 @@ void main() {
       expect(pdfBytes.isNotEmpty, isTrue);
       expect(pdfBytes.length, greaterThan(1000));
     });
+
+    test('StudentPaymentRecord model creation and fee heads summary calculation', () {
+      final now = DateTime.now();
+      final ledger1 = StudentFeeLedger(
+        id: 'led-1',
+        studentId: 'std-100',
+        feeHeadId: 'fh-tuition',
+        academicYear: '2026-2027',
+        amountDue: 2000.0,
+        amountPaid: 2000.0,
+        dueDate: now,
+        status: LedgerStatus.paid,
+        feeHeadName: 'Tuition Fee (April)',
+        createdAt: now,
+        updatedAt: now,
+      );
+      final ledger2 = StudentFeeLedger(
+        id: 'led-2',
+        studentId: 'std-100',
+        feeHeadId: 'fh-transport',
+        academicYear: '2026-2027',
+        amountDue: 800.0,
+        amountPaid: 800.0,
+        dueDate: now,
+        status: LedgerStatus.paid,
+        feeHeadName: 'Transport Fee (April)',
+        createdAt: now,
+        updatedAt: now,
+      );
+
+      final record = StudentPaymentRecord(
+        transactionId: 'txn-100',
+        receiptNumber: 'RCT-2026-0099',
+        timestamp: now,
+        paymentMethod: PaymentMethod.online,
+        totalAmountPaid: 2800.0,
+        academicYear: '2026-2027',
+        notes: 'Online fee payment via QR',
+        paidLedgers: [ledger1, ledger2],
+        invoiceIds: ['inv-1', 'inv-2'],
+      );
+
+      expect(record.transactionId, 'txn-100');
+      expect(record.receiptNumber, 'RCT-2026-0099');
+      expect(record.paymentMethod, PaymentMethod.online);
+      expect(record.totalAmountPaid, 2800.0);
+      expect(record.academicYear, '2026-2027');
+      expect(record.paidLedgers.length, 2);
+      expect(record.feeHeadsSummary, 'Tuition Fee (April), Transport Fee (April)');
+    });
   });
 }

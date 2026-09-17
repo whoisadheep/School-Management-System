@@ -7,6 +7,7 @@ import '../../../models/models.dart';
 import '../../../providers/services_provider.dart';
 import '../../../providers/dashboard_provider.dart';
 import '../../widgets/payment_receipt_dialog.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../../../services/app_logger.dart';
 
 /// Student Fee Ledger View — shows all fee head obligations, due dates,
@@ -38,7 +39,7 @@ class _StudentFeeLedgerViewState extends ConsumerState<StudentFeeLedgerView> wit
   void initState() {
     super.initState();
     _selectedAcademicYear = widget.academicYear;
-    _tabController = TabController(length: 2, vsync: this);
+    _tabController = TabController(length: 3, vsync: this);
   }
 
   @override
@@ -79,6 +80,7 @@ class _StudentFeeLedgerViewState extends ConsumerState<StudentFeeLedgerView> wit
               tabs: const [
                 Tab(text: 'Ledger'),
                 Tab(text: 'Monthly Status'),
+                Tab(text: 'Payment History & Receipts'),
               ],
             ),
           ),
@@ -89,6 +91,7 @@ class _StudentFeeLedgerViewState extends ConsumerState<StudentFeeLedgerView> wit
               children: [
                 _buildLedgerTab(summaryAsync, ledgerAsync),
                 _buildMonthlyStatusTab(),
+                _buildPaymentHistoryTab(),
               ],
             ),
           ),
@@ -258,48 +261,65 @@ class _StudentFeeLedgerViewState extends ConsumerState<StudentFeeLedgerView> wit
                         bgColor = AppTheme.primaryPurple.withValues(alpha: 0.1);
                       }
 
-                      return InkWell(
-                        onTap: (statusStr == 'pending' || statusStr == 'overdue') && ledgers.isNotEmpty
-                            ? () {
-                                setState(() {
-                                  if (isSelected) {
-                                    _selectedMonthsForPayment.remove(month);
-                                  } else {
-                                    _selectedMonthsForPayment.add(month);
-                                  }
-                                });
-                              }
-                            : null,
-                        borderRadius: BorderRadius.circular(12),
-                        child: Container(
-                          decoration: BoxDecoration(
-                            color: bgColor,
-                            borderRadius: BorderRadius.circular(12),
-                            border: Border.all(color: borderColor, width: isSelected ? 2 : 1),
-                          ),
-                          child: Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Text(
-                                month,
-                                style: GoogleFonts.poppins(fontSize: 16, fontWeight: FontWeight.bold, color: textColor),
-                              ),
-                              const SizedBox(height: 4),
-                              Text(
-                                statusStr.toUpperCase(),
-                                style: GoogleFonts.poppins(fontSize: 10, fontWeight: FontWeight.w600, color: textColor),
-                              ),
-                              if (monthDue > 0)
-                                Padding(
-                                  padding: const EdgeInsets.only(top: 4.0),
-                                  child: Text('Due: ${_currencyFormat.format(monthDue)}', style: GoogleFonts.poppins(fontSize: 10, color: AppTheme.error)),
+                      final isClickablePaid = (statusStr == 'paid' || monthCollected > 0) && ledgers.isNotEmpty;
+
+                      return Tooltip(
+                        message: isClickablePaid
+                            ? 'Tap to view breakdown & print receipt for $month'
+                            : ((statusStr == 'pending' || statusStr == 'overdue') ? 'Tap to select $month for payment' : ''),
+                        child: InkWell(
+                          onTap: (statusStr == 'pending' || statusStr == 'overdue') && ledgers.isNotEmpty
+                              ? () {
+                                  setState(() {
+                                    if (isSelected) {
+                                      _selectedMonthsForPayment.remove(month);
+                                    } else {
+                                      _selectedMonthsForPayment.add(month);
+                                    }
+                                  });
+                                }
+                              : isClickablePaid
+                                  ? () => _showPaidMonthReceiptModal(month, ledgers, statusStr)
+                                  : null,
+                          borderRadius: BorderRadius.circular(12),
+                          child: Container(
+                            decoration: BoxDecoration(
+                              color: bgColor,
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(color: borderColor, width: isSelected ? 2 : 1),
+                            ),
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Text(
+                                  month,
+                                  style: GoogleFonts.poppins(fontSize: 16, fontWeight: FontWeight.bold, color: textColor),
                                 ),
-                              if (monthCollected > 0)
-                                Padding(
-                                  padding: const EdgeInsets.only(top: 4.0),
-                                  child: Text('Paid: ${_currencyFormat.format(monthCollected)}', style: GoogleFonts.poppins(fontSize: 10, color: AppTheme.success)),
+                                const SizedBox(height: 4),
+                                Text(
+                                  statusStr.toUpperCase(),
+                                  style: GoogleFonts.poppins(fontSize: 10, fontWeight: FontWeight.w600, color: textColor),
                                 ),
-                            ],
+                                if (monthDue > 0)
+                                  Padding(
+                                    padding: const EdgeInsets.only(top: 4.0),
+                                    child: Text('Due: ${_currencyFormat.format(monthDue)}', style: GoogleFonts.poppins(fontSize: 10, color: AppTheme.error)),
+                                  ),
+                                if (monthCollected > 0)
+                                  Padding(
+                                    padding: const EdgeInsets.only(top: 4.0),
+                                    child: Row(
+                                      mainAxisAlignment: MainAxisAlignment.center,
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Text('Paid: ${_currencyFormat.format(monthCollected)}', style: GoogleFonts.poppins(fontSize: 10, color: AppTheme.success, fontWeight: FontWeight.w500)),
+                                        const SizedBox(width: 4),
+                                        const Icon(Icons.receipt_long_rounded, size: 12, color: AppTheme.success),
+                                      ],
+                                    ),
+                                  ),
+                              ],
+                            ),
                           ),
                         ),
                       );
@@ -646,20 +666,48 @@ class _StudentFeeLedgerViewState extends ConsumerState<StudentFeeLedgerView> wit
           Expanded(
             flex: 2,
             child: isPaid
-                ? Text('✓ Cleared', style: GoogleFonts.poppins(fontSize: 10, color: AppTheme.success, fontWeight: FontWeight.w600))
-                : SizedBox(
-                    height: 28,
-                    child: ElevatedButton(
-                      onPressed: () => _showRowPaymentDialog(context, entry),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: AppTheme.primaryPurple,
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(horizontal: 10),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
-                        textStyle: GoogleFonts.poppins(fontSize: 10, fontWeight: FontWeight.w600),
+                ? Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text('✓ Cleared', style: GoogleFonts.poppins(fontSize: 10, color: AppTheme.success, fontWeight: FontWeight.w600)),
+                      const SizedBox(width: 4),
+                      IconButton(
+                        icon: const Icon(Icons.receipt_rounded, size: 16, color: AppTheme.primaryPurple),
+                        tooltip: 'View / Print Receipt',
+                        padding: EdgeInsets.zero,
+                        constraints: const BoxConstraints(),
+                        onPressed: () => _showReceiptForSingleLedger(entry),
                       ),
-                      child: const Text('Pay'),
-                    ),
+                    ],
+                  )
+                : Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      SizedBox(
+                        height: 28,
+                        child: ElevatedButton(
+                          onPressed: () => _showRowPaymentDialog(context, entry),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: AppTheme.primaryPurple,
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(horizontal: 10),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+                            textStyle: GoogleFonts.poppins(fontSize: 10, fontWeight: FontWeight.w600),
+                          ),
+                          child: const Text('Pay'),
+                        ),
+                      ),
+                      if (entry.amountPaid > 0) ...[
+                        const SizedBox(width: 4),
+                        IconButton(
+                          icon: const Icon(Icons.receipt_rounded, size: 16, color: AppTheme.primaryPurple),
+                          tooltip: 'View / Print Partial Receipt',
+                          padding: EdgeInsets.zero,
+                          constraints: const BoxConstraints(),
+                          onPressed: () => _showReceiptForSingleLedger(entry),
+                        ),
+                      ],
+                    ],
                   ),
           ),
         ],
@@ -949,6 +997,7 @@ class _StudentFeeLedgerViewState extends ConsumerState<StudentFeeLedgerView> wit
       // Refresh providers
       ref.invalidate(studentFeeLedgerProvider(_param));
       ref.invalidate(studentLedgerSummaryProvider(_param));
+      ref.invalidate(studentPaymentHistoryProvider(_param));
       ref.invalidate(studentsListProvider);
       ref.invalidate(dashboardMetricsProvider);
 
@@ -1230,6 +1279,7 @@ class _StudentFeeLedgerViewState extends ConsumerState<StudentFeeLedgerView> wit
       // Invalidate providers
       ref.invalidate(studentFeeLedgerProvider(_param));
       ref.invalidate(studentLedgerSummaryProvider(_param));
+      ref.invalidate(studentPaymentHistoryProvider(_param));
       ref.invalidate(studentsListProvider);
       ref.invalidate(dashboardMetricsProvider);
 
@@ -1294,6 +1344,7 @@ class _StudentFeeLedgerViewState extends ConsumerState<StudentFeeLedgerView> wit
       // Refresh providers
       ref.invalidate(studentFeeLedgerProvider(_param));
       ref.invalidate(studentLedgerSummaryProvider(_param));
+      ref.invalidate(studentPaymentHistoryProvider(_param));
       ref.invalidate(studentsListProvider);
       ref.invalidate(dashboardMetricsProvider);
 
@@ -1323,4 +1374,477 @@ class _StudentFeeLedgerViewState extends ConsumerState<StudentFeeLedgerView> wit
       if (mounted) setState(() => _isProcessingPayment = false);
     }
   }
+
+  // ============================================================================
+  // TAB 3: PAYMENT HISTORY & HISTORICAL RECEIPTS
+  // ============================================================================
+
+  Widget _buildPaymentHistoryTab() {
+    final historyAsync = ref.watch(studentPaymentHistoryProvider(_param));
+
+    return historyAsync.when(
+      data: (records) {
+        if (records.isEmpty) {
+          return Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(Icons.receipt_long_rounded, size: 64, color: AppTheme.textHint.withValues(alpha: 0.3)),
+                const SizedBox(height: 16),
+                Text(
+                  'No payment history or receipts found',
+                  style: GoogleFonts.poppins(fontSize: 16, fontWeight: FontWeight.w600, color: AppTheme.textSecondary),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'Payments recorded for ${widget.student.name} will appear here with instant receipt generation.',
+                  textAlign: TextAlign.center,
+                  style: GoogleFonts.poppins(fontSize: 12, color: AppTheme.textHint),
+                ),
+              ],
+            ),
+          );
+        }
+
+        final totalCollected = records.fold<double>(0.0, (sum, r) => sum + r.totalAmountPaid);
+
+        return Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              // Summary Bar
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+                margin: const EdgeInsets.only(bottom: 16),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: AppTheme.divider),
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(6),
+                          decoration: BoxDecoration(
+                            color: AppTheme.primaryPurple.withValues(alpha: 0.1),
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                          child: const Icon(Icons.history_edu_rounded, color: AppTheme.primaryPurple, size: 20),
+                        ),
+                        const SizedBox(width: 10),
+                        Text(
+                          '${records.length} Payment Transactions Recorded',
+                          style: GoogleFonts.poppins(fontSize: 13, fontWeight: FontWeight.w600, color: AppTheme.textPrimary),
+                        ),
+                      ],
+                    ),
+                    Row(
+                      children: [
+                        Text('Total Amount Paid: ', style: GoogleFonts.poppins(fontSize: 12, color: AppTheme.textSecondary)),
+                        Text(_currencyFormat.format(totalCollected), style: GoogleFonts.poppins(fontSize: 14, fontWeight: FontWeight.bold, color: AppTheme.success)),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+
+              // Payments Table
+              Expanded(
+                child: Container(
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: AppTheme.divider),
+                  ),
+                  child: Column(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                        decoration: const BoxDecoration(
+                          color: AppTheme.bgSurface,
+                          borderRadius: BorderRadius.only(topLeft: Radius.circular(12), topRight: Radius.circular(12)),
+                        ),
+                        child: Row(
+                          children: [
+                            _headerCell('Date & Time', flex: 3),
+                            _headerCell('Receipt / Ref #', flex: 3),
+                            _headerCell('Fees / Description', flex: 4),
+                            _headerCell('Method', flex: 2),
+                            _headerCell('Amount Paid', flex: 2),
+                            _headerCell('Action', flex: 3),
+                          ],
+                        ),
+                      ),
+                      const Divider(height: 1, color: AppTheme.divider),
+                      Expanded(
+                        child: ListView.separated(
+                          itemCount: records.length,
+                          separatorBuilder: (_, __) => const Divider(height: 1, color: AppTheme.divider),
+                          itemBuilder: (context, index) {
+                            final record = records[index];
+                            return Padding(
+                              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                              child: Row(
+                                children: [
+                                  // Date
+                                  Expanded(
+                                    flex: 3,
+                                    child: Text(
+                                      DateFormat('dd MMM yyyy, hh:mm a').format(record.timestamp),
+                                      style: GoogleFonts.poppins(fontSize: 12, color: AppTheme.textPrimary),
+                                    ),
+                                  ),
+                                  // Receipt #
+                                  Expanded(
+                                    flex: 3,
+                                    child: Row(
+                                      children: [
+                                        Container(
+                                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                          decoration: BoxDecoration(
+                                            color: AppTheme.primaryPurple.withValues(alpha: 0.1),
+                                            borderRadius: BorderRadius.circular(6),
+                                          ),
+                                          child: Text(
+                                            record.receiptNumber,
+                                            style: GoogleFonts.poppins(fontSize: 11, fontWeight: FontWeight.w700, color: AppTheme.primaryPurple),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                  // Fees / Description
+                                  Expanded(
+                                    flex: 4,
+                                    child: Text(
+                                      record.feeHeadsSummary,
+                                      style: GoogleFonts.poppins(fontSize: 12, color: AppTheme.textSecondary),
+                                      maxLines: 2,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ),
+                                  // Method
+                                  Expanded(
+                                    flex: 2,
+                                    child: Text(
+                                      record.paymentMethod.displayName,
+                                      style: GoogleFonts.poppins(fontSize: 11, fontWeight: FontWeight.w500, color: AppTheme.textPrimary),
+                                    ),
+                                  ),
+                                  // Amount
+                                  Expanded(
+                                    flex: 2,
+                                    child: Text(
+                                      _currencyFormat.format(record.totalAmountPaid),
+                                      style: GoogleFonts.poppins(fontSize: 12, fontWeight: FontWeight.bold, color: AppTheme.success),
+                                    ),
+                                  ),
+                                  // Action
+                                  Expanded(
+                                    flex: 3,
+                                    child: Row(
+                                      children: [
+                                        ElevatedButton.icon(
+                                          onPressed: () => _openReceiptForPaymentRecord(record),
+                                          icon: const Icon(Icons.print_rounded, size: 14),
+                                          label: Text('Print', style: GoogleFonts.poppins(fontSize: 11, fontWeight: FontWeight.w600)),
+                                          style: ElevatedButton.styleFrom(
+                                            backgroundColor: AppTheme.primaryPurple,
+                                            foregroundColor: Colors.white,
+                                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+                                            minimumSize: Size.zero,
+                                            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                          ),
+                                        ),
+                                        const SizedBox(width: 6),
+                                        IconButton(
+                                          icon: const Icon(Icons.share_rounded, size: 16, color: AppTheme.textSecondary),
+                                          tooltip: 'WhatsApp / Share Receipt',
+                                          padding: EdgeInsets.zero,
+                                          constraints: const BoxConstraints(),
+                                          onPressed: () => _shareReceiptWhatsApp(record),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            );
+                          },
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+      loading: () => const Center(child: CircularProgressIndicator(strokeWidth: 2)),
+      error: (e, _) => Center(child: Text('Error loading payment history: $e', style: GoogleFonts.poppins(color: AppTheme.error))),
+    );
+  }
+
+  Future<void> _showReceiptForSingleLedger(StudentFeeLedger entry) async {
+    final dbService = ref.read(databaseServiceProvider);
+    final paymentRecord = await dbService.getPaymentRecordByLedgerId(entry.id);
+    final rctNum = paymentRecord?.receiptNumber ?? await dbService.getNextReceiptNumber();
+    final method = paymentRecord?.paymentMethod ?? PaymentMethod.cash;
+
+    if (!mounted) return;
+    await PaymentReceiptDialog.show(
+      context: context,
+      student: widget.student,
+      paidLedgers: [entry],
+      totalAmount: entry.amountPaid > 0 ? entry.amountPaid : entry.amountDue,
+      paymentMethod: method,
+      referenceNumber: rctNum,
+      academicYear: _selectedAcademicYear,
+      receiptNumber: rctNum,
+    );
+  }
+
+  Future<void> _openReceiptForPaymentRecord(StudentPaymentRecord record) async {
+    final ledgers = record.paidLedgers.isNotEmpty
+        ? record.paidLedgers
+        : [
+            StudentFeeLedger(
+              id: record.transactionId,
+              studentId: widget.student.id,
+              feeHeadId: 'fh-composite',
+              academicYear: record.academicYear,
+              amountDue: record.totalAmountPaid,
+              amountPaid: record.totalAmountPaid,
+              dueDate: record.timestamp,
+              status: LedgerStatus.paid,
+              feeHeadName: record.notes ?? 'Fee Collection',
+              createdAt: record.timestamp,
+              updatedAt: record.timestamp,
+            ),
+          ];
+
+    if (!mounted) return;
+    await PaymentReceiptDialog.show(
+      context: context,
+      student: widget.student,
+      paidLedgers: ledgers,
+      totalAmount: record.totalAmountPaid,
+      paymentMethod: record.paymentMethod,
+      referenceNumber: record.receiptNumber,
+      academicYear: record.academicYear,
+      receiptNumber: record.receiptNumber,
+    );
+  }
+
+  void _showPaidMonthReceiptModal(String month, List<dynamic> ledgers, String statusStr) async {
+    final dbService = ref.read(databaseServiceProvider);
+    final monthData = await dbService.getMonthlyReceiptData(widget.student.id, _selectedAcademicYear, month);
+    final paidLedgers = (monthData['paid_ledgers'] as List<dynamic>? ?? []).cast<StudentFeeLedger>();
+    final matchingPayments = (monthData['matching_payments'] as List<dynamic>? ?? []).cast<StudentPaymentRecord>();
+    final totalPaid = (monthData['total_month_paid'] as num?)?.toDouble() ?? 0.0;
+    final totalDue = (monthData['total_month_due'] as num?)?.toDouble() ?? 0.0;
+
+    if (!mounted) return;
+
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: Colors.white,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: AppTheme.primaryPurple.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: const Icon(Icons.calendar_month_rounded, color: AppTheme.primaryPurple, size: 22),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('$month $_selectedAcademicYear', style: GoogleFonts.poppins(fontSize: 16, fontWeight: FontWeight.bold, color: AppTheme.textPrimary)),
+                  Text('${widget.student.name} • Class ${widget.student.gradeLevel}', style: GoogleFonts.poppins(fontSize: 11, color: AppTheme.textSecondary)),
+                ],
+              ),
+            ),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+              decoration: BoxDecoration(
+                color: statusStr == 'paid' ? AppTheme.successLight : AppTheme.warningLight,
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: Text(statusStr.toUpperCase(), style: GoogleFonts.poppins(fontSize: 10, fontWeight: FontWeight.bold, color: statusStr == 'paid' ? AppTheme.success : AppTheme.warning)),
+            ),
+          ],
+        ),
+        content: SizedBox(
+          width: 480,
+          child: SingleChildScrollView(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // Summary Bar
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: AppTheme.bgSurface,
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text('Total Due', style: GoogleFonts.poppins(fontSize: 11, color: AppTheme.textSecondary)),
+                          Text(_currencyFormat.format(totalDue), style: GoogleFonts.poppins(fontSize: 13, fontWeight: FontWeight.bold, color: AppTheme.textPrimary)),
+                        ],
+                      ),
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.end,
+                        children: [
+                          Text('Amount Paid', style: GoogleFonts.poppins(fontSize: 11, color: AppTheme.textSecondary)),
+                          Text(_currencyFormat.format(totalPaid), style: GoogleFonts.poppins(fontSize: 13, fontWeight: FontWeight.bold, color: AppTheme.success)),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 16),
+                Text('Fee Items for $month', style: GoogleFonts.poppins(fontSize: 12, fontWeight: FontWeight.w600, color: AppTheme.textPrimary)),
+                const SizedBox(height: 8),
+                ...ledgers.map((l) {
+                  final item = l is StudentFeeLedger ? l : StudentFeeLedger.fromMap(l as Map<String, dynamic>);
+                  return Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 4),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(item.feeHeadName ?? item.feeHeadId, style: GoogleFonts.poppins(fontSize: 12, color: AppTheme.textPrimary)),
+                        Text('Due: ${_currencyFormat.format(item.amountDue)}  •  Paid: ${_currencyFormat.format(item.amountPaid)}',
+                            style: GoogleFonts.poppins(fontSize: 11, color: item.amountPaid >= item.amountDue ? AppTheme.success : AppTheme.error, fontWeight: FontWeight.w500)),
+                      ],
+                    ),
+                  );
+                }),
+                if (matchingPayments.isNotEmpty) ...[
+                  const SizedBox(height: 16),
+                  const Divider(height: 1),
+                  const SizedBox(height: 12),
+                  Text('Payment Transactions for $month', style: GoogleFonts.poppins(fontSize: 12, fontWeight: FontWeight.w600, color: AppTheme.textPrimary)),
+                  const SizedBox(height: 8),
+                  ...matchingPayments.map((p) => Container(
+                    margin: const EdgeInsets.only(bottom: 8),
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: AppTheme.divider),
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(p.receiptNumber, style: GoogleFonts.poppins(fontSize: 11, fontWeight: FontWeight.bold, color: AppTheme.primaryPurple)),
+                            Text('${DateFormat('dd MMM yyyy').format(p.timestamp)} • ${p.paymentMethod.displayName}', style: GoogleFonts.poppins(fontSize: 10, color: AppTheme.textSecondary)),
+                          ],
+                        ),
+                        Row(
+                          children: [
+                            Text(_currencyFormat.format(p.totalAmountPaid), style: GoogleFonts.poppins(fontSize: 12, fontWeight: FontWeight.bold, color: AppTheme.success)),
+                            const SizedBox(width: 8),
+                            IconButton(
+                              icon: const Icon(Icons.print_rounded, size: 16, color: AppTheme.primaryPurple),
+                              tooltip: 'Print this receipt',
+                              onPressed: () {
+                                Navigator.pop(ctx);
+                                _openReceiptForPaymentRecord(p);
+                              },
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  )),
+                ],
+              ],
+            ),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Close'),
+          ),
+          if (totalPaid > 0)
+            ElevatedButton.icon(
+              onPressed: () async {
+                Navigator.pop(ctx);
+                final rctNum = matchingPayments.isNotEmpty
+                    ? matchingPayments.first.receiptNumber
+                    : await dbService.getNextReceiptNumber();
+                final method = matchingPayments.isNotEmpty
+                    ? matchingPayments.first.paymentMethod
+                    : PaymentMethod.cash;
+
+                if (!mounted) return;
+                await PaymentReceiptDialog.show(
+                  context: context,
+                  student: widget.student,
+                  paidLedgers: paidLedgers.isNotEmpty
+                      ? paidLedgers
+                      : ledgers.map((l) => l is StudentFeeLedger ? l : StudentFeeLedger.fromMap(l as Map<String, dynamic>)).toList(),
+                  totalAmount: totalPaid,
+                  paymentMethod: method,
+                  referenceNumber: rctNum,
+                  academicYear: _selectedAcademicYear,
+                  receiptNumber: rctNum,
+                );
+              },
+              icon: const Icon(Icons.print_rounded, size: 16),
+              label: Text('Print Month Receipt ($month)', style: GoogleFonts.poppins(fontSize: 12, fontWeight: FontWeight.w600)),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppTheme.primaryPurple,
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  void _shareReceiptWhatsApp(StudentPaymentRecord record) async {
+    final phone = widget.student.guardianPhone ?? widget.student.fatherPhone ?? '';
+    final cleanPhone = phone.replaceAll(RegExp(r'\D'), '');
+
+    final msg = '''*FEE PAYMENT RECEIPT*
+Student: ${widget.student.name} (${widget.student.gradeLevel})
+Receipt #: ${record.receiptNumber}
+Date: ${DateFormat('dd MMM yyyy, hh:mm a').format(record.timestamp)}
+Fees: ${record.feeHeadsSummary}
+Amount Paid: ${_currencyFormat.format(record.totalAmountPaid)}
+Mode: ${record.paymentMethod.displayName}
+Status: Paid ✓
+Thank you!''';
+
+    final uri = Uri.parse('https://wa.me/$cleanPhone?text=${Uri.encodeComponent(msg)}');
+    if (await canLaunchUrl(uri)) {
+      await launchUrl(uri);
+    }
+  }
 }
+

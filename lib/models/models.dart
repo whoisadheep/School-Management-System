@@ -54,3 +54,4 @@ export 'attendance_settings.dart';
 export 'book.dart';
 export 'book_issue.dart';
 export 'class_subject.dart';
+export 'student_payment_record.dart';

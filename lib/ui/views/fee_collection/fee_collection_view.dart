@@ -31,6 +31,7 @@ class _FeeCollectionViewState extends ConsumerState<FeeCollectionView> with Sing
 
   // Student Search / Lookup
   final TextEditingController _studentSearchController = TextEditingController();
+  final TextEditingController _invoiceSearchController = TextEditingController();
   Student? _selectedStudent;
 
   // Session & Month Range
@@ -66,6 +67,7 @@ class _FeeCollectionViewState extends ConsumerState<FeeCollectionView> with Sing
   void dispose() {
     _tabController.dispose();
     _studentSearchController.dispose();
+    _invoiceSearchController.dispose();
     _paidAmountController.dispose();
     _referenceController.dispose();
     _notesController.dispose();
@@ -1238,6 +1240,7 @@ class _FeeCollectionViewState extends ConsumerState<FeeCollectionView> with Sing
       // Invalidate providers
       ref.invalidate(studentsListProvider);
       ref.invalidate(studentFeeLedgerProvider);
+      ref.invalidate(studentPaymentHistoryProvider);
       ref.invalidate(invoicesListProvider);
       ref.invalidate(dashboardMetricsProvider);
 
@@ -1253,6 +1256,7 @@ class _FeeCollectionViewState extends ConsumerState<FeeCollectionView> with Sing
           receiptNumber: receiptNumber,
         );
 
+        if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Payment of ${_currencyFormat.format(paidAmount)} recorded successfully!'),
@@ -1287,6 +1291,11 @@ class _FeeCollectionViewState extends ConsumerState<FeeCollectionView> with Sing
 
   Widget _buildInvoicesRecordTab() {
     final invoicesAsync = ref.watch(invoicesListProvider);
+    final studentsAsync = ref.watch(studentsListProvider);
+
+    final studentMap = {
+      for (final s in (studentsAsync.value ?? <Student>[])) s.id: s
+    };
 
     return SingleChildScrollView(
       padding: const EdgeInsets.all(28),
@@ -1299,76 +1308,195 @@ class _FeeCollectionViewState extends ConsumerState<FeeCollectionView> with Sing
                 return _buildEmptyCard('No fee invoices or receipts recorded yet.');
               }
 
-              return Container(
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: AppTheme.divider),
-                ),
-                child: Column(
-                  children: [
+              final query = _invoiceSearchController.text.trim().toLowerCase();
+              final filteredInvoices = invoices.where((inv) {
+                if (query.isEmpty) return true;
+                final student = studentMap[inv.studentId];
+                final studentName = student?.name.toLowerCase() ?? '';
+                final admissionNo = student?.admissionNumber?.toLowerCase() ?? '';
+                final rollNo = student?.rollNumber?.toLowerCase() ?? '';
+                final invoiceId = 'inv-${inv.id.toLowerCase()}';
+                final notes = inv.notes?.toLowerCase() ?? '';
+                return studentName.contains(query) ||
+                    admissionNo.contains(query) ||
+                    rollNo.contains(query) ||
+                    invoiceId.contains(query) ||
+                    notes.contains(query);
+              }).toList();
+
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  // Filter / Search Toolbar
+                  Container(
+                    margin: const EdgeInsets.only(bottom: 16),
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: AppTheme.divider),
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.search_rounded, size: 20, color: AppTheme.primaryPurple),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: TextField(
+                            controller: _invoiceSearchController,
+                            onChanged: (_) => setState(() {}),
+                            decoration: InputDecoration(
+                              hintText: 'Search by Student Name, Admission No, Roll No, or Invoice ID...',
+                              hintStyle: GoogleFonts.poppins(fontSize: 13, color: AppTheme.textHint),
+                              border: InputBorder.none,
+                              isDense: true,
+                            ),
+                            style: GoogleFonts.poppins(fontSize: 13),
+                          ),
+                        ),
+                        if (_invoiceSearchController.text.isNotEmpty)
+                          IconButton(
+                            icon: const Icon(Icons.clear, size: 18, color: AppTheme.textSecondary),
+                            onPressed: () {
+                              _invoiceSearchController.clear();
+                              setState(() {});
+                            },
+                          ),
+                        const SizedBox(width: 8),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+                          decoration: BoxDecoration(
+                            color: AppTheme.bgSurface,
+                            borderRadius: BorderRadius.circular(6),
+                            border: Border.all(color: AppTheme.divider),
+                          ),
+                          child: Text(
+                            '${filteredInvoices.length} / ${invoices.length} records',
+                            style: GoogleFonts.poppins(fontSize: 12, fontWeight: FontWeight.w600, color: AppTheme.textSecondary),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+
+                  // Table Container
+                  if (filteredInvoices.isEmpty)
+                    _buildEmptyCard('No invoices match the search filter "$query".')
+                  else
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-                      decoration: const BoxDecoration(
-                        color: AppTheme.bgSurface,
-                        borderRadius: BorderRadius.only(topLeft: Radius.circular(12), topRight: Radius.circular(12)),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: AppTheme.divider),
                       ),
-                      child: Row(
+                      child: Column(
                         children: [
-                          _th('Invoice ID', flex: 3),
-                          _th('Date', flex: 3),
-                          _th('Description / Notes', flex: 4),
-                          _th('Amount Paid', flex: 2),
-                          _th('Status', flex: 2),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                            decoration: const BoxDecoration(
+                              color: AppTheme.bgSurface,
+                              borderRadius: BorderRadius.only(topLeft: Radius.circular(12), topRight: Radius.circular(12)),
+                            ),
+                            child: Row(
+                              children: [
+                                _th('Invoice ID', flex: 2),
+                                _th('Date', flex: 2),
+                                _th('Student Details', flex: 3),
+                                _th('Description / Notes', flex: 3),
+                                _th('Amount Paid', flex: 2),
+                                _th('Status', flex: 1, textAlign: TextAlign.center),
+                                _th('Receipt', flex: 1, textAlign: TextAlign.center),
+                              ],
+                            ),
+                          ),
+                          const Divider(height: 1, color: AppTheme.divider),
+                          ListView.separated(
+                            shrinkWrap: true,
+                            physics: const NeverScrollableScrollPhysics(),
+                            itemCount: filteredInvoices.length,
+                            separatorBuilder: (_, __) => const Divider(height: 1, color: AppTheme.divider),
+                            itemBuilder: (context, idx) {
+                              final inv = filteredInvoices[idx];
+                              final student = studentMap[inv.studentId];
+                              return Padding(
+                                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                                child: Row(
+                                  children: [
+                                    Expanded(
+                                      flex: 2,
+                                      child: Text(
+                                        'INV-${inv.id.substring(0, 8).toUpperCase()}',
+                                        style: GoogleFonts.poppins(fontWeight: FontWeight.bold, fontSize: 12),
+                                      ),
+                                    ),
+                                    Expanded(
+                                      flex: 2,
+                                      child: Text(_dateFormat.format(inv.createdAt), style: GoogleFonts.poppins(fontSize: 12)),
+                                    ),
+                                    Expanded(
+                                      flex: 3,
+                                      child: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          Text(
+                                            student?.name ?? 'Student ID: ${inv.studentId.substring(0, 8)}',
+                                            style: GoogleFonts.poppins(fontWeight: FontWeight.w600, fontSize: 12, color: AppTheme.textPrimary),
+                                            overflow: TextOverflow.ellipsis,
+                                          ),
+                                          if (student != null)
+                                            Text(
+                                              'Adm: ${student.admissionNumber ?? 'N/A'} • ${student.gradeLevel}',
+                                              style: GoogleFonts.poppins(fontSize: 11, color: AppTheme.textSecondary),
+                                              overflow: TextOverflow.ellipsis,
+                                            ),
+                                        ],
+                                      ),
+                                    ),
+                                    Expanded(
+                                      flex: 3,
+                                      child: Text(inv.notes ?? 'Fee Collection', style: GoogleFonts.poppins(fontSize: 12, color: AppTheme.textSecondary)),
+                                    ),
+                                    Expanded(
+                                      flex: 2,
+                                      child: Text(
+                                        _currencyFormat.format(inv.totalAmount),
+                                        style: GoogleFonts.poppins(fontWeight: FontWeight.bold, fontSize: 12, color: AppTheme.success),
+                                      ),
+                                    ),
+                                    Expanded(
+                                      flex: 1,
+                                      child: Center(
+                                        child: Container(
+                                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                          decoration: BoxDecoration(
+                                            color: AppTheme.successLight,
+                                            borderRadius: BorderRadius.circular(4),
+                                          ),
+                                          child: Text(
+                                            inv.status.name.toUpperCase(),
+                                            style: GoogleFonts.poppins(fontSize: 10, fontWeight: FontWeight.bold, color: AppTheme.success),
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                    Expanded(
+                                      flex: 1,
+                                      child: Center(
+                                        child: IconButton(
+                                          icon: const Icon(Icons.print_rounded, size: 18, color: AppTheme.primaryPurple),
+                                          tooltip: 'Print Fee Receipt',
+                                          onPressed: () => _printReceiptForInvoice(inv, student),
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              );
+                            },
+                          ),
                         ],
                       ),
                     ),
-                    const Divider(height: 1, color: AppTheme.divider),
-                    ListView.separated(
-                      shrinkWrap: true,
-                      physics: const NeverScrollableScrollPhysics(),
-                      itemCount: invoices.length,
-                      separatorBuilder: (_, __) => const Divider(height: 1, color: AppTheme.divider),
-                      itemBuilder: (context, idx) {
-                        final inv = invoices[idx];
-                        return Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-                          child: Row(
-                            children: [
-                              Expanded(
-                                flex: 3,
-                                child: Text('INV-${inv.id.substring(0, 8).toUpperCase()}', style: GoogleFonts.poppins(fontWeight: FontWeight.bold, fontSize: 12)),
-                              ),
-                              Expanded(
-                                flex: 3,
-                                child: Text(_dateFormat.format(inv.createdAt), style: GoogleFonts.poppins(fontSize: 12)),
-                              ),
-                              Expanded(
-                                flex: 4,
-                                child: Text(inv.notes ?? 'Fee Collection', style: GoogleFonts.poppins(fontSize: 12, color: AppTheme.textSecondary)),
-                              ),
-                              Expanded(
-                                flex: 2,
-                                child: Text(_currencyFormat.format(inv.totalAmount), style: GoogleFonts.poppins(fontWeight: FontWeight.bold, fontSize: 12, color: AppTheme.success)),
-                              ),
-                              Expanded(
-                                flex: 2,
-                                child: Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                                  decoration: BoxDecoration(
-                                    color: AppTheme.successLight,
-                                    borderRadius: BorderRadius.circular(4),
-                                  ),
-                                  child: Text('PAID', style: GoogleFonts.poppins(fontSize: 10, fontWeight: FontWeight.bold, color: AppTheme.success)),
-                                ),
-                              ),
-                            ],
-                          ),
-                        );
-                      },
-                    ),
-                  ],
-                ),
+                ],
               );
             },
             loading: () => const Center(child: CircularProgressIndicator(strokeWidth: 2)),
@@ -1376,6 +1504,87 @@ class _FeeCollectionViewState extends ConsumerState<FeeCollectionView> with Sing
           ),
         ),
       ),
+    );
+  }
+
+  Future<void> _printReceiptForInvoice(Invoice inv, Student? student) async {
+    final dbService = ref.read(databaseServiceProvider);
+
+    Student? resolvedStudent = student;
+    if (resolvedStudent == null) {
+      final fetched = await dbService.getStudentById(inv.studentId);
+      if (fetched != null) {
+        resolvedStudent = fetched;
+      }
+    }
+
+    if (resolvedStudent == null) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Student information could not be found for this invoice.', style: GoogleFonts.poppins()),
+            backgroundColor: AppTheme.error,
+          ),
+        );
+      }
+      return;
+    }
+
+    final paymentRecord = await dbService.getPaymentRecordByInvoiceId(inv.id);
+    List<StudentFeeLedger> paidLedgers;
+    PaymentMethod method = PaymentMethod.cash;
+    String rctNum = 'RCT-${inv.id.substring(0, 8).toUpperCase()}';
+    String acadYear = inv.academicYearId?.replaceFirst('ay-', '') ?? _selectedAcademicYear ?? '2026-2027';
+
+    if (paymentRecord != null) {
+      paidLedgers = paymentRecord.paidLedgers.isNotEmpty
+          ? paymentRecord.paidLedgers
+          : [
+              StudentFeeLedger(
+                id: inv.ledgerId ?? inv.id,
+                studentId: resolvedStudent.id,
+                feeHeadId: 'fh-composite',
+                academicYear: paymentRecord.academicYear,
+                amountDue: paymentRecord.totalAmountPaid,
+                amountPaid: paymentRecord.totalAmountPaid,
+                dueDate: paymentRecord.timestamp,
+                status: LedgerStatus.paid,
+                feeHeadName: paymentRecord.notes ?? inv.notes ?? 'Fee Collection',
+                createdAt: paymentRecord.timestamp,
+                updatedAt: paymentRecord.timestamp,
+              )
+            ];
+      method = paymentRecord.paymentMethod;
+      rctNum = paymentRecord.receiptNumber;
+      acadYear = paymentRecord.academicYear;
+    } else {
+      paidLedgers = [
+        StudentFeeLedger(
+          id: inv.ledgerId ?? inv.id,
+          studentId: resolvedStudent.id,
+          feeHeadId: 'fh-composite',
+          academicYear: acadYear,
+          amountDue: inv.totalAmount,
+          amountPaid: inv.totalAmount,
+          dueDate: inv.dueDate,
+          status: LedgerStatus.paid,
+          feeHeadName: inv.notes ?? 'Fee Collection',
+          createdAt: inv.createdAt,
+          updatedAt: inv.updatedAt,
+        )
+      ];
+    }
+
+    if (!mounted) return;
+    await PaymentReceiptDialog.show(
+      context: context,
+      student: resolvedStudent,
+      paidLedgers: paidLedgers,
+      totalAmount: inv.totalAmount,
+      paymentMethod: method,
+      referenceNumber: rctNum,
+      academicYear: acadYear,
+      receiptNumber: rctNum,
     );
   }
 
@@ -1448,7 +1657,7 @@ class _FeeCollectionViewState extends ConsumerState<FeeCollectionView> with Sing
                       ref.invalidate(invoicesListProvider);
                       ref.invalidate(dashboardMetricsProvider);
 
-                      if (context.mounted) {
+                      if (mounted) {
                         ScaffoldMessenger.of(context).showSnackBar(
                           SnackBar(content: Text('Successfully generated $count invoices!'), backgroundColor: AppTheme.primaryPurple),
                         );
@@ -1496,10 +1705,14 @@ class _FeeCollectionViewState extends ConsumerState<FeeCollectionView> with Sing
     );
   }
 
-  Widget _th(String label, {int flex = 1}) {
+  Widget _th(String label, {int flex = 1, TextAlign textAlign = TextAlign.start}) {
     return Expanded(
       flex: flex,
-      child: Text(label, style: GoogleFonts.poppins(fontSize: 11, fontWeight: FontWeight.w600, color: AppTheme.textSecondary, letterSpacing: 0.5)),
+      child: Text(
+        label,
+        textAlign: textAlign,
+        style: GoogleFonts.poppins(fontSize: 11, fontWeight: FontWeight.w600, color: AppTheme.textSecondary, letterSpacing: 0.5),
+      ),
     );
   }
 

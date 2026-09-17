@@ -415,6 +415,12 @@ final studentLedgerSummaryProvider = FutureProvider.family.autoDispose<Map<Strin
   final dbService = ref.watch(databaseServiceProvider);
   return await dbService.getStudentLedgerSummary(param.studentId, param.academicYear);
 });
+
+/// Student Payment History Provider — returns chronological payment & receipt records
+final studentPaymentHistoryProvider = FutureProvider.family.autoDispose<List<StudentPaymentRecord>, StudentYearParam>((ref, param) async {
+  final dbService = ref.watch(databaseServiceProvider);
+  return await dbService.getStudentPaymentHistory(param.studentId, academicYear: param.academicYear);
+});
 // ============================================================================
 // FEE REPORTING PROVIDERS (PHASE 4)
 // ============================================================================
