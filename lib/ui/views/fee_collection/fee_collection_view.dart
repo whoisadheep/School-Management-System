@@ -13,6 +13,7 @@ import '../../../providers/services_provider.dart';
 import '../../../services/bulk_invoice_service.dart';
 import '../../widgets/payment_receipt_dialog.dart';
 import '../../../services/app_logger.dart';
+import '../../../services/sound_service.dart';
 
 /// Remade Form-Based Fee Collection View:
 /// Features:
@@ -55,6 +56,7 @@ class _FeeCollectionViewState extends ConsumerState<FeeCollectionView> with Sing
   String? _rapidFromMonth;
   String? _rapidToMonth;
   bool _rapidIncludeOneTimeDues = true;
+  bool _rapidIncludePastArrears = true;
   final ScrollController _rapidDuesScrollController = ScrollController();
 
   // Last receipt tracker for quick re-print & WhatsApp
@@ -70,6 +72,7 @@ class _FeeCollectionViewState extends ConsumerState<FeeCollectionView> with Sing
   String? _selectedAcademicYear;
   String? _fromMonth;
   String? _toMonth;
+  final bool _includePastArrears = true;
 
   // Selected Dues & Payment Calculations
   final Set<String> _selectedLedgerIds = {};
@@ -183,13 +186,17 @@ class _FeeCollectionViewState extends ConsumerState<FeeCollectionView> with Sing
     _selectedLedgerIds.clear();
     for (final l in unpaidLedgers) {
       final idx = _monthIndex(l.monthLabel);
-      if (idx != -1 && idx >= minIdx && idx <= maxIdx) {
-        _selectedLedgerIds.add(l.id);
+      if (idx != -1) {
+        if (idx >= minIdx && idx <= maxIdx) {
+          _selectedLedgerIds.add(l.id);
+        } else if (idx < minIdx && _includePastArrears) {
+          _selectedLedgerIds.add(l.id);
+        }
       }
       // Also automatically include transport fees that fall in this period or have no month label
       final isTransport = l.feeHeadId == 'fh-transport' || (l.feeHeadName?.toLowerCase().contains('transport') ?? false);
       if (isTransport) {
-        if (idx == -1 || (idx >= minIdx && idx <= maxIdx)) {
+        if (idx == -1 || (idx >= minIdx && idx <= maxIdx) || (idx < minIdx && _includePastArrears)) {
           _selectedLedgerIds.add(l.id);
         }
       }
@@ -313,9 +320,9 @@ class _FeeCollectionViewState extends ConsumerState<FeeCollectionView> with Sing
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Icon(Icons.bolt_rounded, size: 18, color: Colors.amber),
-                      SizedBox(width: 6),
-                      Text('Rapid Express Counter'),
+                      Icon(Icons.point_of_sale_rounded, size: 18),
+                      SizedBox(width: 8),
+                      Text('Rapid Express Desk'),
                     ],
                   ),
                 ),
@@ -344,52 +351,78 @@ class _FeeCollectionViewState extends ConsumerState<FeeCollectionView> with Sing
   }
 
   void _rapidPreset1Month() {
+    SoundService().playClick();
     final available = _getRapidAvailableMonths();
-    if (available.isNotEmpty) {
-      setState(() {
-        _rapidFromMonth = available.first;
-        _rapidToMonth = available.first;
-        _applyRapidMonthRange();
-      });
+    if (available.isEmpty) return;
+
+    String targetMonth = available.first;
+    final firstMonthLedgers = _rapidStudentDues.where((l) => l.monthLabel == available.first).toList();
+    final isFirstMonthOnlyPartial = firstMonthLedgers.isNotEmpty &&
+        firstMonthLedgers.every((l) => l.status == LedgerStatus.partial);
+
+    if (isFirstMonthOnlyPartial && available.length > 1) {
+      targetMonth = available[1];
     }
+
+    setState(() {
+      _rapidFromMonth = targetMonth;
+      _rapidToMonth = targetMonth;
+      _rapidIncludePastArrears = true;
+      _applyRapidMonthRange();
+    });
   }
 
   void _rapidPresetQuarter() {
+    SoundService().playClick();
     final available = _getRapidAvailableMonths();
     if (available.isNotEmpty) {
       setState(() {
         _rapidFromMonth = available.first;
         _rapidToMonth = available.length >= 3 ? available[2] : available.last;
+        _rapidIncludePastArrears = true;
         _applyRapidMonthRange();
       });
     }
   }
 
   void _rapidPresetHalfYear() {
+    SoundService().playClick();
     final available = _getRapidAvailableMonths();
     if (available.isNotEmpty) {
       setState(() {
         _rapidFromMonth = available.first;
         _rapidToMonth = available.length >= 6 ? available[5] : available.last;
+        _rapidIncludePastArrears = true;
         _applyRapidMonthRange();
       });
     }
   }
 
   void _rapidPresetAllMonths() {
+    SoundService().playClick();
     final available = _getRapidAvailableMonths();
     if (available.isNotEmpty) {
       setState(() {
         _rapidFromMonth = available.first;
         _rapidToMonth = available.last;
+        _rapidIncludePastArrears = true;
         _applyRapidMonthRange();
       });
     }
   }
 
   void _rapidToggleAnnualFees() {
+    SoundService().playClick();
     setState(() {
       _rapidIncludeOneTimeDues = !_rapidIncludeOneTimeDues;
+      _applyRapidMonthRange();
+    });
+  }
+
+  void _rapidTogglePastArrears() {
+    SoundService().playClick();
+    setState(() {
+      _rapidIncludePastArrears = !_rapidIncludePastArrears;
       _applyRapidMonthRange();
     });
   }
@@ -416,55 +449,59 @@ class _FeeCollectionViewState extends ConsumerState<FeeCollectionView> with Sing
         const SingleActivator(LogicalKeyboardKey.f4): _rapidPresetHalfYear,
         const SingleActivator(LogicalKeyboardKey.f5): _rapidPresetAllMonths,
         const SingleActivator(LogicalKeyboardKey.keyA, alt: true): _rapidToggleAnnualFees,
+        const SingleActivator(LogicalKeyboardKey.keyR, alt: true): _rapidTogglePastArrears,
         const SingleActivator(LogicalKeyboardKey.f9): _executeRapidPayment,
         const SingleActivator(LogicalKeyboardKey.enter, control: true): _executeRapidPayment,
         const SingleActivator(LogicalKeyboardKey.keyP, control: true): _reprintLastReceipt,
       },
-      child: SingleChildScrollView(
-        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-        child: Center(
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 1200),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                _buildRapidCounterHeader(metricsAsync),
-                const SizedBox(height: 12),
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    // Left Column: Search, Student Snapshot, Payment Mode
-                    Expanded(
-                      flex: 5,
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          _buildRapidSearchCard(allStudents),
-                          const SizedBox(height: 12),
-                          _buildRapidStudentCard(),
-                          const SizedBox(height: 12),
-                          _buildRapidPaymentMethodCard(),
-                        ],
+      child: Container(
+        color: const Color(0xFFF1F3F9), // Power background color framing the workspace cards
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+          child: Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 1200),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  _buildRapidCounterHeader(metricsAsync),
+                  const SizedBox(height: 12),
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // Left Column: Search, Student Snapshot, Payment Mode
+                      Expanded(
+                        flex: 5,
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            _buildRapidSearchCard(allStudents),
+                            const SizedBox(height: 12),
+                            _buildRapidStudentCard(),
+                            const SizedBox(height: 12),
+                            _buildRapidPaymentMethodCard(),
+                          ],
+                        ),
                       ),
-                    ),
-                    const SizedBox(width: 14),
-                    // Right Column: Outstanding Dues & Tendered / Change Checkout
-                    Expanded(
-                      flex: 7,
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          _buildRapidDuesCard(),
-                          const SizedBox(height: 12),
-                          _buildRapidCheckoutCard(),
-                        ],
+                      const SizedBox(width: 14),
+                      // Right Column: Outstanding Dues & Tendered / Change Checkout
+                      Expanded(
+                        flex: 7,
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            _buildRapidDuesCard(),
+                            const SizedBox(height: 12),
+                            _buildRapidCheckoutCard(),
+                          ],
+                        ),
                       ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 12),
-                _buildRapidKeyboardHintsFooter(),
-              ],
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  _buildRapidKeyboardHintsFooter(),
+                ],
+              ),
             ),
           ),
         ),
@@ -481,16 +518,17 @@ class _FeeCollectionViewState extends ConsumerState<FeeCollectionView> with Sing
       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
       decoration: BoxDecoration(
         gradient: const LinearGradient(
-          colors: [AppTheme.primaryPurple, Color(0xFF6C5CE7)],
+          colors: [Color(0xFF0F172A), Color(0xFF1E1B4B), Color(0xFF281C59)],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
         borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: const Color(0xFF6366F1).withValues(alpha: 0.35), width: 1.2),
         boxShadow: [
           BoxShadow(
-            color: AppTheme.primaryPurple.withValues(alpha: 0.25),
-            blurRadius: 12,
-            offset: const Offset(0, 4),
+            color: const Color(0xFF0F172A).withValues(alpha: 0.35),
+            blurRadius: 16,
+            offset: const Offset(0, 6),
           ),
         ],
       ),
@@ -499,10 +537,11 @@ class _FeeCollectionViewState extends ConsumerState<FeeCollectionView> with Sing
           Container(
             padding: const EdgeInsets.all(10),
             decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.2),
+              color: const Color(0xFF6366F1).withValues(alpha: 0.25),
               borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: const Color(0xFF818CF8).withValues(alpha: 0.4)),
             ),
-            child: const Icon(Icons.bolt_rounded, size: 28, color: Colors.amberAccent),
+            child: const Icon(Icons.point_of_sale_rounded, size: 26, color: Color(0xFFC7D2FE)),
           ),
           const SizedBox(width: 16),
           Expanded(
@@ -512,51 +551,96 @@ class _FeeCollectionViewState extends ConsumerState<FeeCollectionView> with Sing
                 Row(
                   children: [
                     Text(
-                      'RAPID EXPRESS FEE COUNTER',
+                      'RAPID EXPRESS DESK',
                       style: GoogleFonts.poppins(
                         fontSize: 16,
                         fontWeight: FontWeight.bold,
                         color: Colors.white,
-                        letterSpacing: 0.5,
+                        letterSpacing: 0.6,
                       ),
                     ),
                     const SizedBox(width: 10),
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                       decoration: BoxDecoration(
-                        color: Colors.amberAccent.withValues(alpha: 0.3),
+                        color: const Color(0xFF6366F1).withValues(alpha: 0.3),
                         borderRadius: BorderRadius.circular(6),
+                        border: Border.all(color: const Color(0xFF818CF8).withValues(alpha: 0.4)),
                       ),
                       child: Text(
-                        '10-Sec POS Mode',
-                        style: GoogleFonts.poppins(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.amberAccent),
+                        'HIGH SPEED POS',
+                        style: GoogleFonts.poppins(
+                          fontSize: 9,
+                          fontWeight: FontWeight.bold,
+                          color: const Color(0xFFE0E7FF),
+                          letterSpacing: 0.5,
+                        ),
                       ),
                     ),
                   ],
                 ),
-                const SizedBox(height: 2),
+                const SizedBox(height: 3),
                 Text(
-                  'Scan/Enter roll or admission number ➔ Verify dues ➔ Hit [Enter] to collect & issue dual 2-in-1 A4 receipt.',
-                  style: GoogleFonts.poppins(fontSize: 12, color: Colors.white70),
+                  'Scan or enter student roll/adm number  •  Verify breakdown  •  Press [Enter] to collect & issue dual A4 receipt.',
+                  style: GoogleFonts.poppins(fontSize: 11.5, color: const Color(0xFFCBD5E1)),
                 ),
               ],
             ),
           ),
           const SizedBox(width: 16),
+          // Audio Cues Toggle
+          Tooltip(
+            message: SoundService().soundEnabled ? 'Mute Audio Effects' : 'Enable Audio Effects',
+            child: InkWell(
+              onTap: () {
+                setState(() {
+                  SoundService().toggleSound();
+                });
+              },
+              borderRadius: BorderRadius.circular(10),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.08),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: Colors.white12),
+                ),
+                child: Row(
+                  children: [
+                    Icon(
+                      SoundService().soundEnabled ? Icons.volume_up_rounded : Icons.volume_off_rounded,
+                      size: 16,
+                      color: SoundService().soundEnabled ? const Color(0xFFA5B4FC) : Colors.white38,
+                    ),
+                    const SizedBox(width: 6),
+                    Text(
+                      SoundService().soundEnabled ? 'Sound ON' : 'Muted',
+                      style: GoogleFonts.poppins(
+                        fontSize: 10,
+                        fontWeight: FontWeight.w600,
+                        color: SoundService().soundEnabled ? const Color(0xFFA5B4FC) : Colors.white38,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(width: 10),
           // Today's Counter Tally
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
             decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.15),
+              color: Colors.white.withValues(alpha: 0.1),
               borderRadius: BorderRadius.circular(10),
-              border: Border.all(color: Colors.white24),
+              border: Border.all(color: Colors.white12),
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.end,
               children: [
                 Text(
                   'TODAY COLLECTED',
-                  style: GoogleFonts.poppins(fontSize: 9, fontWeight: FontWeight.bold, color: Colors.white70, letterSpacing: 0.5),
+                  style: GoogleFonts.poppins(fontSize: 9, fontWeight: FontWeight.bold, color: const Color(0xFF94A3B8), letterSpacing: 0.5),
                 ),
                 Text(
                   _currencyFormat.format(todaysColl),
@@ -564,13 +648,13 @@ class _FeeCollectionViewState extends ConsumerState<FeeCollectionView> with Sing
                 ),
                 Text(
                   '$todaysCount receipts issued',
-                  style: GoogleFonts.poppins(fontSize: 10, color: Colors.white60),
+                  style: GoogleFonts.poppins(fontSize: 10, color: const Color(0xFF94A3B8)),
                 ),
               ],
             ),
           ),
           if (_lastReceiptNumber != null) ...[
-            const SizedBox(width: 12),
+            const SizedBox(width: 10),
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
               decoration: BoxDecoration(
@@ -656,7 +740,7 @@ class _FeeCollectionViewState extends ConsumerState<FeeCollectionView> with Sing
             }),
             onSubmitted: (val) => _handleRapidSearchSubmit(val, allStudents, suggestions),
             decoration: InputDecoration(
-              prefixIcon: Icon(Icons.flash_on_rounded, color: Colors.amber[700]),
+              prefixIcon: const Icon(Icons.search_rounded, color: AppTheme.primaryPurple, size: 20),
               suffixIcon: _rapidSearchController.text.isNotEmpty
                   ? IconButton(
                       icon: const Icon(Icons.clear, size: 18),
@@ -998,6 +1082,7 @@ class _FeeCollectionViewState extends ConsumerState<FeeCollectionView> with Sing
   }
 
   void _setRapidPaymentMethod(PaymentMethod method) {
+    SoundService().playClick();
     setState(() => _rapidPaymentMethod = method);
     if (_rapidStudent != null) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -1020,6 +1105,14 @@ class _FeeCollectionViewState extends ConsumerState<FeeCollectionView> with Sing
     final selectedDues = _rapidStudentDues.where((l) => _rapidSelectedLedgerIds.contains(l.id)).toList();
     final double totalSelectedDue = selectedDues.fold(0.0, (sum, l) => sum + l.remainingAmount);
 
+    final fromIdx = _monthIndex(_rapidFromMonth);
+    final pastArrearsList = _rapidStudentDues.where((l) {
+      final idx = _monthIndex(l.monthLabel);
+      return idx != -1 && fromIdx != -1 && idx < fromIdx;
+    }).toList();
+    final double pastArrearsTotal = pastArrearsList.fold(0.0, (sum, l) => sum + l.remainingAmount);
+    final pastArrearsLabels = pastArrearsList.map((l) => l.monthLabel ?? 'Arrear').toSet().join(', ');
+
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
@@ -1039,7 +1132,9 @@ class _FeeCollectionViewState extends ConsumerState<FeeCollectionView> with Sing
               ),
               if (_rapidStudentDues.isNotEmpty)
                 Text(
-                  '${selectedDues.length} fees selected • Total: ${_currencyFormat.format(totalSelectedDue)}',
+                  pastArrearsTotal > 0 && _rapidIncludePastArrears
+                      ? '${selectedDues.length} fees selected • Total: ${_currencyFormat.format(totalSelectedDue)} (incl. ${_currencyFormat.format(pastArrearsTotal)} arrears)'
+                      : '${selectedDues.length} fees selected • Total: ${_currencyFormat.format(totalSelectedDue)}',
                   style: GoogleFonts.poppins(fontSize: 11, fontWeight: FontWeight.w600, color: AppTheme.primaryPurple),
                 ),
             ],
@@ -1229,9 +1324,80 @@ class _FeeCollectionViewState extends ConsumerState<FeeCollectionView> with Sing
                           ),
                         ),
                       ),
+                    if (pastArrearsTotal > 0)
+                      InkWell(
+                        onTap: _rapidTogglePastArrears,
+                        borderRadius: BorderRadius.circular(6),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: _rapidIncludePastArrears ? const Color(0xFFFEF3C7) : Colors.white,
+                            borderRadius: BorderRadius.circular(6),
+                            border: Border.all(color: _rapidIncludePastArrears ? const Color(0xFFF59E0B) : AppTheme.divider),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                                decoration: BoxDecoration(
+                                  color: _rapidIncludePastArrears ? const Color(0xFFFDE68A) : AppTheme.bgSurface,
+                                  borderRadius: BorderRadius.circular(3),
+                                ),
+                                child: Text(
+                                  'Alt+R',
+                                  style: GoogleFonts.poppins(
+                                    fontSize: 9,
+                                    fontWeight: FontWeight.bold,
+                                    color: _rapidIncludePastArrears ? const Color(0xFF92400E) : AppTheme.textHint,
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 5),
+                              Text(
+                                'Past Arrears (${_currencyFormat.format(pastArrearsTotal)}): ${_rapidIncludePastArrears ? "ON" : "OFF"}',
+                                style: GoogleFonts.poppins(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w600,
+                                  color: _rapidIncludePastArrears ? const Color(0xFF92400E) : AppTheme.textSecondary,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
                   ],
                 ),
               ),
+              if (pastArrearsTotal > 0 && _rapidIncludePastArrears)
+                Container(
+                  margin: const EdgeInsets.only(bottom: 8),
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFFFFBEB),
+                    borderRadius: BorderRadius.circular(6),
+                    border: Border.all(color: const Color(0xFFFDE68A)),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.info_outline_rounded, size: 15, color: Color(0xFFD97706)),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          'Previous unpaid balance of ${_currencyFormat.format(pastArrearsTotal)} from $pastArrearsLabels is carried forward and included in total.',
+                          style: GoogleFonts.poppins(fontSize: 11, fontWeight: FontWeight.w600, color: const Color(0xFF92400E)),
+                        ),
+                      ),
+                      InkWell(
+                        onTap: _rapidTogglePastArrears,
+                        child: Text(
+                          'Exclude',
+                          style: GoogleFonts.poppins(fontSize: 11, fontWeight: FontWeight.bold, color: const Color(0xFFB45309), decoration: TextDecoration.underline),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
             ],
             // Professional Financial Ledger Table (NO CHECKMARKS, BOUNDED HEIGHT)
             Container(
@@ -1301,9 +1467,12 @@ class _FeeCollectionViewState extends ConsumerState<FeeCollectionView> with Sing
                               separatorBuilder: (_, __) => const Divider(height: 1, color: AppTheme.divider),
                               itemBuilder: (context, idx) {
                                 final l = selectedDues[idx];
+                                final lMonthIdx = _monthIndex(l.monthLabel);
+                                final isPastArrear = lMonthIdx != -1 && fromIdx != -1 && lMonthIdx < fromIdx;
                                 final isOverdue = l.dueDate.isBefore(DateTime.now()) && l.status != LedgerStatus.paid;
 
-                                return Padding(
+                                return Container(
+                                  color: isPastArrear ? const Color(0xFFFFFBEB).withValues(alpha: 0.5) : null,
                                   padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                                   child: Row(
                                     children: [
@@ -1323,8 +1492,12 @@ class _FeeCollectionViewState extends ConsumerState<FeeCollectionView> with Sing
                                       Expanded(
                                         flex: 3,
                                         child: Text(
-                                          l.monthLabel ?? "Annual",
-                                          style: GoogleFonts.poppins(fontSize: 11, color: AppTheme.textSecondary),
+                                          isPastArrear ? '${l.monthLabel} (Arrears)' : (l.monthLabel ?? "Annual"),
+                                          style: GoogleFonts.poppins(
+                                            fontSize: 11, 
+                                            color: isPastArrear ? const Color(0xFFD97706) : AppTheme.textSecondary,
+                                            fontWeight: isPastArrear ? FontWeight.w600 : FontWeight.normal,
+                                          ),
                                           maxLines: 1,
                                           overflow: TextOverflow.ellipsis,
                                         ),
@@ -1342,15 +1515,20 @@ class _FeeCollectionViewState extends ConsumerState<FeeCollectionView> with Sing
                                           child: Container(
                                             padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
                                             decoration: BoxDecoration(
-                                              color: isOverdue ? AppTheme.error.withValues(alpha: 0.1) : Colors.amber.withValues(alpha: 0.15),
+                                              color: isPastArrear
+                                                  ? const Color(0xFFFEF3C7)
+                                                  : (isOverdue ? AppTheme.error.withValues(alpha: 0.1) : Colors.amber.withValues(alpha: 0.15)),
                                               borderRadius: BorderRadius.circular(4),
+                                              border: isPastArrear ? Border.all(color: const Color(0xFFF59E0B), width: 0.5) : null,
                                             ),
                                             child: Text(
-                                              isOverdue ? 'OVERDUE' : 'DUE',
+                                              isPastArrear ? 'ARREARS' : (isOverdue ? 'OVERDUE' : 'DUE'),
                                               style: GoogleFonts.poppins(
                                                 fontSize: 8,
                                                 fontWeight: FontWeight.bold,
-                                                color: isOverdue ? AppTheme.error : Colors.amber[900],
+                                                color: isPastArrear
+                                                    ? const Color(0xFFB45309)
+                                                    : (isOverdue ? AppTheme.error : Colors.amber[900]),
                                               ),
                                             ),
                                           ),
@@ -1360,7 +1538,11 @@ class _FeeCollectionViewState extends ConsumerState<FeeCollectionView> with Sing
                                         flex: 3,
                                         child: Text(
                                           _currencyFormat.format(l.remainingAmount),
-                                          style: GoogleFonts.poppins(fontSize: 11, fontWeight: FontWeight.bold, color: AppTheme.textPrimary),
+                                          style: GoogleFonts.poppins(
+                                            fontSize: 11, 
+                                            fontWeight: FontWeight.bold, 
+                                            color: isPastArrear ? const Color(0xFFB45309) : AppTheme.textPrimary,
+                                          ),
                                           textAlign: TextAlign.end,
                                         ),
                                       ),
@@ -1752,6 +1934,9 @@ class _FeeCollectionViewState extends ConsumerState<FeeCollectionView> with Sing
       if (idx != -1) {
         if (idx >= minIdx && idx <= maxIdx) {
           _rapidSelectedLedgerIds.add(l.id);
+        } else if (idx < minIdx && _rapidIncludePastArrears) {
+          // Unpaid dues prior to From Month are PAST ARREARS and must be rolled in!
+          _rapidSelectedLedgerIds.add(l.id);
         }
       } else {
         if (_rapidIncludeOneTimeDues) {
@@ -1774,6 +1959,7 @@ class _FeeCollectionViewState extends ConsumerState<FeeCollectionView> with Sing
       _rapidFromMonth = null;
       _rapidToMonth = null;
       _rapidIncludeOneTimeDues = true;
+      _rapidIncludePastArrears = true;
     });
 
     final dbService = ref.read(databaseServiceProvider);
@@ -1782,7 +1968,7 @@ class _FeeCollectionViewState extends ConsumerState<FeeCollectionView> with Sing
       _selectedAcademicYear ?? '2026-2027',
     );
 
-    final unpaid = ledgers.where((l) => l.status != LedgerStatus.paid && l.remainingAmount > 0).toList();
+    final unpaid = ledgers.where((l) => l.status != LedgerStatus.paid && l.status.name != 'rolled_over' && l.remainingAmount > 0).toList();
     unpaid.sort((a, b) => a.dueDate.compareTo(b.dueDate));
 
     if (mounted) {
@@ -1790,11 +1976,25 @@ class _FeeCollectionViewState extends ConsumerState<FeeCollectionView> with Sing
         _rapidStudentDues = unpaid;
         final available = _getRapidAvailableMonths();
         if (available.isNotEmpty) {
-          _rapidFromMonth = available.first;
-          _rapidToMonth = available.last;
+          // Default to the first full pending month (or available.first) with past arrears rolled in!
+          String targetFrom = available.first;
+          final firstMonthLedgers = unpaid.where((l) => l.monthLabel == available.first).toList();
+          final isFirstMonthOnlyPartial = firstMonthLedgers.isNotEmpty &&
+              firstMonthLedgers.every((l) => l.status == LedgerStatus.partial);
+          if (isFirstMonthOnlyPartial && available.length > 1) {
+            targetFrom = available[1];
+          }
+          _rapidFromMonth = targetFrom;
+          _rapidToMonth = targetFrom;
         }
         _applyRapidMonthRange();
       });
+
+      if (unpaid.any((l) => l.dueDate.isBefore(DateTime.now()) || l.status == LedgerStatus.partial)) {
+        SoundService().playAlert();
+      } else {
+        SoundService().playClick();
+      }
 
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (_rapidPaymentMethod == PaymentMethod.cash) {
@@ -1827,6 +2027,7 @@ class _FeeCollectionViewState extends ConsumerState<FeeCollectionView> with Sing
 
     final licenseState = ref.read(licenseStateProvider).value;
     if (licenseState?.status.isReadOnly ?? false) {
+      SoundService().playAlert();
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
@@ -1844,6 +2045,7 @@ class _FeeCollectionViewState extends ConsumerState<FeeCollectionView> with Sing
 
     final paidAmount = double.tryParse(_rapidPaidAmountController.text.trim()) ?? 0.0;
     if (paidAmount <= 0) {
+      SoundService().playAlert();
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Please enter a valid payment amount.', style: GoogleFonts.poppins()), backgroundColor: AppTheme.error),
@@ -1854,6 +2056,7 @@ class _FeeCollectionViewState extends ConsumerState<FeeCollectionView> with Sing
 
     final selectedLedgers = _rapidStudentDues.where((l) => _rapidSelectedLedgerIds.contains(l.id)).toList();
     if (selectedLedgers.isEmpty) {
+      SoundService().playAlert();
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('No fee dues selected to pay.', style: GoogleFonts.poppins()), backgroundColor: AppTheme.error),
@@ -1901,6 +2104,8 @@ class _FeeCollectionViewState extends ConsumerState<FeeCollectionView> with Sing
       ref.invalidate(invoicesListProvider);
       ref.invalidate(dashboardMetricsProvider);
 
+      SoundService().playSuccess();
+
       if (mounted) {
         await PaymentReceiptDialog.show(
           context: context,
@@ -1916,6 +2121,7 @@ class _FeeCollectionViewState extends ConsumerState<FeeCollectionView> with Sing
         _resetRapidCounter();
       }
     } catch (e, stack) {
+      SoundService().playAlert();
       AppLogger.instance.error('Rapid payment processing failed', e, stack);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -1930,6 +2136,7 @@ class _FeeCollectionViewState extends ConsumerState<FeeCollectionView> with Sing
   }
 
   void _resetRapidCounter() {
+    SoundService().playClick();
     setState(() {
       _rapidSearchController.clear();
       _rapidPaidAmountController.clear();
@@ -1942,6 +2149,7 @@ class _FeeCollectionViewState extends ConsumerState<FeeCollectionView> with Sing
       _rapidFromMonth = null;
       _rapidToMonth = null;
       _rapidIncludeOneTimeDues = true;
+      _rapidIncludePastArrears = true;
     });
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -2387,7 +2595,7 @@ Thank you for your payment!''';
                       ref.invalidate(studentFeeLedgerProvider);
                       ref.invalidate(studentTransportProvider);
                     },
-                    icon: const Icon(Icons.bolt_rounded, size: 18),
+                    icon: const Icon(Icons.receipt_long_rounded, size: 18),
                     label: Text('Generate Fee Dues for $academicYear', style: GoogleFonts.poppins(fontWeight: FontWeight.bold)),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: AppTheme.primaryPurple,

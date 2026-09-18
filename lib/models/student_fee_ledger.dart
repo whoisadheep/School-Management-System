@@ -181,3 +181,30 @@ class StudentFeeLedger {
   @override
   int get hashCode => id.hashCode;
 }
+
+/// Represents an aggregated summary of outstanding fee dues for a student in an academic session
+class StudentFeeDuesSummary {
+  final String studentId;
+  final String studentName;
+  final String? admissionNumber;
+  final String? rollNumber;
+  final String gradeLevel;
+  final double totalDue;
+  final double totalPaid;
+  final double unpaidBalance;
+  final int unpaidLedgerCount;
+  final List<String> unpaidDetails; // e.g. ["Tuition Fee (April): ₹500"]
+
+  const StudentFeeDuesSummary({
+    required this.studentId,
+    required this.studentName,
+    this.admissionNumber,
+    this.rollNumber,
+    required this.gradeLevel,
+    required this.totalDue,
+    required this.totalPaid,
+    required this.unpaidBalance,
+    required this.unpaidLedgerCount,
+    this.unpaidDetails = const [],
+  });
+}

@@ -458,6 +458,231 @@ class DatabaseService {
     });
   }
 
+  /// Retrieves aggregated summary of uncleared fee dues for a batch of students in an academic year
+  Future<Map<String, StudentFeeDuesSummary>> getStudentsUnpaidDuesSummary({
+    required List<String> studentIds,
+    required String academicYear,
+  }) async {
+    if (studentIds.isEmpty) return {};
+    final db = await _db;
+    final cleanYear = academicYear.replaceFirst('ay-', '');
+    final ayWithPrefix = academicYear.startsWith('ay-') ? academicYear : 'ay-$academicYear';
+    final placeholders = List.filled(studentIds.length, '?').join(',');
+
+    final rows = await db.rawQuery('''
+      SELECT sfl.*, 
+             fh.name as fee_head_name, 
+             s.name as student_name,
+             s.admission_number,
+             s.roll_number,
+             s.grade_level
+      FROM student_fee_ledger sfl
+      LEFT JOIN fee_heads fh ON sfl.fee_head_id = fh.id
+      JOIN students s ON sfl.student_id = s.id
+      WHERE sfl.student_id IN ($placeholders)
+        AND (sfl.academic_year = ? OR sfl.academic_year = ?)
+        AND sfl.status IN ('pending', 'partial', 'overdue')
+        AND (sfl.amount_due - sfl.amount_paid) > 0.01
+      ORDER BY sfl.due_date ASC
+    ''', [...studentIds, cleanYear, ayWithPrefix]);
+
+    final map = <String, StudentFeeDuesSummary>{};
+    for (final row in rows) {
+      final sId = row['student_id'] as String;
+      final amountDue = (row['amount_due'] as num?)?.toDouble() ?? 0.0;
+      final amountPaid = (row['amount_paid'] as num?)?.toDouble() ?? 0.0;
+      final balance = amountDue - amountPaid;
+      if (balance <= 0.01) continue;
+
+      final feeHeadName = row['fee_head_name'] as String? ?? 'Fee';
+      final monthLabel = row['month_label'] as String?;
+      final detail = monthLabel != null ? '$feeHeadName ($monthLabel): ₹${balance.toStringAsFixed(0)}' : '$feeHeadName: ₹${balance.toStringAsFixed(0)}';
+
+      if (!map.containsKey(sId)) {
+        map[sId] = StudentFeeDuesSummary(
+          studentId: sId,
+          studentName: row['student_name'] as String? ?? 'Student',
+          admissionNumber: row['admission_number'] as String?,
+          rollNumber: row['roll_number'] as String?,
+          gradeLevel: row['grade_level'] as String? ?? '',
+          totalDue: amountDue,
+          totalPaid: amountPaid,
+          unpaidBalance: balance,
+          unpaidLedgerCount: 1,
+          unpaidDetails: [detail],
+        );
+      } else {
+        final existing = map[sId]!;
+        map[sId] = StudentFeeDuesSummary(
+          studentId: sId,
+          studentName: existing.studentName,
+          admissionNumber: existing.admissionNumber,
+          rollNumber: existing.rollNumber,
+          gradeLevel: existing.gradeLevel,
+          totalDue: existing.totalDue + amountDue,
+          totalPaid: existing.totalPaid + amountPaid,
+          unpaidBalance: existing.unpaidBalance + balance,
+          unpaidLedgerCount: existing.unpaidLedgerCount + 1,
+          unpaidDetails: [...existing.unpaidDetails, detail],
+        );
+      }
+    }
+    return map;
+  }
+
+  /// Bulk promote a list of students with optional end-of-session arrears rollover
+  Future<void> promoteStudentsWithArrearsRollover({
+    required List<String> studentIds,
+    required String targetGrade,
+    String? classId,
+    String? sectionId,
+    String? sectionName,
+    bool markAsAlumni = false,
+    required String fromAcademicYear,
+    required String toAcademicYear,
+    required bool rolloverArrears,
+  }) async {
+    final db = await _db;
+    final nowIso = DateTime.now().toIso8601String();
+    final cleanFromYear = fromAcademicYear.replaceFirst('ay-', '');
+    final ayFromWithPrefix = fromAcademicYear.startsWith('ay-') ? fromAcademicYear : 'ay-$fromAcademicYear';
+    final cleanToYear = toAcademicYear.replaceFirst('ay-', '');
+    final ayToWithPrefix = toAcademicYear.startsWith('ay-') ? toAcademicYear : 'ay-$toAcademicYear';
+
+    await db.transaction((txn) async {
+      // 1. Promote or graduate students
+      for (final id in studentIds) {
+        if (markAsAlumni) {
+          await _updateLogged(
+            txn,
+            'students',
+            {
+              'is_active': 0,
+              'is_alumni': 1,
+              'updated_at': nowIso,
+            },
+            where: 'id = ?',
+            whereArgs: [id],
+          );
+        } else {
+          final Map<String, Object?> updates = {
+            'grade_level': targetGrade,
+            'updated_at': nowIso,
+          };
+          if (classId != null) updates['class_id'] = classId;
+          if (sectionId != null) updates['section_id'] = sectionId;
+          if (sectionName != null) updates['section'] = sectionName;
+
+          await _updateLogged(
+            txn,
+            'students',
+            updates,
+            where: 'id = ?',
+            whereArgs: [id],
+          );
+        }
+      }
+
+      // 2. If rollover is requested, roll over unpaid dues into toAcademicYear
+      if (rolloverArrears && !markAsAlumni && cleanFromYear != cleanToYear) {
+        // Ensure system fee head for arrears exists
+        await txn.rawInsert('''
+          INSERT OR IGNORE INTO fee_heads (id, name, description, is_recurring, frequency)
+          VALUES ('fh-previous-arrears', 'Previous Session Arrears', 'Outstanding fee balance carried forward from previous academic session', 0, 'one_time')
+        ''');
+
+        for (final studentId in studentIds) {
+          final openRows = await txn.rawQuery('''
+            SELECT id, amount_due, amount_paid, month_label
+            FROM student_fee_ledger
+            WHERE student_id = ? 
+              AND (academic_year = ? OR academic_year = ?)
+              AND status IN ('pending', 'partial', 'overdue')
+              AND (amount_due - amount_paid) > 0.01
+          ''', [studentId, cleanFromYear, ayFromWithPrefix]);
+
+          if (openRows.isEmpty) continue;
+
+          double totalArrears = 0.0;
+          for (final r in openRows) {
+            final due = (r['amount_due'] as num?)?.toDouble() ?? 0.0;
+            final paid = (r['amount_paid'] as num?)?.toDouble() ?? 0.0;
+            totalArrears += (due - paid);
+          }
+
+          if (totalArrears > 0.01) {
+            // Check if an arrears ledger entry already exists for this student in target year
+            final existingArrears = await txn.rawQuery('''
+              SELECT id, amount_due, amount_paid FROM student_fee_ledger
+              WHERE student_id = ? 
+                AND (academic_year = ? OR academic_year = ?) 
+                AND fee_head_id = 'fh-previous-arrears'
+            ''', [studentId, cleanToYear, ayToWithPrefix]);
+
+            if (existingArrears.isNotEmpty) {
+              final oldDue = (existingArrears.first['amount_due'] as num?)?.toDouble() ?? 0.0;
+              await txn.rawUpdate('''
+                UPDATE student_fee_ledger
+                SET amount_due = ?, updated_at = ?
+                WHERE id = ?
+              ''', [oldDue + totalArrears, nowIso, existingArrears.first['id']]);
+            } else {
+              final newLedgerId = const Uuid().v4();
+              final yearParts = cleanToYear.split('-');
+              final startYear = int.tryParse(yearParts.first) ?? DateTime.now().year;
+              final dueDate = DateTime(startYear, 4, 1).toIso8601String();
+
+              await _insertLogged(txn, 'student_fee_ledger', {
+                'id': newLedgerId,
+                'student_id': studentId,
+                'fee_head_id': 'fh-previous-arrears',
+                'academic_year': cleanToYear,
+                'amount_due': totalArrears,
+                'amount_paid': 0.0,
+                'due_date': dueDate,
+                'status': 'pending',
+                'month_label': 'Arrears ($cleanFromYear)',
+                'created_at': nowIso,
+                'updated_at': nowIso,
+              });
+            }
+
+            // Mark old entries as settled/closed via rollover
+            for (final r in openRows) {
+              final oldId = r['id'] as String;
+              final oldDue = (r['amount_due'] as num?)?.toDouble() ?? 0.0;
+              final oldLabel = r['month_label'] as String? ?? '';
+              final updatedLabel = oldLabel.isNotEmpty
+                  ? '$oldLabel [Rolled over to $cleanToYear]'
+                  : 'Arrears [Rolled over to $cleanToYear]';
+
+              await txn.rawUpdate('''
+                UPDATE student_fee_ledger
+                SET amount_paid = ?,
+                    status = 'paid',
+                    month_label = ?,
+                    updated_at = ?
+                WHERE id = ?
+              ''', [oldDue, updatedLabel, nowIso, oldId]);
+            }
+
+            // Audit log
+            try {
+              await logAction(
+                actionType: 'update',
+                module: 'fees',
+                entityType: 'student_fee_ledger',
+                entityId: studentId,
+                description: 'Rolled over ₹${totalArrears.toStringAsFixed(0)} arrears for student $studentId from $cleanFromYear to $cleanToYear',
+                executor: txn,
+              );
+            } catch (_) {}
+          }
+        }
+      }
+    });
+  }
+
   // ----------------------------------------------------------------------------
   // Student Document Storage Operations
   // ----------------------------------------------------------------------------

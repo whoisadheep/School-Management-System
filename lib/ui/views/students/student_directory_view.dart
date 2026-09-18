@@ -2587,31 +2587,81 @@ class _StudentDirectoryViewState extends ConsumerState<StudentDirectoryView>
                     ? null
                     : () async {
                         try {
+                          setDialogState(() => isLoading = true);
                           final dbService = ref.read(databaseServiceProvider);
-                          await dbService.promoteStudentsBatch(
+                          final currentAy = await dbService.getCurrentAcademicYear();
+                          final fromYear = currentAy?.name ?? '2026-2027';
+
+                          // Determine target academic year
+                          String targetYear;
+                          if (targetClassId != null) {
+                            try {
+                              final match = allClasses.firstWhere((c) => c.id == targetClassId);
+                              targetYear = match.academicYear ?? _nextAcademicYear(fromYear);
+                            } catch (_) {
+                              targetYear = _nextAcademicYear(fromYear);
+                            }
+                          } else {
+                            targetYear = _nextAcademicYear(fromYear);
+                          }
+
+                          // Query unpaid fee dues summary for all selected students
+                          final duesMap = await dbService.getStudentsUnpaidDuesSummary(
                             studentIds: selectedStudentIds.toList(),
-                            targetGrade: isAlumni ? fromGrade : toGrade,
-                            classId: isAlumni ? null : targetClassId,
-                            sectionId: isAlumni ? null : targetSectionId,
-                            sectionName: isAlumni ? null : targetSectionName,
-                            markAsAlumni: isAlumni,
+                            academicYear: fromYear,
                           );
 
-                          ref.invalidate(studentDirectoryProvider);
-                          ref.invalidate(studentsListProvider);
-                          ref.invalidate(dashboardMetricsProvider);
-                          ref.invalidate(sectionStudentCountProvider);
+                          final studentsWithDues = duesMap.values.where((s) => s.unpaidBalance > 0.01).toList();
 
-                          if (context.mounted) {
-                            Navigator.of(context).pop();
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
-                                content: Text('Successfully promoted ${selectedStudentIds.length} student(s) to $toGrade!', style: GoogleFonts.poppins(color: Colors.white, fontWeight: FontWeight.w600)),
-                                backgroundColor: AppTheme.primaryPurple,
-                              ),
+                          if (studentsWithDues.isEmpty) {
+                            // All selected students are fee-cleared! Proceed directly
+                            await dbService.promoteStudentsWithArrearsRollover(
+                              studentIds: selectedStudentIds.toList(),
+                              targetGrade: isAlumni ? fromGrade : toGrade,
+                              classId: isAlumni ? null : targetClassId,
+                              sectionId: isAlumni ? null : targetSectionId,
+                              sectionName: isAlumni ? null : targetSectionName,
+                              markAsAlumni: isAlumni,
+                              fromAcademicYear: fromYear,
+                              toAcademicYear: targetYear,
+                              rolloverArrears: false,
                             );
+
+                            ref.invalidate(studentDirectoryProvider);
+                            ref.invalidate(studentsListProvider);
+                            ref.invalidate(dashboardMetricsProvider);
+                            ref.invalidate(sectionStudentCountProvider);
+
+                            if (context.mounted) {
+                              Navigator.of(context).pop();
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: Text('Fee Clearance Verified: Successfully promoted ${selectedStudentIds.length} student(s) to $toGrade!', style: GoogleFonts.poppins(color: Colors.white, fontWeight: FontWeight.w600)),
+                                  backgroundColor: AppTheme.primaryPurple,
+                                ),
+                              );
+                            }
+                          } else {
+                            // Uncleared dues detected: trigger Step 2 Warning Modal
+                            setDialogState(() => isLoading = false);
+                            if (context.mounted) {
+                              _showFeeClearanceWarningDialog(
+                                parentContext: context,
+                                studentsWithDues: studentsWithDues,
+                                allSelectedIds: selectedStudentIds,
+                                fromGrade: fromGrade,
+                                toGrade: toGrade,
+                                fromYear: fromYear,
+                                targetYear: targetYear,
+                                targetClassId: targetClassId,
+                                targetSectionId: targetSectionId,
+                                targetSectionName: targetSectionName,
+                                isAlumni: isAlumni,
+                              );
+                            }
                           }
                         } catch (e, stackTrace) {
+                          setDialogState(() => isLoading = false);
                           AppLogger.instance.error('Failed to promote students', e, stackTrace);
                           if (context.mounted) {
                             ScaffoldMessenger.of(context).showSnackBar(
@@ -2628,6 +2678,277 @@ class _StudentDirectoryViewState extends ConsumerState<StudentDirectoryView>
           );
         },
       ),
+    );
+  }
+
+  String _nextAcademicYear(String currentYear) {
+    final clean = currentYear.replaceFirst('ay-', '');
+    final parts = clean.split('-');
+    if (parts.length == 2) {
+      final start = int.tryParse(parts[0]);
+      final end = int.tryParse(parts[1]);
+      if (start != null && end != null) {
+        return '${start + 1}-${end + 1}';
+      }
+    }
+    return '2027-2028';
+  }
+
+  void _showFeeClearanceWarningDialog({
+    required BuildContext parentContext,
+    required List<StudentFeeDuesSummary> studentsWithDues,
+    required Set<String> allSelectedIds,
+    required String fromGrade,
+    required String toGrade,
+    required String fromYear,
+    required String targetYear,
+    required String? targetClassId,
+    required String? targetSectionId,
+    required String? targetSectionName,
+    required bool isAlumni,
+  }) {
+    final totalUnpaid = studentsWithDues.fold(0.0, (sum, s) => sum + s.unpaidBalance);
+    final unpaidStudentIds = studentsWithDues.map((s) => s.studentId).toSet();
+    final clearedStudentIds = allSelectedIds.difference(unpaidStudentIds);
+
+    showDialog(
+      context: parentContext,
+      barrierDismissible: false,
+      builder: (modalCtx) {
+        return AlertDialog(
+          backgroundColor: Colors.white,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          title: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFFEF3C7),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: const Icon(Icons.warning_amber_rounded, color: Color(0xFFD97706), size: 24),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('Fee Clearance & Arrears Warning', style: GoogleFonts.poppins(fontWeight: FontWeight.bold, fontSize: 14, color: const Color(0xFF92400E))),
+                    Text('Step 2: Session End Financial Audit ($fromYear)', style: GoogleFonts.poppins(fontSize: 11, color: AppTheme.textSecondary)),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          content: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 620, maxHeight: 450),
+            child: SingleChildScrollView(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Alert Banner
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFFFFBEB),
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: const Color(0xFFFDE68A)),
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.info_outline_rounded, color: Color(0xFFD97706), size: 20),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Text(
+                            '${studentsWithDues.length} of ${allSelectedIds.length} student(s) have uncleared dues totaling ₹${totalUnpaid.toStringAsFixed(0)} in session $fromYear.',
+                            style: GoogleFonts.poppins(fontSize: 12, fontWeight: FontWeight.w600, color: const Color(0xFF92400E)),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 14),
+                  Text('Students with Uncleared Fee Obligations:', style: GoogleFonts.poppins(fontSize: 12, fontWeight: FontWeight.bold, color: AppTheme.textPrimary)),
+                  const SizedBox(height: 8),
+                  // List of unpaid students
+                  Container(
+                    constraints: const BoxConstraints(maxHeight: 180),
+                    decoration: BoxDecoration(
+                      color: AppTheme.bgSurface,
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: AppTheme.divider),
+                    ),
+                    child: ListView.separated(
+                      shrinkWrap: true,
+                      padding: const EdgeInsets.symmetric(vertical: 4),
+                      itemCount: studentsWithDues.length,
+                      separatorBuilder: (_, __) => const Divider(height: 1, color: AppTheme.divider),
+                      itemBuilder: (context, idx) {
+                        final item = studentsWithDues[idx];
+                        return Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                          child: Row(
+                            children: [
+                              CircleAvatar(
+                                radius: 14,
+                                backgroundColor: const Color(0xFFFEF3C7),
+                                child: Text('${idx + 1}', style: GoogleFonts.poppins(fontSize: 10, fontWeight: FontWeight.bold, color: const Color(0xFFB45309))),
+                              ),
+                              const SizedBox(width: 10),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(item.studentName, style: GoogleFonts.poppins(fontSize: 12, fontWeight: FontWeight.w600, color: AppTheme.textPrimary)),
+                                    Text(
+                                      'Roll: ${item.rollNumber ?? "N/A"} • ${item.unpaidDetails.join(', ')}',
+                                      style: GoogleFonts.poppins(fontSize: 10, color: AppTheme.textSecondary),
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              Text(
+                                '₹${item.unpaidBalance.toStringAsFixed(0)} Due',
+                                style: GoogleFonts.poppins(fontSize: 12, fontWeight: FontWeight.bold, color: AppTheme.error),
+                              ),
+                            ],
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+                  const SizedBox(height: 14),
+                  // Policy options explanation
+                  Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: Colors.blue.shade50,
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: Colors.blue.shade100),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('Choose Resolution Policy:', style: GoogleFonts.poppins(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.blue.shade900)),
+                        const SizedBox(height: 4),
+                        Text('• Strict Policy: Collect all pending dues before promoting students.', style: GoogleFonts.poppins(fontSize: 11, color: Colors.blue.shade800)),
+                        Text('• Rollover Policy: Carry forward dues as "Previous Session Arrears" in $targetYear.', style: GoogleFonts.poppins(fontSize: 11, color: Colors.blue.shade800)),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          actions: [
+            // Action 1: Cancel
+            TextButton(
+              onPressed: () => Navigator.of(modalCtx).pop(),
+              child: Text('Cancel & Collect Dues', style: GoogleFonts.poppins(color: AppTheme.textSecondary, fontWeight: FontWeight.w600)),
+            ),
+            // Action 2: Promote Cleared Only
+            if (clearedStudentIds.isNotEmpty)
+              OutlinedButton.icon(
+                onPressed: () async {
+                  final dbService = ref.read(databaseServiceProvider);
+                  Navigator.of(modalCtx).pop(); // close warning
+                  Navigator.of(parentContext).pop(); // close promotion tool
+
+                  try {
+                    await dbService.promoteStudentsWithArrearsRollover(
+                      studentIds: clearedStudentIds.toList(),
+                      targetGrade: isAlumni ? fromGrade : toGrade,
+                      classId: isAlumni ? null : targetClassId,
+                      sectionId: isAlumni ? null : targetSectionId,
+                      sectionName: isAlumni ? null : targetSectionName,
+                      markAsAlumni: isAlumni,
+                      fromAcademicYear: fromYear,
+                      toAcademicYear: targetYear,
+                      rolloverArrears: false,
+                    );
+
+                    ref.invalidate(studentDirectoryProvider);
+                    ref.invalidate(studentsListProvider);
+                    ref.invalidate(dashboardMetricsProvider);
+                    ref.invalidate(sectionStudentCountProvider);
+
+                    if (parentContext.mounted) {
+                      ScaffoldMessenger.of(parentContext).showSnackBar(
+                        SnackBar(
+                          content: Text(
+                            'Promoted ${clearedStudentIds.length} fee-cleared student(s) to $toGrade. ${studentsWithDues.length} student(s) with dues withheld in $fromGrade.',
+                            style: GoogleFonts.poppins(color: Colors.white, fontWeight: FontWeight.w600),
+                          ),
+                          backgroundColor: AppTheme.primaryPurple,
+                        ),
+                      );
+                    }
+                  } catch (e) {
+                    if (parentContext.mounted) {
+                      ScaffoldMessenger.of(parentContext).showSnackBar(
+                        SnackBar(content: Text('Error: $e'), backgroundColor: AppTheme.error),
+                      );
+                    }
+                  }
+                },
+                icon: const Icon(Icons.check_circle_outline, size: 16),
+                label: Text('Promote Cleared Only (${clearedStudentIds.length})', style: GoogleFonts.poppins(fontSize: 11, fontWeight: FontWeight.w600)),
+                style: OutlinedButton.styleFrom(foregroundColor: AppTheme.primaryPurple),
+              ),
+            // Action 3: Promote All with Rollover
+            ElevatedButton.icon(
+              onPressed: () async {
+                final dbService = ref.read(databaseServiceProvider);
+                Navigator.of(modalCtx).pop(); // close warning
+                Navigator.of(parentContext).pop(); // close promotion tool
+
+                try {
+                  await dbService.promoteStudentsWithArrearsRollover(
+                    studentIds: allSelectedIds.toList(),
+                    targetGrade: isAlumni ? fromGrade : toGrade,
+                    classId: isAlumni ? null : targetClassId,
+                    sectionId: isAlumni ? null : targetSectionId,
+                    sectionName: isAlumni ? null : targetSectionName,
+                    markAsAlumni: isAlumni,
+                    fromAcademicYear: fromYear,
+                    toAcademicYear: targetYear,
+                    rolloverArrears: true,
+                  );
+
+                  ref.invalidate(studentDirectoryProvider);
+                  ref.invalidate(studentsListProvider);
+                  ref.invalidate(dashboardMetricsProvider);
+                  ref.invalidate(sectionStudentCountProvider);
+
+                  if (parentContext.mounted) {
+                    ScaffoldMessenger.of(parentContext).showSnackBar(
+                      SnackBar(
+                        content: Text(
+                          'Promoted all ${allSelectedIds.length} student(s) to $toGrade! Rolled over ₹${totalUnpaid.toStringAsFixed(0)} dues as Previous Session Arrears into $targetYear.',
+                          style: GoogleFonts.poppins(color: Colors.white, fontWeight: FontWeight.w600),
+                        ),
+                        backgroundColor: AppTheme.primaryPurple,
+                        duration: const Duration(seconds: 4),
+                      ),
+                    );
+                  }
+                } catch (e) {
+                  if (parentContext.mounted) {
+                    ScaffoldMessenger.of(parentContext).showSnackBar(
+                      SnackBar(content: Text('Error: $e'), backgroundColor: AppTheme.error),
+                    );
+                  }
+                }
+              },
+              icon: const Icon(Icons.swap_horiz_rounded, size: 16),
+              label: Text('Promote & Rollover Arrears', style: GoogleFonts.poppins(fontSize: 11, fontWeight: FontWeight.bold)),
+              style: ElevatedButton.styleFrom(backgroundColor: AppTheme.primaryPurple, foregroundColor: Colors.white),
+            ),
+          ],
+        );
+      },
     );
   }
 
