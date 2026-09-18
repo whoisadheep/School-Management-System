@@ -8,6 +8,7 @@ import '../../../core/theme/app_theme.dart';
 import '../../../models/models.dart';
 import '../../../providers/dashboard_provider.dart';
 import '../../../providers/license_provider.dart';
+import '../../../providers/navigation_provider.dart';
 import '../../../providers/services_provider.dart';
 import '../../../services/bulk_invoice_service.dart';
 import '../../widgets/payment_receipt_dialog.dart';
@@ -213,6 +214,16 @@ class _FeeCollectionViewState extends ConsumerState<FeeCollectionView> with Sing
 
   @override
   Widget build(BuildContext context) {
+    ref.listen<Student?>(pendingRapidFeeStudentProvider, (previous, student) {
+      if (student != null) {
+        if (_tabController.index != 0) {
+          _tabController.animateTo(0);
+        }
+        _selectRapidStudent(student);
+        ref.read(pendingRapidFeeStudentProvider.notifier).state = null;
+      }
+    });
+
     final yearsAsync = ref.watch(academicYearsProvider);
     final currentYear = ref.watch(currentAcademicYearProvider).value?.name;
     final yearList = yearsAsync.value?.map((y) => y.name).toList() ?? ['2026-2027'];

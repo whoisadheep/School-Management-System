@@ -1,30 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
-import '../../../models/models.dart';
+import '../../../core/theme/app_theme.dart';
 import '../../../providers/auth_provider.dart';
 import '../../../providers/navigation_provider.dart';
-import '../../../providers/services_provider.dart';
-
-class _GlobalSearchData {
-  final List<Student> students;
-  final List<Staff> staff;
-
-  const _GlobalSearchData({required this.students, required this.staff});
-}
-
-final _globalSearchDataProvider =
-    FutureProvider<_GlobalSearchData>((ref) async {
-  final dbService = ref.watch(databaseServiceProvider);
-  final results = await Future.wait([
-    dbService.getAllStudents(activeOnly: false),
-    dbService.getAllStaff(page: 0, pageSize: 10000, activeOnly: false),
-  ]);
-  return _GlobalSearchData(
-    students: results[0] as List<Student>,
-    staff: results[1] as List<Staff>,
-  );
-});
+import '../../widgets/command_palette_dialog.dart';
 
 class DesktopTopBar extends ConsumerWidget {
   const DesktopTopBar({super.key});
@@ -53,87 +33,65 @@ class DesktopTopBar extends ConsumerWidget {
           ),
           const SizedBox(width: 32),
 
-          SizedBox(
-            width: 440,
-            child: SearchAnchor.bar(
-              barHintText: 'Search students or staff by name, ID, or phone',
-              barLeading: const Icon(Icons.search_rounded),
-              barElevation: const WidgetStatePropertyAll(0),
-              barBackgroundColor:
-                  const WidgetStatePropertyAll(Color(0xFFF1F0F5)),
-              barShape: const WidgetStatePropertyAll(
-                StadiumBorder(),
+          // Global Command Palette (Ctrl + K) Trigger
+          InkWell(
+            onTap: () {
+              showDialog(
+                context: context,
+                barrierColor: Colors.black.withValues(alpha: 0.45),
+                barrierDismissible: true,
+                builder: (context) => const CommandPaletteDialog(),
+              );
+            },
+            borderRadius: BorderRadius.circular(24),
+            child: Container(
+              width: 440,
+              height: 44,
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              decoration: BoxDecoration(
+                color: const Color(0xFFF1F0F5),
+                borderRadius: BorderRadius.circular(24),
+                border: Border.all(color: Colors.transparent),
               ),
-              isFullScreen: false,
-              viewConstraints:
-                  const BoxConstraints(maxWidth: 520, maxHeight: 500),
-              suggestionsBuilder: (context, controller) async {
-                final query = controller.text.trim().toLowerCase();
-                if (query.length < 2) {
-                  return [
-                    Padding(
-                      padding: const EdgeInsets.all(16),
-                      child: Text(
-                        'Type at least 2 characters to search students and staff.',
-                        style: GoogleFonts.poppins(
-                          fontSize: 13,
-                          color: Colors.grey.shade600,
+              child: Row(
+                children: [
+                  const Icon(Icons.search_rounded, color: Color(0xFF6B7280), size: 20),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      'Search anything (students, views, actions)...',
+                      style: GoogleFonts.poppins(
+                        fontSize: 13,
+                        color: const Color(0xFF9CA3AF),
+                      ),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(6),
+                      border: Border.all(color: const Color(0xFFE5E7EB)),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withValues(alpha: 0.04),
+                          blurRadius: 4,
+                          offset: const Offset(0, 1),
                         ),
+                      ],
+                    ),
+                    child: Text(
+                      'Ctrl + K',
+                      style: GoogleFonts.poppins(
+                        fontSize: 10,
+                        fontWeight: FontWeight.bold,
+                        color: AppTheme.primaryPurple,
                       ),
                     ),
-                  ];
-                }
-
-                final data = await ref.read(_globalSearchDataProvider.future);
-                final students = data.students
-                    .where((student) => _matchesStudent(student, query))
-                    .take(6)
-                    .toList();
-                final staff = data.staff
-                    .where((member) => _matchesStaff(member, query))
-                    .take(6)
-                    .toList();
-
-                if (students.isEmpty && staff.isEmpty) {
-                  return [
-                    Padding(
-                      padding: const EdgeInsets.all(16),
-                      child: Text(
-                        'No students or staff match “${controller.text.trim()}”.',
-                        style: GoogleFonts.poppins(
-                          fontSize: 13,
-                          color: Colors.grey.shade600,
-                        ),
-                      ),
-                    ),
-                  ];
-                }
-
-                return [
-                  if (students.isNotEmpty) ...[
-                    _buildSearchSectionLabel('Students'),
-                    ...students.map(
-                      (student) => _buildStudentSuggestion(
-                        context,
-                        ref,
-                        controller,
-                        student,
-                      ),
-                    ),
-                  ],
-                  if (staff.isNotEmpty) ...[
-                    _buildSearchSectionLabel('Staff'),
-                    ...staff.map(
-                      (member) => _buildStaffSuggestion(
-                        context,
-                        ref,
-                        controller,
-                        member,
-                      ),
-                    ),
-                  ],
-                ];
-              },
+                  ),
+                ],
+              ),
             ),
           ),
 
@@ -147,8 +105,7 @@ class DesktopTopBar extends ConsumerWidget {
               const CircleAvatar(
                 radius: 20,
                 backgroundColor: Color(0xFFE8E4FF),
-                child: Icon(Icons.person_rounded,
-                    color: Color(0xFF4C3BCF), size: 22),
+                child: Icon(Icons.person_rounded, color: Color(0xFF4C3BCF), size: 22),
               ),
               const SizedBox(width: 10),
               Column(
@@ -174,8 +131,7 @@ class DesktopTopBar extends ConsumerWidget {
               ),
               const SizedBox(width: 4),
               PopupMenuButton<String>(
-                icon: Icon(Icons.keyboard_arrow_down_rounded,
-                    color: Colors.grey.shade600),
+                icon: Icon(Icons.keyboard_arrow_down_rounded, color: Colors.grey.shade600),
                 onSelected: (value) {
                   if (value == 'logout') {
                     ref.read(authProvider.notifier).logout();
@@ -183,33 +139,22 @@ class DesktopTopBar extends ConsumerWidget {
                     showDialog(
                       context: context,
                       builder: (context) => AlertDialog(
-                        title: Text('User Profile',
-                            style: GoogleFonts.poppins(
-                                fontWeight: FontWeight.bold)),
+                        title: Text('User Profile', style: GoogleFonts.poppins(fontWeight: FontWeight.bold)),
                         content: Column(
                           mainAxisSize: MainAxisSize.min,
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text(
-                                'Name: ${currentAdmin?.fullName ?? "System Administrator"}',
-                                style: GoogleFonts.poppins()),
-                            Text(
-                                'Username: ${currentAdmin?.username ?? "admin"}',
-                                style: GoogleFonts.poppins()),
-                            Text(
-                                'Role: ${currentAdmin?.role.toUpperCase() ?? "ADMIN"}',
-                                style: GoogleFonts.poppins()),
-                            Text('Status: Active Account',
-                                style: GoogleFonts.poppins(
-                                    color: Colors.green,
-                                    fontWeight: FontWeight.bold)),
+                            Text('Name: ${currentAdmin?.fullName ?? "System Administrator"}', style: GoogleFonts.poppins()),
+                            Text('Username: ${currentAdmin?.username ?? "admin"}', style: GoogleFonts.poppins()),
+                            Text('Role: ${currentAdmin?.role.toUpperCase() ?? "ADMIN"}', style: GoogleFonts.poppins()),
+                            Text('Status: Active Account', style: GoogleFonts.poppins(color: Colors.green, fontWeight: FontWeight.bold)),
                           ],
                         ),
                         actions: [
                           TextButton(
-                              onPressed: () => Navigator.pop(context),
-                              child:
-                                  Text('Close', style: GoogleFonts.poppins())),
+                            onPressed: () => Navigator.pop(context),
+                            child: Text('Close', style: GoogleFonts.poppins()),
+                          ),
                         ],
                       ),
                     );
@@ -222,8 +167,7 @@ class DesktopTopBar extends ConsumerWidget {
                       children: [
                         const Icon(Icons.person_outline, size: 18),
                         const SizedBox(width: 8),
-                        Text('Profile',
-                            style: GoogleFonts.poppins(fontSize: 13)),
+                        Text('Profile', style: GoogleFonts.poppins(fontSize: 13)),
                       ],
                     ),
                   ),
@@ -231,12 +175,9 @@ class DesktopTopBar extends ConsumerWidget {
                     value: 'logout',
                     child: Row(
                       children: [
-                        const Icon(Icons.logout_rounded,
-                            size: 18, color: Colors.red),
+                        const Icon(Icons.logout_rounded, size: 18, color: Colors.red),
                         const SizedBox(width: 8),
-                        Text('Logout',
-                            style: GoogleFonts.poppins(
-                                fontSize: 13, color: Colors.red)),
+                        Text('Logout', style: GoogleFonts.poppins(fontSize: 13, color: Colors.red)),
                       ],
                     ),
                   ),
@@ -248,101 +189,6 @@ class DesktopTopBar extends ConsumerWidget {
       ),
     );
   }
-
-  static bool _matchesStudent(Student student, String query) {
-    return [
-      student.name,
-      student.admissionNumber,
-      student.rollNumber,
-      student.id,
-      student.guardianPhone,
-      student.fatherPhone,
-      student.motherPhone,
-      student.gradeLevel,
-      student.section,
-    ].any((value) => value?.toLowerCase().contains(query) ?? false);
-  }
-
-  static bool _matchesStaff(Staff staff, String query) {
-    return [
-      staff.fullName,
-      staff.staffCode,
-      staff.id,
-      staff.phone,
-      staff.email,
-      staff.designation,
-      staff.departmentId,
-      staff.role,
-    ].any((value) => value?.toLowerCase().contains(query) ?? false);
-  }
-
-  Widget _buildSearchSectionLabel(String label) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
-      child: Text(
-        label.toUpperCase(),
-        style: GoogleFonts.poppins(
-          color: const Color(0xFF6B7280),
-          fontSize: 11,
-          fontWeight: FontWeight.w700,
-          letterSpacing: 0.7,
-        ),
-      ),
-    );
-  }
-
-  Widget _buildStudentSuggestion(
-    BuildContext context,
-    WidgetRef ref,
-    SearchController controller,
-    Student student,
-  ) {
-    final details = [
-      student.admissionNumber ?? 'No admission ID',
-      '${student.gradeLevel}${student.section == null ? '' : ' • ${student.section}'}',
-      student.guardianPhone ?? student.fatherPhone,
-    ].whereType<String>().join('  ·  ');
-    return ListTile(
-      leading: const CircleAvatar(child: Icon(Icons.school_outlined)),
-      title: Text(student.name,
-          style: GoogleFonts.poppins(fontWeight: FontWeight.w600)),
-      subtitle: Text(details, style: GoogleFonts.poppins(fontSize: 12)),
-      onTap: () {
-        controller.closeView(student.name);
-        ref.read(selectedTabProvider.notifier).state = NavigationTab.students;
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          ref.read(pendingStudentProfileProvider.notifier).state = student;
-        });
-      },
-    );
-  }
-
-  Widget _buildStaffSuggestion(
-    BuildContext context,
-    WidgetRef ref,
-    SearchController controller,
-    Staff staff,
-  ) {
-    final details = [
-      staff.staffCode ?? 'No employee ID',
-      staff.designation ?? staff.role.replaceAll('_', ' '),
-      staff.phone,
-    ].whereType<String>().join('  ·  ');
-    return ListTile(
-      leading: const CircleAvatar(child: Icon(Icons.badge_outlined)),
-      title: Text(staff.fullName,
-          style: GoogleFonts.poppins(fontWeight: FontWeight.w600)),
-      subtitle: Text(details, style: GoogleFonts.poppins(fontSize: 12)),
-      onTap: () {
-        controller.closeView(staff.fullName);
-        ref.read(selectedTabProvider.notifier).state = NavigationTab.staff;
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          ref.read(pendingStaffProfileProvider.notifier).state = staff;
-        });
-      },
-    );
-  }
-
 
   String _getPageTitle(NavigationTab tab) {
     switch (tab) {

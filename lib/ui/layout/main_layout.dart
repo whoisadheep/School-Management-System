@@ -33,6 +33,7 @@ import '../views/update/update_dialog.dart';
 import '../views/onboarding/onboarding_wizard_view.dart';
 import '../../providers/onboarding_provider.dart';
 import '../../services/update_service.dart';
+import '../widgets/command_palette_dialog.dart';
 import 'widgets/sidebar.dart';
 import 'widgets/top_bar.dart';
 
@@ -61,6 +62,15 @@ class _MainLayoutState extends ConsumerState<MainLayout> {
         builder: (context) => UpdateDialog(updateInfo: updateInfo),
       );
     }
+  }
+
+  void _openCommandPalette(BuildContext context) {
+    showDialog(
+      context: context,
+      barrierColor: Colors.black.withValues(alpha: 0.45),
+      barrierDismissible: true,
+      builder: (context) => const CommandPaletteDialog(),
+    );
   }
 
   @override
@@ -107,6 +117,12 @@ class _MainLayoutState extends ConsumerState<MainLayout> {
         },
         const SingleActivator(LogicalKeyboardKey.digit6, control: true): () {
           ref.read(selectedTabProvider.notifier).state = NavigationTab.settings;
+        },
+        const SingleActivator(LogicalKeyboardKey.keyK, control: true): () {
+          _openCommandPalette(context);
+        },
+        const SingleActivator(LogicalKeyboardKey.keyK, meta: true): () {
+          _openCommandPalette(context);
         },
       },
       child: Focus(

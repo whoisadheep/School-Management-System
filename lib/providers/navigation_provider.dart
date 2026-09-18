@@ -81,3 +81,6 @@ final sidebarCollapsedProvider = StateProvider<bool>((ref) {
 /// directory after it becomes visible.
 final pendingStudentProfileProvider = StateProvider<Student?>((ref) => null);
 final pendingStaffProfileProvider = StateProvider<Staff?>((ref) => null);
+
+/// Quick fee collection requests issued via Global Command Palette or search
+final pendingRapidFeeStudentProvider = StateProvider<Student?>((ref) => null);
