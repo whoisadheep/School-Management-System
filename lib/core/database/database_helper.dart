@@ -2203,20 +2203,54 @@ class DatabaseHelper {
         )
       ''');
 
-      await db.execute('''
-        CREATE TABLE IF NOT EXISTS audit_logs (
-          id TEXT PRIMARY KEY,
-          admin_user_id TEXT,
-          action_type TEXT,
-          module TEXT,
-          entity_type TEXT,
-          entity_id TEXT,
-          description TEXT,
-          old_value TEXT,
-          new_value TEXT,
-          timestamp TEXT
-        )
-      ''');
+      final auditLogsMaster = await db.rawQuery(
+        "SELECT sql FROM sqlite_master WHERE type='table' AND name='audit_logs'",
+      );
+      if (auditLogsMaster.isNotEmpty) {
+        final sql = auditLogsMaster.first['sql'] as String? ?? '';
+        if (sql.contains('admin_users_old')) {
+          await db.execute('PRAGMA foreign_keys=OFF;');
+          await db.execute('ALTER TABLE audit_logs RENAME TO audit_logs_corrupted;');
+          await db.execute('''
+            CREATE TABLE audit_logs (
+              id TEXT PRIMARY KEY,
+              admin_user_id TEXT,
+              action_type TEXT CHECK(action_type IN ('create','update','delete','login','risky_action_blocked')),
+              module TEXT,
+              entity_type TEXT,
+              entity_id TEXT,
+              description TEXT,
+              old_value TEXT,
+              new_value TEXT,
+              timestamp TEXT,
+              FOREIGN KEY (admin_user_id) REFERENCES admin_users(id) ON DELETE SET NULL
+            )
+          ''');
+          await db.execute('''
+            INSERT INTO audit_logs (id, admin_user_id, action_type, module, entity_type, entity_id, description, old_value, new_value, timestamp)
+            SELECT id, admin_user_id, action_type, module, entity_type, entity_id, description, old_value, new_value, timestamp
+            FROM audit_logs_corrupted;
+          ''');
+          await db.execute('DROP TABLE audit_logs_corrupted;');
+          await db.execute('PRAGMA foreign_keys=ON;');
+        }
+      } else {
+        await db.execute('''
+          CREATE TABLE audit_logs (
+            id TEXT PRIMARY KEY,
+            admin_user_id TEXT,
+            action_type TEXT,
+            module TEXT,
+            entity_type TEXT,
+            entity_id TEXT,
+            description TEXT,
+            old_value TEXT,
+            new_value TEXT,
+            timestamp TEXT,
+            FOREIGN KEY (admin_user_id) REFERENCES admin_users(id) ON DELETE SET NULL
+          )
+        ''');
+      }
 
       // 1. Classes & Sections
       await db.execute('''

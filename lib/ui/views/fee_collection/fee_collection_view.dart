@@ -54,6 +54,7 @@ class _FeeCollectionViewState extends ConsumerState<FeeCollectionView> with Sing
   String? _rapidFromMonth;
   String? _rapidToMonth;
   bool _rapidIncludeOneTimeDues = true;
+  final ScrollController _rapidDuesScrollController = ScrollController();
 
   // Last receipt tracker for quick re-print & WhatsApp
   String? _lastReceiptNumber;
@@ -154,6 +155,7 @@ class _FeeCollectionViewState extends ConsumerState<FeeCollectionView> with Sing
     _rapidTenderedController.dispose();
     _rapidTenderedFocusNode.dispose();
     _rapidReferenceController.dispose();
+    _rapidDuesScrollController.dispose();
     super.dispose();
   }
 
@@ -1279,8 +1281,10 @@ class _FeeCollectionViewState extends ConsumerState<FeeCollectionView> with Sing
                             ),
                           )
                         : Scrollbar(
+                            controller: _rapidDuesScrollController,
                             thumbVisibility: true,
                             child: ListView.separated(
+                              controller: _rapidDuesScrollController,
                               padding: EdgeInsets.zero,
                               itemCount: selectedDues.length,
                               separatorBuilder: (_, __) => const Divider(height: 1, color: AppTheme.divider),
