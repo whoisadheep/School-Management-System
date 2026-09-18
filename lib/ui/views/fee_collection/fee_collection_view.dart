@@ -49,6 +49,9 @@ class _FeeCollectionViewState extends ConsumerState<FeeCollectionView> with Sing
   List<StudentFeeLedger> _rapidStudentDues = [];
   final Set<String> _rapidSelectedLedgerIds = {};
   bool _rapidIsProcessing = false;
+  String? _rapidFromMonth;
+  String? _rapidToMonth;
+  bool _rapidIncludeOneTimeDues = true;
 
   // Last receipt tracker for quick re-print & WhatsApp
   String? _lastReceiptNumber;
@@ -56,6 +59,8 @@ class _FeeCollectionViewState extends ConsumerState<FeeCollectionView> with Sing
   double? _lastReceiptAmount;
   PaymentMethod? _lastReceiptMethod;
   List<StudentFeeLedger>? _lastReceiptLedgers;
+  String? _lastReceiptReference;
+  String? _lastReceiptPeriod;
 
   // Session & Month Range
   String? _selectedAcademicYear;
@@ -827,6 +832,10 @@ class _FeeCollectionViewState extends ConsumerState<FeeCollectionView> with Sing
   }
 
   Widget _buildRapidDuesCard() {
+    final availableMonths = _getRapidAvailableMonths();
+    final nonMonthlyCount = _rapidStudentDues.where((l) => _monthIndex(l.monthLabel) == -1).length;
+    final allSelected = _rapidStudentDues.isNotEmpty && _rapidSelectedLedgerIds.length == _rapidStudentDues.length;
+
     return Container(
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
@@ -845,9 +854,38 @@ class _FeeCollectionViewState extends ConsumerState<FeeCollectionView> with Sing
                 style: GoogleFonts.poppins(fontSize: 11, fontWeight: FontWeight.bold, color: AppTheme.primaryPurple, letterSpacing: 0.5),
               ),
               if (_rapidStudentDues.isNotEmpty)
-                Text(
-                  '${_rapidSelectedLedgerIds.length} of ${_rapidStudentDues.length} selected',
-                  style: GoogleFonts.poppins(fontSize: 11, fontWeight: FontWeight.w600, color: AppTheme.textSecondary),
+                Row(
+                  children: [
+                    Text(
+                      '${_rapidSelectedLedgerIds.length} of ${_rapidStudentDues.length} selected',
+                      style: GoogleFonts.poppins(fontSize: 11, fontWeight: FontWeight.w600, color: AppTheme.textSecondary),
+                    ),
+                    const SizedBox(width: 8),
+                    InkWell(
+                      onTap: () {
+                        setState(() {
+                          if (allSelected) {
+                            _rapidSelectedLedgerIds.clear();
+                          } else {
+                            _rapidSelectedLedgerIds.addAll(_rapidStudentDues.map((l) => l.id));
+                          }
+                          _updateRapidCalculations();
+                        });
+                      },
+                      borderRadius: BorderRadius.circular(4),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                        child: Text(
+                          allSelected ? 'Deselect All' : 'Select All',
+                          style: GoogleFonts.poppins(
+                            fontSize: 11,
+                            fontWeight: FontWeight.bold,
+                            color: AppTheme.primaryPurple,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
             ],
           ),
@@ -889,7 +927,189 @@ class _FeeCollectionViewState extends ConsumerState<FeeCollectionView> with Sing
                 ],
               ),
             )
-          else
+          else ...[
+            if (availableMonths.isNotEmpty) ...[
+              Container(
+                margin: const EdgeInsets.only(bottom: 14),
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: AppTheme.bgSurface,
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: AppTheme.divider),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        const Icon(Icons.date_range_rounded, size: 16, color: AppTheme.primaryPurple),
+                        const SizedBox(width: 6),
+                        Text(
+                          'FEE PERIOD / MONTH RANGE',
+                          style: GoogleFonts.poppins(fontSize: 10, fontWeight: FontWeight.bold, color: AppTheme.primaryPurple, letterSpacing: 0.5),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 10),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      children: [
+                        // FROM MONTH
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(color: AppTheme.divider),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Text('From: ', style: GoogleFonts.poppins(fontSize: 11, fontWeight: FontWeight.w600, color: AppTheme.textSecondary)),
+                              DropdownButton<String>(
+                                value: availableMonths.contains(_rapidFromMonth) ? _rapidFromMonth : availableMonths.first,
+                                underline: const SizedBox(),
+                                isDense: true,
+                                style: GoogleFonts.poppins(fontSize: 11, fontWeight: FontWeight.bold, color: AppTheme.textPrimary),
+                                items: availableMonths.map((m) => DropdownMenuItem(value: m, child: Text(m))).toList(),
+                                onChanged: (val) {
+                                  if (val != null) {
+                                    setState(() {
+                                      _rapidFromMonth = val;
+                                      if (_monthIndex(_rapidToMonth) < _monthIndex(val)) {
+                                        _rapidToMonth = val;
+                                      }
+                                      _applyRapidMonthRange();
+                                    });
+                                  }
+                                },
+                              ),
+                            ],
+                          ),
+                        ),
+                        const Icon(Icons.arrow_forward_rounded, size: 14, color: AppTheme.primaryPurple),
+                        // TO MONTH
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(color: AppTheme.divider),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Text('To: ', style: GoogleFonts.poppins(fontSize: 11, fontWeight: FontWeight.w600, color: AppTheme.textSecondary)),
+                              DropdownButton<String>(
+                                value: availableMonths.contains(_rapidToMonth) ? _rapidToMonth : availableMonths.last,
+                                underline: const SizedBox(),
+                                isDense: true,
+                                style: GoogleFonts.poppins(fontSize: 11, fontWeight: FontWeight.bold, color: AppTheme.textPrimary),
+                                items: availableMonths.map((m) => DropdownMenuItem(value: m, child: Text(m))).toList(),
+                                onChanged: (val) {
+                                  if (val != null) {
+                                    setState(() {
+                                      _rapidToMonth = val;
+                                      if (_monthIndex(_rapidFromMonth) > _monthIndex(val)) {
+                                        _rapidFromMonth = val;
+                                      }
+                                      _applyRapidMonthRange();
+                                    });
+                                  }
+                                },
+                              ),
+                            ],
+                          ),
+                        ),
+                        // PRESET CHIPS
+                        _buildRapidMonthPresetChip(
+                          label: '1 Mo',
+                          onTap: () {
+                            setState(() {
+                              _rapidFromMonth = availableMonths.first;
+                              _rapidToMonth = availableMonths.first;
+                              _applyRapidMonthRange();
+                            });
+                          },
+                        ),
+                        _buildRapidMonthPresetChip(
+                          label: '3 Mo (Qtr)',
+                          onTap: () {
+                            setState(() {
+                              _rapidFromMonth = availableMonths.first;
+                              _rapidToMonth = availableMonths.length >= 3 ? availableMonths[2] : availableMonths.last;
+                              _applyRapidMonthRange();
+                            });
+                          },
+                        ),
+                        _buildRapidMonthPresetChip(
+                          label: '6 Mo (Half)',
+                          onTap: () {
+                            setState(() {
+                              _rapidFromMonth = availableMonths.first;
+                              _rapidToMonth = availableMonths.length >= 6 ? availableMonths[5] : availableMonths.last;
+                              _applyRapidMonthRange();
+                            });
+                          },
+                        ),
+                        _buildRapidMonthPresetChip(
+                          label: 'All (${availableMonths.length})',
+                          isHighlight: true,
+                          onTap: () {
+                            setState(() {
+                              _rapidFromMonth = availableMonths.first;
+                              _rapidToMonth = availableMonths.last;
+                              _applyRapidMonthRange();
+                            });
+                          },
+                        ),
+                      ],
+                    ),
+                    if (nonMonthlyCount > 0) ...[
+                      const SizedBox(height: 8),
+                      InkWell(
+                        onTap: () {
+                          setState(() {
+                            _rapidIncludeOneTimeDues = !_rapidIncludeOneTimeDues;
+                            _applyRapidMonthRange();
+                          });
+                        },
+                        borderRadius: BorderRadius.circular(6),
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 2),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              SizedBox(
+                                width: 24,
+                                height: 24,
+                                child: Checkbox(
+                                  value: _rapidIncludeOneTimeDues,
+                                  activeColor: AppTheme.primaryPurple,
+                                  onChanged: (v) {
+                                    setState(() {
+                                      _rapidIncludeOneTimeDues = v ?? true;
+                                      _applyRapidMonthRange();
+                                    });
+                                  },
+                                ),
+                              ),
+                              const SizedBox(width: 6),
+                              Text(
+                                'Include One-Time / Annual Fees ($nonMonthlyCount dues)',
+                                style: GoogleFonts.poppins(fontSize: 11, fontWeight: FontWeight.w500, color: AppTheme.textPrimary),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            ],
             ListView.separated(
               shrinkWrap: true,
               physics: const NeverScrollableScrollPhysics(),
@@ -964,7 +1184,35 @@ class _FeeCollectionViewState extends ConsumerState<FeeCollectionView> with Sing
                 );
               },
             ),
+          ],
         ],
+      ),
+    );
+  }
+
+  Widget _buildRapidMonthPresetChip({
+    required String label,
+    required VoidCallback onTap,
+    bool isHighlight = false,
+  }) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(6),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+        decoration: BoxDecoration(
+          color: isHighlight ? AppTheme.primaryPurple : Colors.white,
+          borderRadius: BorderRadius.circular(6),
+          border: Border.all(color: isHighlight ? AppTheme.primaryPurple : AppTheme.divider),
+        ),
+        child: Text(
+          label,
+          style: GoogleFonts.poppins(
+            fontSize: 11,
+            fontWeight: FontWeight.w600,
+            color: isHighlight ? Colors.white : AppTheme.primaryPurple,
+          ),
+        ),
       ),
     );
   }
@@ -1232,6 +1480,59 @@ class _FeeCollectionViewState extends ConsumerState<FeeCollectionView> with Sing
     }
   }
 
+  List<String> _getRapidAvailableMonths() {
+    final months = <String>[];
+    for (final l in _rapidStudentDues) {
+      if (l.monthLabel != null && !months.contains(l.monthLabel!)) {
+        months.add(l.monthLabel!);
+      }
+    }
+    months.sort((a, b) => _monthIndex(a).compareTo(_monthIndex(b)));
+    return months;
+  }
+
+  void _applyRapidMonthRange() {
+    final available = _getRapidAvailableMonths();
+    if (available.isEmpty) {
+      _rapidSelectedLedgerIds.clear();
+      if (_rapidIncludeOneTimeDues) {
+        for (final l in _rapidStudentDues) {
+          _rapidSelectedLedgerIds.add(l.id);
+        }
+      }
+      _updateRapidCalculations();
+      return;
+    }
+
+    if (_rapidFromMonth == null || !available.contains(_rapidFromMonth)) {
+      _rapidFromMonth = available.first;
+    }
+    if (_rapidToMonth == null || !available.contains(_rapidToMonth)) {
+      _rapidToMonth = available.last;
+    }
+
+    final fromIdx = _monthIndex(_rapidFromMonth);
+    final toIdx = _monthIndex(_rapidToMonth);
+    final minIdx = fromIdx <= toIdx ? fromIdx : toIdx;
+    final maxIdx = fromIdx <= toIdx ? toIdx : fromIdx;
+
+    _rapidSelectedLedgerIds.clear();
+    for (final l in _rapidStudentDues) {
+      final idx = _monthIndex(l.monthLabel);
+      if (idx != -1) {
+        if (idx >= minIdx && idx <= maxIdx) {
+          _rapidSelectedLedgerIds.add(l.id);
+        }
+      } else {
+        if (_rapidIncludeOneTimeDues) {
+          _rapidSelectedLedgerIds.add(l.id);
+        }
+      }
+    }
+
+    _updateRapidCalculations();
+  }
+
   Future<void> _selectRapidStudent(Student student) async {
     setState(() {
       _rapidStudent = student;
@@ -1240,6 +1541,9 @@ class _FeeCollectionViewState extends ConsumerState<FeeCollectionView> with Sing
       _rapidPaidAmountController.clear();
       _rapidTenderedController.clear();
       _rapidReferenceController.clear();
+      _rapidFromMonth = null;
+      _rapidToMonth = null;
+      _rapidIncludeOneTimeDues = true;
     });
 
     final dbService = ref.read(databaseServiceProvider);
@@ -1251,18 +1555,15 @@ class _FeeCollectionViewState extends ConsumerState<FeeCollectionView> with Sing
     final unpaid = ledgers.where((l) => l.status != LedgerStatus.paid && l.remainingAmount > 0).toList();
     unpaid.sort((a, b) => a.dueDate.compareTo(b.dueDate));
 
-    double totalDue = 0.0;
-    final selectedIds = <String>{};
-    for (final l in unpaid) {
-      selectedIds.add(l.id);
-      totalDue += l.remainingAmount;
-    }
-
     if (mounted) {
       setState(() {
         _rapidStudentDues = unpaid;
-        _rapidSelectedLedgerIds.addAll(selectedIds);
-        _rapidPaidAmountController.text = totalDue > 0 ? totalDue.toStringAsFixed(0) : '0';
+        final available = _getRapidAvailableMonths();
+        if (available.isNotEmpty) {
+          _rapidFromMonth = available.first;
+          _rapidToMonth = available.last;
+        }
+        _applyRapidMonthRange();
       });
 
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -1326,6 +1627,14 @@ class _FeeCollectionViewState extends ConsumerState<FeeCollectionView> with Sing
     final student = _rapidStudent!;
     final acadYear = _selectedAcademicYear ?? '2026-2027';
 
+    final periodInfo = (_rapidFromMonth != null && _rapidToMonth != null && _getRapidAvailableMonths().isNotEmpty)
+        ? (_rapidFromMonth == _rapidToMonth ? _rapidFromMonth! : '$_rapidFromMonth to $_rapidToMonth')
+        : null;
+    final userRef = _rapidReferenceController.text.trim();
+    final combinedRef = userRef.isNotEmpty
+        ? (periodInfo != null ? '$userRef (Period: $periodInfo)' : userRef)
+        : (periodInfo != null ? 'Period: $periodInfo' : null);
+
     try {
       final updatedLedgers = await dbService.recordMultiMonthPayment(
         studentId: student.id,
@@ -1333,7 +1642,7 @@ class _FeeCollectionViewState extends ConsumerState<FeeCollectionView> with Sing
         ledgerIds: selectedLedgers.map((l) => l.id).toList(),
         paymentMethod: _rapidPaymentMethod,
         paidAmount: paidAmount,
-        referenceNumber: _rapidReferenceController.text.trim().isNotEmpty ? _rapidReferenceController.text.trim() : null,
+        referenceNumber: combinedRef,
       );
 
       final receiptNumber = await dbService.getNextReceiptNumber();
@@ -1343,6 +1652,8 @@ class _FeeCollectionViewState extends ConsumerState<FeeCollectionView> with Sing
       _lastReceiptAmount = paidAmount;
       _lastReceiptMethod = _rapidPaymentMethod;
       _lastReceiptLedgers = updatedLedgers;
+      _lastReceiptReference = combinedRef;
+      _lastReceiptPeriod = periodInfo;
 
       ref.invalidate(studentsListProvider);
       ref.invalidate(studentFeeLedgerProvider);
@@ -1357,7 +1668,7 @@ class _FeeCollectionViewState extends ConsumerState<FeeCollectionView> with Sing
           paidLedgers: updatedLedgers,
           totalAmount: paidAmount,
           paymentMethod: _rapidPaymentMethod,
-          referenceNumber: _rapidReferenceController.text.trim().isNotEmpty ? _rapidReferenceController.text.trim() : null,
+          referenceNumber: combinedRef,
           academicYear: acadYear,
           receiptNumber: receiptNumber,
         );
@@ -1388,6 +1699,9 @@ class _FeeCollectionViewState extends ConsumerState<FeeCollectionView> with Sing
       _rapidStudentDues = [];
       _rapidSelectedLedgerIds.clear();
       _rapidPaymentMethod = PaymentMethod.cash;
+      _rapidFromMonth = null;
+      _rapidToMonth = null;
+      _rapidIncludeOneTimeDues = true;
     });
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -1405,10 +1719,11 @@ class _FeeCollectionViewState extends ConsumerState<FeeCollectionView> with Sing
         '';
     final cleanPhone = phone.replaceAll(RegExp(r'\D'), '');
     final dateStr = DateFormat('dd MMM yyyy, hh:mm a').format(DateTime.now());
+    final periodLine = _lastReceiptPeriod != null ? 'Fee Period: $_lastReceiptPeriod\n' : '';
     final msg = '''*FEE PAYMENT RECEIPT*
 Student: ${_lastReceiptStudent!.name} (${_lastReceiptStudent!.gradeLevel})
 Receipt No: $_lastReceiptNumber
-Amount Paid: ${_currencyFormat.format(_lastReceiptAmount ?? 0)}
+${periodLine}Amount Paid: ${_currencyFormat.format(_lastReceiptAmount ?? 0)}
 Payment Mode: ${_lastReceiptMethod?.displayName ?? 'Cash'}
 Date: $dateStr
 
@@ -1434,6 +1749,7 @@ Thank you for your payment!''';
       paymentMethod: _lastReceiptMethod ?? PaymentMethod.cash,
       academicYear: _selectedAcademicYear,
       receiptNumber: _lastReceiptNumber!,
+      referenceNumber: _lastReceiptReference,
     );
   }
 
