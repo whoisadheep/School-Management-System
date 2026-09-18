@@ -38,7 +38,9 @@ class _FeeCollectionViewState extends ConsumerState<FeeCollectionView> with Sing
 
   // Rapid Express Counter State & Controllers
   final TextEditingController _rapidSearchController = TextEditingController();
-  final FocusNode _rapidSearchFocusNode = FocusNode();
+  late final FocusNode _rapidSearchFocusNode;
+  int _rapidHighlightedSuggestionIndex = 0;
+  int _rapidSuggestionsCount = 0;
   final TextEditingController _rapidPaidAmountController = TextEditingController();
   final FocusNode _rapidPaidFocusNode = FocusNode();
   final TextEditingController _rapidTenderedController = TextEditingController();
@@ -89,10 +91,56 @@ class _FeeCollectionViewState extends ConsumerState<FeeCollectionView> with Sing
   void initState() {
     super.initState();
     _tabController = TabController(length: 4, vsync: this);
+    _tabController.addListener(_handleTabChange);
+
+    _rapidSearchFocusNode = FocusNode(
+      debugLabel: 'RapidSearchFocusNode',
+      onKeyEvent: (node, event) {
+        if (event is KeyDownEvent) {
+          if (event.logicalKey == LogicalKeyboardKey.arrowDown) {
+            if (_rapidSuggestionsCount > 0) {
+              setState(() {
+                _rapidHighlightedSuggestionIndex =
+                    (_rapidHighlightedSuggestionIndex + 1) % _rapidSuggestionsCount;
+              });
+              return KeyEventResult.handled;
+            }
+          } else if (event.logicalKey == LogicalKeyboardKey.arrowUp) {
+            if (_rapidSuggestionsCount > 0) {
+              setState(() {
+                _rapidHighlightedSuggestionIndex =
+                    (_rapidHighlightedSuggestionIndex - 1 + _rapidSuggestionsCount) % _rapidSuggestionsCount;
+              });
+              return KeyEventResult.handled;
+            }
+          }
+        }
+        return KeyEventResult.ignored;
+      },
+    );
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _focusRapidSearch();
+    });
+  }
+
+  void _handleTabChange() {
+    if (_tabController.index == 0) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _focusRapidSearch();
+      });
+    }
+  }
+
+  void _focusRapidSearch() {
+    if (mounted && _rapidSearchFocusNode.canRequestFocus) {
+      _rapidSearchFocusNode.requestFocus();
+    }
   }
 
   @override
   void dispose() {
+    _tabController.removeListener(_handleTabChange);
     _tabController.dispose();
     _studentSearchController.dispose();
     _invoiceSearchController.dispose();
@@ -282,6 +330,57 @@ class _FeeCollectionViewState extends ConsumerState<FeeCollectionView> with Sing
     );
   }
 
+  void _rapidPreset1Month() {
+    final available = _getRapidAvailableMonths();
+    if (available.isNotEmpty) {
+      setState(() {
+        _rapidFromMonth = available.first;
+        _rapidToMonth = available.first;
+        _applyRapidMonthRange();
+      });
+    }
+  }
+
+  void _rapidPresetQuarter() {
+    final available = _getRapidAvailableMonths();
+    if (available.isNotEmpty) {
+      setState(() {
+        _rapidFromMonth = available.first;
+        _rapidToMonth = available.length >= 3 ? available[2] : available.last;
+        _applyRapidMonthRange();
+      });
+    }
+  }
+
+  void _rapidPresetHalfYear() {
+    final available = _getRapidAvailableMonths();
+    if (available.isNotEmpty) {
+      setState(() {
+        _rapidFromMonth = available.first;
+        _rapidToMonth = available.length >= 6 ? available[5] : available.last;
+        _applyRapidMonthRange();
+      });
+    }
+  }
+
+  void _rapidPresetAllMonths() {
+    final available = _getRapidAvailableMonths();
+    if (available.isNotEmpty) {
+      setState(() {
+        _rapidFromMonth = available.first;
+        _rapidToMonth = available.last;
+        _applyRapidMonthRange();
+      });
+    }
+  }
+
+  void _rapidToggleAnnualFees() {
+    setState(() {
+      _rapidIncludeOneTimeDues = !_rapidIncludeOneTimeDues;
+      _applyRapidMonthRange();
+    });
+  }
+
   // ============================================================================
   // TAB 0: RAPID EXPRESS FEE COUNTER (HIGH-SPEED KEYBOARD WORKFLOW)
   // ============================================================================
@@ -294,60 +393,65 @@ class _FeeCollectionViewState extends ConsumerState<FeeCollectionView> with Sing
     return CallbackShortcuts(
       bindings: {
         const SingleActivator(LogicalKeyboardKey.escape): _resetRapidCounter,
-        const SingleActivator(LogicalKeyboardKey.digit1, alt: true): () => setState(() => _rapidPaymentMethod = PaymentMethod.cash),
-        const SingleActivator(LogicalKeyboardKey.digit2, alt: true): () => setState(() => _rapidPaymentMethod = PaymentMethod.online),
-        const SingleActivator(LogicalKeyboardKey.digit3, alt: true): () => setState(() => _rapidPaymentMethod = PaymentMethod.cheque),
-        const SingleActivator(LogicalKeyboardKey.digit4, alt: true): () => setState(() => _rapidPaymentMethod = PaymentMethod.bankTransfer),
+        const SingleActivator(LogicalKeyboardKey.digit1, alt: true): () => _setRapidPaymentMethod(PaymentMethod.cash),
+        const SingleActivator(LogicalKeyboardKey.digit2, alt: true): () => _setRapidPaymentMethod(PaymentMethod.online),
+        const SingleActivator(LogicalKeyboardKey.digit3, alt: true): () => _setRapidPaymentMethod(PaymentMethod.cheque),
+        const SingleActivator(LogicalKeyboardKey.digit4, alt: true): () => _setRapidPaymentMethod(PaymentMethod.bankTransfer),
+        const SingleActivator(LogicalKeyboardKey.f1): _rapidPreset1Month,
         const SingleActivator(LogicalKeyboardKey.f2): _shareLastReceiptWhatsApp,
+        const SingleActivator(LogicalKeyboardKey.f3): _rapidPresetQuarter,
+        const SingleActivator(LogicalKeyboardKey.f4): _rapidPresetHalfYear,
+        const SingleActivator(LogicalKeyboardKey.f5): _rapidPresetAllMonths,
+        const SingleActivator(LogicalKeyboardKey.keyA, alt: true): _rapidToggleAnnualFees,
+        const SingleActivator(LogicalKeyboardKey.f9): _executeRapidPayment,
+        const SingleActivator(LogicalKeyboardKey.enter, control: true): _executeRapidPayment,
+        const SingleActivator(LogicalKeyboardKey.keyP, control: true): _reprintLastReceipt,
       },
-      child: Focus(
-        autofocus: true,
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(24),
-          child: Center(
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 1200),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  _buildRapidCounterHeader(metricsAsync),
-                  const SizedBox(height: 20),
-                  Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      // Left Column: Search, Student Snapshot, Payment Mode
-                      Expanded(
-                        flex: 5,
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.stretch,
-                          children: [
-                            _buildRapidSearchCard(allStudents),
-                            const SizedBox(height: 16),
-                            _buildRapidStudentCard(),
-                            const SizedBox(height: 16),
-                            _buildRapidPaymentMethodCard(),
-                          ],
-                        ),
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+        child: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 1200),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                _buildRapidCounterHeader(metricsAsync),
+                const SizedBox(height: 12),
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Left Column: Search, Student Snapshot, Payment Mode
+                    Expanded(
+                      flex: 5,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          _buildRapidSearchCard(allStudents),
+                          const SizedBox(height: 12),
+                          _buildRapidStudentCard(),
+                          const SizedBox(height: 12),
+                          _buildRapidPaymentMethodCard(),
+                        ],
                       ),
-                      const SizedBox(width: 20),
-                      // Right Column: Outstanding Dues & Tendered / Change Checkout
-                      Expanded(
-                        flex: 7,
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.stretch,
-                          children: [
-                            _buildRapidDuesCard(),
-                            const SizedBox(height: 16),
-                            _buildRapidCheckoutCard(),
-                          ],
-                        ),
+                    ),
+                    const SizedBox(width: 14),
+                    // Right Column: Outstanding Dues & Tendered / Change Checkout
+                    Expanded(
+                      flex: 7,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          _buildRapidDuesCard(),
+                          const SizedBox(height: 12),
+                          _buildRapidCheckoutCard(),
+                        ],
                       ),
-                    ],
-                  ),
-                  const SizedBox(height: 16),
-                  _buildRapidKeyboardHintsFooter(),
-                ],
-              ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                _buildRapidKeyboardHintsFooter(),
+              ],
             ),
           ),
         ),
@@ -503,9 +607,10 @@ class _FeeCollectionViewState extends ConsumerState<FeeCollectionView> with Sing
             return adm.contains(query) || roll.contains(query) || name.contains(query);
           }).take(4).toList()
         : <Student>[];
+    _rapidSuggestionsCount = suggestions.length;
 
     return Container(
-      padding: const EdgeInsets.all(18),
+      padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(14),
@@ -528,13 +633,15 @@ class _FeeCollectionViewState extends ConsumerState<FeeCollectionView> with Sing
               ),
             ],
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 10),
           TextField(
             controller: _rapidSearchController,
             focusNode: _rapidSearchFocusNode,
             autofocus: true,
-            onChanged: (_) => setState(() {}),
-            onSubmitted: (val) => _handleRapidSearchSubmit(val, allStudents),
+            onChanged: (_) => setState(() {
+              _rapidHighlightedSuggestionIndex = 0;
+            }),
+            onSubmitted: (val) => _handleRapidSearchSubmit(val, allStudents, suggestions),
             decoration: InputDecoration(
               prefixIcon: Icon(Icons.flash_on_rounded, color: Colors.amber[700]),
               suffixIcon: _rapidSearchController.text.isNotEmpty
@@ -542,15 +649,17 @@ class _FeeCollectionViewState extends ConsumerState<FeeCollectionView> with Sing
                       icon: const Icon(Icons.clear, size: 18),
                       onPressed: () {
                         _rapidSearchController.clear();
-                        setState(() {});
+                        setState(() {
+                          _rapidHighlightedSuggestionIndex = 0;
+                        });
                       },
                     )
                   : null,
               hintText: 'Type Roll No, Adm No, or Student Name...',
-              hintStyle: GoogleFonts.poppins(fontSize: 13, color: AppTheme.textHint),
+              hintStyle: GoogleFonts.poppins(fontSize: 12, color: AppTheme.textHint),
               filled: true,
               fillColor: AppTheme.bgSurface,
-              contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+              contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
               border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(10),
                 borderSide: BorderSide.none,
@@ -558,59 +667,103 @@ class _FeeCollectionViewState extends ConsumerState<FeeCollectionView> with Sing
             ),
             style: GoogleFonts.poppins(fontSize: 13, fontWeight: FontWeight.w600),
           ),
-          // Suggestions dropdown list
+          // Suggestions dropdown list with keyboard navigation
           if (suggestions.isNotEmpty) ...[
-            const SizedBox(height: 8),
+            const SizedBox(height: 6),
             Container(
               decoration: BoxDecoration(
                 color: Colors.white,
-                borderRadius: BorderRadius.circular(10),
-                border: Border.all(color: AppTheme.divider),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: AppTheme.primaryPurple.withValues(alpha: 0.3)),
                 boxShadow: [
-                  BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 8, offset: const Offset(0, 3)),
+                  BoxShadow(color: Colors.black.withValues(alpha: 0.06), blurRadius: 8, offset: const Offset(0, 3)),
                 ],
               ),
-              child: ListView.separated(
-                shrinkWrap: true,
-                physics: const NeverScrollableScrollPhysics(),
-                itemCount: suggestions.length,
-                separatorBuilder: (_, __) => const Divider(height: 1, color: AppTheme.divider),
-                itemBuilder: (context, idx) {
-                  final s = suggestions[idx];
-                  return InkWell(
-                    onTap: () => _selectRapidStudent(s),
-                    borderRadius: BorderRadius.circular(10),
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                      child: Row(
-                        children: [
-                          CircleAvatar(
-                            radius: 14,
-                            backgroundColor: AppTheme.primaryPurple.withValues(alpha: 0.1),
-                            child: Text(
-                              s.name.isNotEmpty ? s.name[0].toUpperCase() : '?',
-                              style: GoogleFonts.poppins(fontSize: 12, fontWeight: FontWeight.bold, color: AppTheme.primaryPurple),
-                            ),
-                          ),
-                          const SizedBox(width: 10),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(s.name, style: GoogleFonts.poppins(fontSize: 12, fontWeight: FontWeight.w600, color: AppTheme.textPrimary)),
-                                Text(
-                                  'Adm: ${s.admissionNumber ?? 'N/A'} • Roll: ${s.rollNumber ?? 'N/A'} • ${s.gradeLevel}',
-                                  style: GoogleFonts.poppins(fontSize: 10, color: AppTheme.textSecondary),
+              child: Column(
+                children: [
+                  ListView.separated(
+                    shrinkWrap: true,
+                    physics: const NeverScrollableScrollPhysics(),
+                    padding: EdgeInsets.zero,
+                    itemCount: suggestions.length,
+                    separatorBuilder: (_, __) => const Divider(height: 1, color: AppTheme.divider),
+                    itemBuilder: (context, idx) {
+                      final s = suggestions[idx];
+                      final isHighlighted = idx == _rapidHighlightedSuggestionIndex;
+
+                      return InkWell(
+                        onTap: () => _selectRapidStudent(s),
+                        borderRadius: BorderRadius.circular(8),
+                        child: Container(
+                          color: isHighlighted ? AppTheme.primaryPurple.withValues(alpha: 0.08) : Colors.transparent,
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                          child: Row(
+                            children: [
+                              CircleAvatar(
+                                radius: 12,
+                                backgroundColor: isHighlighted ? AppTheme.primaryPurple : AppTheme.primaryPurple.withValues(alpha: 0.1),
+                                child: Text(
+                                  s.name.isNotEmpty ? s.name[0].toUpperCase() : '?',
+                                  style: GoogleFonts.poppins(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.bold,
+                                    color: isHighlighted ? Colors.white : AppTheme.primaryPurple,
+                                  ),
                                 ),
-                              ],
-                            ),
+                              ),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      s.name,
+                                      style: GoogleFonts.poppins(fontSize: 12, fontWeight: FontWeight.w600, color: AppTheme.textPrimary),
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                    Text(
+                                      'Adm: ${s.admissionNumber ?? 'N/A'} • Roll: ${s.rollNumber ?? 'N/A'} • ${s.gradeLevel}',
+                                      style: GoogleFonts.poppins(fontSize: 10, color: AppTheme.textSecondary),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              if (isHighlighted)
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                  decoration: BoxDecoration(
+                                    color: AppTheme.primaryPurple,
+                                    borderRadius: BorderRadius.circular(4),
+                                  ),
+                                  child: Text(
+                                    'Enter',
+                                    style: GoogleFonts.poppins(fontSize: 9, fontWeight: FontWeight.bold, color: Colors.white),
+                                  ),
+                                )
+                              else
+                                const Icon(Icons.arrow_forward_rounded, size: 14, color: AppTheme.textHint),
+                            ],
                           ),
-                          const Icon(Icons.arrow_forward_rounded, size: 14, color: AppTheme.textSecondary),
-                        ],
-                      ),
+                        ),
+                      );
+                    },
+                  ),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                    decoration: const BoxDecoration(
+                      color: AppTheme.bgSurface,
+                      borderRadius: BorderRadius.vertical(bottom: Radius.circular(8)),
                     ),
-                  );
-                },
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text('Use ↑ ↓ to navigate, [Enter] to select', style: GoogleFonts.poppins(fontSize: 9, color: AppTheme.textHint)),
+                        Text('${suggestions.length} matches', style: GoogleFonts.poppins(fontSize: 9, fontWeight: FontWeight.w600, color: AppTheme.textSecondary)),
+                      ],
+                    ),
+                  ),
+                ],
               ),
             ),
           ],
@@ -794,7 +947,7 @@ class _FeeCollectionViewState extends ConsumerState<FeeCollectionView> with Sing
     final isSelected = _rapidPaymentMethod == method;
     return Expanded(
       child: InkWell(
-        onTap: () => setState(() => _rapidPaymentMethod = method),
+        onTap: () => _setRapidPaymentMethod(method),
         borderRadius: BorderRadius.circular(10),
         child: Container(
           padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 4),
@@ -831,13 +984,31 @@ class _FeeCollectionViewState extends ConsumerState<FeeCollectionView> with Sing
     );
   }
 
+  void _setRapidPaymentMethod(PaymentMethod method) {
+    setState(() => _rapidPaymentMethod = method);
+    if (_rapidStudent != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (method == PaymentMethod.cash) {
+          if (_rapidTenderedFocusNode.canRequestFocus) {
+            _rapidTenderedFocusNode.requestFocus();
+          }
+        } else {
+          if (_rapidPaidFocusNode.canRequestFocus) {
+            _rapidPaidFocusNode.requestFocus();
+          }
+        }
+      });
+    }
+  }
+
   Widget _buildRapidDuesCard() {
     final availableMonths = _getRapidAvailableMonths();
     final nonMonthlyCount = _rapidStudentDues.where((l) => _monthIndex(l.monthLabel) == -1).length;
-    final allSelected = _rapidStudentDues.isNotEmpty && _rapidSelectedLedgerIds.length == _rapidStudentDues.length;
+    final selectedDues = _rapidStudentDues.where((l) => _rapidSelectedLedgerIds.contains(l.id)).toList();
+    final double totalSelectedDue = selectedDues.fold(0.0, (sum, l) => sum + l.remainingAmount);
 
     return Container(
-      padding: const EdgeInsets.all(18),
+      padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(14),
@@ -854,66 +1025,37 @@ class _FeeCollectionViewState extends ConsumerState<FeeCollectionView> with Sing
                 style: GoogleFonts.poppins(fontSize: 11, fontWeight: FontWeight.bold, color: AppTheme.primaryPurple, letterSpacing: 0.5),
               ),
               if (_rapidStudentDues.isNotEmpty)
-                Row(
-                  children: [
-                    Text(
-                      '${_rapidSelectedLedgerIds.length} of ${_rapidStudentDues.length} selected',
-                      style: GoogleFonts.poppins(fontSize: 11, fontWeight: FontWeight.w600, color: AppTheme.textSecondary),
-                    ),
-                    const SizedBox(width: 8),
-                    InkWell(
-                      onTap: () {
-                        setState(() {
-                          if (allSelected) {
-                            _rapidSelectedLedgerIds.clear();
-                          } else {
-                            _rapidSelectedLedgerIds.addAll(_rapidStudentDues.map((l) => l.id));
-                          }
-                          _updateRapidCalculations();
-                        });
-                      },
-                      borderRadius: BorderRadius.circular(4),
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                        child: Text(
-                          allSelected ? 'Deselect All' : 'Select All',
-                          style: GoogleFonts.poppins(
-                            fontSize: 11,
-                            fontWeight: FontWeight.bold,
-                            color: AppTheme.primaryPurple,
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
+                Text(
+                  '${selectedDues.length} fees selected • Total: ${_currencyFormat.format(totalSelectedDue)}',
+                  style: GoogleFonts.poppins(fontSize: 11, fontWeight: FontWeight.w600, color: AppTheme.primaryPurple),
                 ),
             ],
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 10),
           if (_rapidStudent == null)
             Padding(
               padding: const EdgeInsets.symmetric(vertical: 36),
               child: Center(
                 child: Column(
                   children: [
-                    Icon(Icons.receipt_outlined, size: 40, color: AppTheme.textHint.withValues(alpha: 0.4)),
+                    Icon(Icons.receipt_outlined, size: 36, color: AppTheme.textHint.withValues(alpha: 0.4)),
                     const SizedBox(height: 8),
                     Text('No dues loaded', style: GoogleFonts.poppins(fontSize: 13, fontWeight: FontWeight.w600, color: AppTheme.textSecondary)),
-                    Text('Select a student on the left to pull live dues.', style: GoogleFonts.poppins(fontSize: 11, color: AppTheme.textHint)),
+                    Text('Scan/Type student roll or admission number above.', style: GoogleFonts.poppins(fontSize: 11, color: AppTheme.textHint)),
                   ],
                 ),
               ),
             )
           else if (_rapidStudentDues.isEmpty)
             Container(
-              padding: const EdgeInsets.all(20),
+              padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
                 color: AppTheme.successLight,
                 borderRadius: BorderRadius.circular(10),
               ),
               child: Row(
                 children: [
-                  const Icon(Icons.check_circle_rounded, color: AppTheme.success, size: 28),
+                  const Icon(Icons.check_circle_rounded, color: AppTheme.success, size: 26),
                   const SizedBox(width: 12),
                   Expanded(
                     child: Column(
@@ -928,261 +1070,294 @@ class _FeeCollectionViewState extends ConsumerState<FeeCollectionView> with Sing
               ),
             )
           else ...[
+            // Period / Month Range Selector Bar (NO CHECKMARKS)
             if (availableMonths.isNotEmpty) ...[
               Container(
-                margin: const EdgeInsets.only(bottom: 14),
-                padding: const EdgeInsets.all(12),
+                margin: const EdgeInsets.only(bottom: 10),
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                 decoration: BoxDecoration(
                   color: AppTheme.bgSurface,
-                  borderRadius: BorderRadius.circular(10),
+                  borderRadius: BorderRadius.circular(8),
                   border: Border.all(color: AppTheme.divider),
                 ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+                child: Wrap(
+                  spacing: 8,
+                  runSpacing: 6,
+                  crossAxisAlignment: WrapCrossAlignment.center,
                   children: [
-                    Row(
-                      children: [
-                        const Icon(Icons.date_range_rounded, size: 16, color: AppTheme.primaryPurple),
-                        const SizedBox(width: 6),
-                        Text(
-                          'FEE PERIOD / MONTH RANGE',
-                          style: GoogleFonts.poppins(fontSize: 10, fontWeight: FontWeight.bold, color: AppTheme.primaryPurple, letterSpacing: 0.5),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 10),
-                    Wrap(
-                      spacing: 8,
-                      runSpacing: 8,
-                      crossAxisAlignment: WrapCrossAlignment.center,
-                      children: [
-                        // FROM MONTH
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 2),
-                          decoration: BoxDecoration(
-                            color: Colors.white,
-                            borderRadius: BorderRadius.circular(8),
-                            border: Border.all(color: AppTheme.divider),
-                          ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Text('From: ', style: GoogleFonts.poppins(fontSize: 11, fontWeight: FontWeight.w600, color: AppTheme.textSecondary)),
-                              DropdownButton<String>(
-                                value: availableMonths.contains(_rapidFromMonth) ? _rapidFromMonth : availableMonths.first,
-                                underline: const SizedBox(),
-                                isDense: true,
-                                style: GoogleFonts.poppins(fontSize: 11, fontWeight: FontWeight.bold, color: AppTheme.textPrimary),
-                                items: availableMonths.map((m) => DropdownMenuItem(value: m, child: Text(m))).toList(),
-                                onChanged: (val) {
-                                  if (val != null) {
-                                    setState(() {
-                                      _rapidFromMonth = val;
-                                      if (_monthIndex(_rapidToMonth) < _monthIndex(val)) {
-                                        _rapidToMonth = val;
-                                      }
-                                      _applyRapidMonthRange();
-                                    });
-                                  }
-                                },
-                              ),
-                            ],
-                          ),
-                        ),
-                        const Icon(Icons.arrow_forward_rounded, size: 14, color: AppTheme.primaryPurple),
-                        // TO MONTH
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 2),
-                          decoration: BoxDecoration(
-                            color: Colors.white,
-                            borderRadius: BorderRadius.circular(8),
-                            border: Border.all(color: AppTheme.divider),
-                          ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Text('To: ', style: GoogleFonts.poppins(fontSize: 11, fontWeight: FontWeight.w600, color: AppTheme.textSecondary)),
-                              DropdownButton<String>(
-                                value: availableMonths.contains(_rapidToMonth) ? _rapidToMonth : availableMonths.last,
-                                underline: const SizedBox(),
-                                isDense: true,
-                                style: GoogleFonts.poppins(fontSize: 11, fontWeight: FontWeight.bold, color: AppTheme.textPrimary),
-                                items: availableMonths.map((m) => DropdownMenuItem(value: m, child: Text(m))).toList(),
-                                onChanged: (val) {
-                                  if (val != null) {
-                                    setState(() {
-                                      _rapidToMonth = val;
-                                      if (_monthIndex(_rapidFromMonth) > _monthIndex(val)) {
-                                        _rapidFromMonth = val;
-                                      }
-                                      _applyRapidMonthRange();
-                                    });
-                                  }
-                                },
-                              ),
-                            ],
-                          ),
-                        ),
-                        // PRESET CHIPS
-                        _buildRapidMonthPresetChip(
-                          label: '1 Mo',
-                          onTap: () {
-                            setState(() {
-                              _rapidFromMonth = availableMonths.first;
-                              _rapidToMonth = availableMonths.first;
-                              _applyRapidMonthRange();
-                            });
-                          },
-                        ),
-                        _buildRapidMonthPresetChip(
-                          label: '3 Mo (Qtr)',
-                          onTap: () {
-                            setState(() {
-                              _rapidFromMonth = availableMonths.first;
-                              _rapidToMonth = availableMonths.length >= 3 ? availableMonths[2] : availableMonths.last;
-                              _applyRapidMonthRange();
-                            });
-                          },
-                        ),
-                        _buildRapidMonthPresetChip(
-                          label: '6 Mo (Half)',
-                          onTap: () {
-                            setState(() {
-                              _rapidFromMonth = availableMonths.first;
-                              _rapidToMonth = availableMonths.length >= 6 ? availableMonths[5] : availableMonths.last;
-                              _applyRapidMonthRange();
-                            });
-                          },
-                        ),
-                        _buildRapidMonthPresetChip(
-                          label: 'All (${availableMonths.length})',
-                          isHighlight: true,
-                          onTap: () {
-                            setState(() {
-                              _rapidFromMonth = availableMonths.first;
-                              _rapidToMonth = availableMonths.last;
-                              _applyRapidMonthRange();
-                            });
-                          },
-                        ),
-                      ],
-                    ),
-                    if (nonMonthlyCount > 0) ...[
-                      const SizedBox(height: 8),
-                      InkWell(
-                        onTap: () {
-                          setState(() {
-                            _rapidIncludeOneTimeDues = !_rapidIncludeOneTimeDues;
-                            _applyRapidMonthRange();
-                          });
-                        },
+                    // FROM MONTH
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
                         borderRadius: BorderRadius.circular(6),
-                        child: Padding(
-                          padding: const EdgeInsets.symmetric(vertical: 2),
+                        border: Border.all(color: AppTheme.divider),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text('From: ', style: GoogleFonts.poppins(fontSize: 11, fontWeight: FontWeight.w600, color: AppTheme.textSecondary)),
+                          DropdownButton<String>(
+                            value: availableMonths.contains(_rapidFromMonth) ? _rapidFromMonth : availableMonths.first,
+                            underline: const SizedBox(),
+                            isDense: true,
+                            style: GoogleFonts.poppins(fontSize: 11, fontWeight: FontWeight.bold, color: AppTheme.textPrimary),
+                            items: availableMonths.map((m) => DropdownMenuItem(value: m, child: Text(m))).toList(),
+                            onChanged: (val) {
+                              if (val != null) {
+                                setState(() {
+                                  _rapidFromMonth = val;
+                                  if (_monthIndex(_rapidToMonth) < _monthIndex(val)) {
+                                    _rapidToMonth = val;
+                                  }
+                                  _applyRapidMonthRange();
+                                });
+                              }
+                            },
+                          ),
+                        ],
+                      ),
+                    ),
+                    const Icon(Icons.arrow_forward_rounded, size: 12, color: AppTheme.primaryPurple),
+                    // TO MONTH
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(6),
+                        border: Border.all(color: AppTheme.divider),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text('To: ', style: GoogleFonts.poppins(fontSize: 11, fontWeight: FontWeight.w600, color: AppTheme.textSecondary)),
+                          DropdownButton<String>(
+                            value: availableMonths.contains(_rapidToMonth) ? _rapidToMonth : availableMonths.last,
+                            underline: const SizedBox(),
+                            isDense: true,
+                            style: GoogleFonts.poppins(fontSize: 11, fontWeight: FontWeight.bold, color: AppTheme.textPrimary),
+                            items: availableMonths.map((m) => DropdownMenuItem(value: m, child: Text(m))).toList(),
+                            onChanged: (val) {
+                              if (val != null) {
+                                setState(() {
+                                  _rapidToMonth = val;
+                                  if (_monthIndex(_rapidFromMonth) > _monthIndex(val)) {
+                                    _rapidFromMonth = val;
+                                  }
+                                  _applyRapidMonthRange();
+                                });
+                              }
+                            },
+                          ),
+                        ],
+                      ),
+                    ),
+                    // PRESET CHIPS WITH SHORTCUT BADGES
+                    _buildRapidMonthPresetChip(
+                      shortcut: 'F1',
+                      label: '1 Mo',
+                      onTap: _rapidPreset1Month,
+                    ),
+                    _buildRapidMonthPresetChip(
+                      shortcut: 'F3',
+                      label: '3 Mo (Qtr)',
+                      onTap: _rapidPresetQuarter,
+                    ),
+                    _buildRapidMonthPresetChip(
+                      shortcut: 'F4',
+                      label: '6 Mo (Half)',
+                      onTap: _rapidPresetHalfYear,
+                    ),
+                    _buildRapidMonthPresetChip(
+                      shortcut: 'F5',
+                      label: 'All (${availableMonths.length})',
+                      isHighlight: true,
+                      onTap: _rapidPresetAllMonths,
+                    ),
+                    if (nonMonthlyCount > 0)
+                      InkWell(
+                        onTap: _rapidToggleAnnualFees,
+                        borderRadius: BorderRadius.circular(6),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: _rapidIncludeOneTimeDues ? AppTheme.primaryPurple.withValues(alpha: 0.1) : Colors.white,
+                            borderRadius: BorderRadius.circular(6),
+                            border: Border.all(color: _rapidIncludeOneTimeDues ? AppTheme.primaryPurple : AppTheme.divider),
+                          ),
                           child: Row(
                             mainAxisSize: MainAxisSize.min,
                             children: [
-                              SizedBox(
-                                width: 24,
-                                height: 24,
-                                child: Checkbox(
-                                  value: _rapidIncludeOneTimeDues,
-                                  activeColor: AppTheme.primaryPurple,
-                                  onChanged: (v) {
-                                    setState(() {
-                                      _rapidIncludeOneTimeDues = v ?? true;
-                                      _applyRapidMonthRange();
-                                    });
-                                  },
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                                decoration: BoxDecoration(
+                                  color: _rapidIncludeOneTimeDues ? AppTheme.primaryPurple.withValues(alpha: 0.2) : AppTheme.bgSurface,
+                                  borderRadius: BorderRadius.circular(3),
+                                ),
+                                child: Text(
+                                  'Alt+A',
+                                  style: GoogleFonts.poppins(
+                                    fontSize: 9,
+                                    fontWeight: FontWeight.bold,
+                                    color: _rapidIncludeOneTimeDues ? AppTheme.primaryPurple : AppTheme.textHint,
+                                  ),
                                 ),
                               ),
-                              const SizedBox(width: 6),
+                              const SizedBox(width: 5),
                               Text(
-                                'Include One-Time / Annual Fees ($nonMonthlyCount dues)',
-                                style: GoogleFonts.poppins(fontSize: 11, fontWeight: FontWeight.w500, color: AppTheme.textPrimary),
+                                'Annual Fees: ${_rapidIncludeOneTimeDues ? "ON" : "OFF"}',
+                                style: GoogleFonts.poppins(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w600,
+                                  color: _rapidIncludeOneTimeDues ? AppTheme.primaryPurple : AppTheme.textSecondary,
+                                ),
                               ),
                             ],
                           ),
                         ),
                       ),
-                    ],
                   ],
                 ),
               ),
             ],
-            ListView.separated(
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              itemCount: _rapidStudentDues.length,
-              separatorBuilder: (_, __) => const Divider(height: 1, color: AppTheme.divider),
-              itemBuilder: (context, idx) {
-                final l = _rapidStudentDues[idx];
-                final isSelected = _rapidSelectedLedgerIds.contains(l.id);
-                final isOverdue = l.dueDate.isBefore(DateTime.now()) && l.status != LedgerStatus.paid;
-
-                return InkWell(
-                  onTap: () {
-                    setState(() {
-                      if (isSelected) {
-                        _rapidSelectedLedgerIds.remove(l.id);
-                      } else {
-                        _rapidSelectedLedgerIds.add(l.id);
-                      }
-                      _updateRapidCalculations();
-                    });
-                  },
-                  borderRadius: BorderRadius.circular(8),
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
+            // Professional Financial Ledger Table (NO CHECKMARKS, BOUNDED HEIGHT)
+            Container(
+              constraints: const BoxConstraints(maxHeight: 185),
+              decoration: BoxDecoration(
+                color: AppTheme.bgSurface,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: AppTheme.divider),
+              ),
+              child: Column(
+                children: [
+                  // Table Header
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+                    decoration: const BoxDecoration(
+                      color: Color(0xFFECEBFA),
+                      borderRadius: BorderRadius.vertical(top: Radius.circular(8)),
+                    ),
                     child: Row(
                       children: [
-                        Checkbox(
-                          value: isSelected,
-                          activeColor: AppTheme.primaryPurple,
-                          onChanged: (v) {
-                            setState(() {
-                              if (v == true) {
-                                _rapidSelectedLedgerIds.add(l.id);
-                              } else {
-                                _rapidSelectedLedgerIds.remove(l.id);
-                              }
-                              _updateRapidCalculations();
-                            });
-                          },
+                        SizedBox(
+                          width: 26,
+                          child: Text('#', style: GoogleFonts.poppins(fontSize: 10, fontWeight: FontWeight.bold, color: AppTheme.primaryPurple)),
                         ),
                         Expanded(
                           flex: 4,
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(l.feeHeadName ?? l.feeHeadId, style: GoogleFonts.poppins(fontSize: 12, fontWeight: FontWeight.w600, color: AppTheme.textPrimary)),
-                              Text(
-                                '${l.monthLabel ?? "Annual"} • Due: ${_dateFormat.format(l.dueDate)}',
-                                style: GoogleFonts.poppins(fontSize: 10, color: isOverdue ? AppTheme.error : AppTheme.textSecondary),
-                              ),
-                            ],
-                          ),
+                          child: Text('FEE HEAD', style: GoogleFonts.poppins(fontSize: 10, fontWeight: FontWeight.bold, color: AppTheme.primaryPurple)),
                         ),
-                        if (isOverdue)
-                          Container(
-                            margin: const EdgeInsets.only(right: 12),
-                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                            decoration: BoxDecoration(color: AppTheme.error.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(4)),
-                            child: Text('OVERDUE', style: GoogleFonts.poppins(fontSize: 9, fontWeight: FontWeight.bold, color: AppTheme.error)),
-                          ),
+                        Expanded(
+                          flex: 3,
+                          child: Text('PERIOD', style: GoogleFonts.poppins(fontSize: 10, fontWeight: FontWeight.bold, color: AppTheme.primaryPurple)),
+                        ),
+                        Expanded(
+                          flex: 3,
+                          child: Text('DUE DATE', style: GoogleFonts.poppins(fontSize: 10, fontWeight: FontWeight.bold, color: AppTheme.primaryPurple)),
+                        ),
                         Expanded(
                           flex: 2,
-                          child: Text(
-                            _currencyFormat.format(l.remainingAmount),
-                            style: GoogleFonts.poppins(fontSize: 13, fontWeight: FontWeight.bold, color: AppTheme.textPrimary),
-                            textAlign: TextAlign.end,
-                          ),
+                          child: Text('STATUS', style: GoogleFonts.poppins(fontSize: 10, fontWeight: FontWeight.bold, color: AppTheme.primaryPurple), textAlign: TextAlign.center),
+                        ),
+                        Expanded(
+                          flex: 3,
+                          child: Text('AMOUNT', style: GoogleFonts.poppins(fontSize: 10, fontWeight: FontWeight.bold, color: AppTheme.primaryPurple), textAlign: TextAlign.end),
                         ),
                       ],
                     ),
                   ),
-                );
-              },
+                  // Table Rows
+                  Expanded(
+                    child: selectedDues.isEmpty
+                        ? Center(
+                            child: Padding(
+                              padding: const EdgeInsets.all(16),
+                              child: Text(
+                                'No fees in current selection. Press [F1..F5] to select fee months.',
+                                style: GoogleFonts.poppins(fontSize: 11, color: AppTheme.textHint),
+                              ),
+                            ),
+                          )
+                        : Scrollbar(
+                            thumbVisibility: true,
+                            child: ListView.separated(
+                              padding: EdgeInsets.zero,
+                              itemCount: selectedDues.length,
+                              separatorBuilder: (_, __) => const Divider(height: 1, color: AppTheme.divider),
+                              itemBuilder: (context, idx) {
+                                final l = selectedDues[idx];
+                                final isOverdue = l.dueDate.isBefore(DateTime.now()) && l.status != LedgerStatus.paid;
+
+                                return Padding(
+                                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                                  child: Row(
+                                    children: [
+                                      SizedBox(
+                                        width: 26,
+                                        child: Text('${idx + 1}', style: GoogleFonts.poppins(fontSize: 11, color: AppTheme.textHint, fontWeight: FontWeight.w600)),
+                                      ),
+                                      Expanded(
+                                        flex: 4,
+                                        child: Text(
+                                          l.feeHeadName ?? l.feeHeadId,
+                                          style: GoogleFonts.poppins(fontSize: 11, fontWeight: FontWeight.w600, color: AppTheme.textPrimary),
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                      ),
+                                      Expanded(
+                                        flex: 3,
+                                        child: Text(
+                                          l.monthLabel ?? "Annual",
+                                          style: GoogleFonts.poppins(fontSize: 11, color: AppTheme.textSecondary),
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                      ),
+                                      Expanded(
+                                        flex: 3,
+                                        child: Text(
+                                          _dateFormat.format(l.dueDate),
+                                          style: GoogleFonts.poppins(fontSize: 10, color: isOverdue ? AppTheme.error : AppTheme.textSecondary),
+                                        ),
+                                      ),
+                                      Expanded(
+                                        flex: 2,
+                                        child: Center(
+                                          child: Container(
+                                            padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                                            decoration: BoxDecoration(
+                                              color: isOverdue ? AppTheme.error.withValues(alpha: 0.1) : Colors.amber.withValues(alpha: 0.15),
+                                              borderRadius: BorderRadius.circular(4),
+                                            ),
+                                            child: Text(
+                                              isOverdue ? 'OVERDUE' : 'DUE',
+                                              style: GoogleFonts.poppins(
+                                                fontSize: 8,
+                                                fontWeight: FontWeight.bold,
+                                                color: isOverdue ? AppTheme.error : Colors.amber[900],
+                                              ),
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                      Expanded(
+                                        flex: 3,
+                                        child: Text(
+                                          _currencyFormat.format(l.remainingAmount),
+                                          style: GoogleFonts.poppins(fontSize: 11, fontWeight: FontWeight.bold, color: AppTheme.textPrimary),
+                                          textAlign: TextAlign.end,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                );
+                              },
+                            ),
+                          ),
+                  ),
+                ],
+              ),
             ),
           ],
         ],
@@ -1191,6 +1366,7 @@ class _FeeCollectionViewState extends ConsumerState<FeeCollectionView> with Sing
   }
 
   Widget _buildRapidMonthPresetChip({
+    required String shortcut,
     required String label,
     required VoidCallback onTap,
     bool isHighlight = false,
@@ -1199,19 +1375,40 @@ class _FeeCollectionViewState extends ConsumerState<FeeCollectionView> with Sing
       onTap: onTap,
       borderRadius: BorderRadius.circular(6),
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
         decoration: BoxDecoration(
           color: isHighlight ? AppTheme.primaryPurple : Colors.white,
           borderRadius: BorderRadius.circular(6),
           border: Border.all(color: isHighlight ? AppTheme.primaryPurple : AppTheme.divider),
         ),
-        child: Text(
-          label,
-          style: GoogleFonts.poppins(
-            fontSize: 11,
-            fontWeight: FontWeight.w600,
-            color: isHighlight ? Colors.white : AppTheme.primaryPurple,
-          ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+              decoration: BoxDecoration(
+                color: isHighlight ? Colors.white.withValues(alpha: 0.25) : AppTheme.bgSurface,
+                borderRadius: BorderRadius.circular(3),
+              ),
+              child: Text(
+                shortcut,
+                style: GoogleFonts.poppins(
+                  fontSize: 9,
+                  fontWeight: FontWeight.bold,
+                  color: isHighlight ? Colors.white : AppTheme.primaryPurple,
+                ),
+              ),
+            ),
+            const SizedBox(width: 5),
+            Text(
+              label,
+              style: GoogleFonts.poppins(
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+                color: isHighlight ? Colors.white : AppTheme.primaryPurple,
+              ),
+            ),
+          ],
         ),
       ),
     );
@@ -1224,7 +1421,7 @@ class _FeeCollectionViewState extends ConsumerState<FeeCollectionView> with Sing
     final isCash = _rapidPaymentMethod == PaymentMethod.cash;
 
     return Container(
-      padding: const EdgeInsets.all(18),
+      padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(14),
@@ -1237,7 +1434,7 @@ class _FeeCollectionViewState extends ConsumerState<FeeCollectionView> with Sing
             '4. TENDERED & CHANGE CHECKOUT',
             style: GoogleFonts.poppins(fontSize: 11, fontWeight: FontWeight.bold, color: AppTheme.primaryPurple, letterSpacing: 0.5),
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 10),
           Row(
             children: [
               Expanded(
@@ -1263,15 +1460,16 @@ class _FeeCollectionViewState extends ConsumerState<FeeCollectionView> with Sing
                         isDense: true,
                         filled: true,
                         fillColor: AppTheme.bgSurface,
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                         border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide.none),
                       ),
-                      style: GoogleFonts.poppins(fontSize: 16, fontWeight: FontWeight.bold, color: AppTheme.textPrimary),
+                      style: GoogleFonts.poppins(fontSize: 15, fontWeight: FontWeight.bold, color: AppTheme.textPrimary),
                     ),
                   ],
                 ),
               ),
               if (isCash) ...[
-                const SizedBox(width: 14),
+                const SizedBox(width: 12),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -1291,9 +1489,10 @@ class _FeeCollectionViewState extends ConsumerState<FeeCollectionView> with Sing
                           isDense: true,
                           filled: true,
                           fillColor: AppTheme.bgSurface,
+                          contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                           border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide.none),
                         ),
-                        style: GoogleFonts.poppins(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.green[800]),
+                        style: GoogleFonts.poppins(fontSize: 15, fontWeight: FontWeight.bold, color: Colors.green[800]),
                       ),
                     ],
                   ),
@@ -1301,53 +1500,53 @@ class _FeeCollectionViewState extends ConsumerState<FeeCollectionView> with Sing
               ],
             ],
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 10),
           // Return Change Banner
           if (isCash && change > 0)
             Container(
-              margin: const EdgeInsets.only(bottom: 12),
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              margin: const EdgeInsets.only(bottom: 10),
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
               decoration: BoxDecoration(
                 color: Colors.green[50],
-                borderRadius: BorderRadius.circular(10),
-                border: Border.all(color: Colors.green[400]!),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.green[300]!),
               ),
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   Row(
                     children: [
-                      Icon(Icons.change_circle_rounded, color: Colors.green[700], size: 24),
+                      Icon(Icons.currency_exchange_rounded, color: Colors.green[700], size: 20),
                       const SizedBox(width: 8),
                       Text(
                         'RETURN CHANGE TO PARENT:',
-                        style: GoogleFonts.poppins(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.green[800]),
+                        style: GoogleFonts.poppins(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.green[800]),
                       ),
                     ],
                   ),
                   Text(
                     _currencyFormat.format(change),
-                    style: GoogleFonts.poppins(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.green[900]),
+                    style: GoogleFonts.poppins(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.green[900]),
                   ),
                 ],
               ),
             )
           else if (isCash && tendered > 0 && tendered < paid)
             Container(
-              margin: const EdgeInsets.only(bottom: 12),
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+              margin: const EdgeInsets.only(bottom: 10),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
               decoration: BoxDecoration(
                 color: Colors.amber[50],
-                borderRadius: BorderRadius.circular(10),
+                borderRadius: BorderRadius.circular(8),
                 border: Border.all(color: Colors.amber[400]!),
               ),
               child: Row(
                 children: [
-                  Icon(Icons.info_outline_rounded, color: Colors.amber[800], size: 20),
-                  const SizedBox(width: 8),
+                  Icon(Icons.info_outline_rounded, color: Colors.amber[800], size: 16),
+                  const SizedBox(width: 6),
                   Text(
                     'Short payment: ${_currencyFormat.format(paid - tendered)} balance will remain in student ledger.',
-                    style: GoogleFonts.poppins(fontSize: 12, fontWeight: FontWeight.w600, color: Colors.amber[900]),
+                    style: GoogleFonts.poppins(fontSize: 11, fontWeight: FontWeight.w600, color: Colors.amber[900]),
                   ),
                 ],
               ),
@@ -1355,7 +1554,7 @@ class _FeeCollectionViewState extends ConsumerState<FeeCollectionView> with Sing
           // Primary Instant Action Button
           SizedBox(
             width: double.infinity,
-            height: 50,
+            height: 46,
             child: ElevatedButton.icon(
               onPressed: (_rapidStudent == null || paid <= 0 || _rapidIsProcessing)
                   ? null
@@ -1366,17 +1565,17 @@ class _FeeCollectionViewState extends ConsumerState<FeeCollectionView> with Sing
                       height: 18,
                       child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
                     )
-                  : const Icon(Icons.print_rounded, size: 20),
+                  : const Icon(Icons.print_rounded, size: 18),
               label: Text(
                 _rapidIsProcessing
                     ? 'Processing Payment...'
-                    : 'ENTER ➔ RECORD & ISSUE 2-IN-1 RECEIPT',
-                style: GoogleFonts.poppins(fontSize: 13, fontWeight: FontWeight.bold, letterSpacing: 0.5),
+                    : '[ENTER] RECORD & ISSUE 2-IN-1 RECEIPT',
+                style: GoogleFonts.poppins(fontSize: 12, fontWeight: FontWeight.bold, letterSpacing: 0.5),
               ),
               style: ElevatedButton.styleFrom(
                 backgroundColor: AppTheme.primaryPurple,
                 foregroundColor: Colors.white,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                 elevation: 2,
               ),
             ),
@@ -1388,22 +1587,27 @@ class _FeeCollectionViewState extends ConsumerState<FeeCollectionView> with Sing
 
   Widget _buildRapidKeyboardHintsFooter() {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
       decoration: BoxDecoration(
         color: AppTheme.bgSurface,
         borderRadius: BorderRadius.circular(10),
         border: Border.all(color: AppTheme.divider),
       ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.center,
+      child: Wrap(
+        spacing: 12,
+        runSpacing: 6,
+        alignment: WrapAlignment.center,
         children: [
-          _buildShortcutPill('[Enter]', 'Confirm & Issue Receipt'),
-          const SizedBox(width: 16),
-          _buildShortcutPill('[Alt + 1..4]', 'Payment Mode'),
-          const SizedBox(width: 16),
-          _buildShortcutPill('[Esc]', 'Clear / New Student'),
-          const SizedBox(width: 16),
-          _buildShortcutPill('[F2]', 'WhatsApp Share'),
+          _buildShortcutPill('Enter', 'Confirm & Pay'),
+          _buildShortcutPill('F1', '1 Month'),
+          _buildShortcutPill('F3', '3 Mo (Qtr)'),
+          _buildShortcutPill('F4', '6 Mo (Half)'),
+          _buildShortcutPill('F5', 'All Mo'),
+          _buildShortcutPill('Alt+1..4', 'Mode'),
+          _buildShortcutPill('Alt+A', 'Annual Fees'),
+          _buildShortcutPill('Esc', 'Reset / Next'),
+          _buildShortcutPill('F2', 'WhatsApp'),
+          _buildShortcutPill('Ctrl+P', 'Reprint'),
         ],
       ),
     );
@@ -1436,31 +1640,41 @@ class _FeeCollectionViewState extends ConsumerState<FeeCollectionView> with Sing
     );
   }
 
-  Future<void> _handleRapidSearchSubmit(String query, List<Student> allStudents) async {
+  Future<void> _handleRapidSearchSubmit(
+    String query,
+    List<Student> allStudents, [
+    List<Student> currentSuggestions = const [],
+  ]) async {
     final q = query.trim().toLowerCase();
     if (q.isEmpty) return;
 
     Student? matched;
-    // 1. Exact match on Admission Number
-    final exactAdm = allStudents.where((s) => s.admissionNumber?.toLowerCase() == q).toList();
-    if (exactAdm.isNotEmpty) {
-      matched = exactAdm.first;
+    // 1. If suggestions dropdown is visible, select the highlighted item
+    if (currentSuggestions.isNotEmpty) {
+      final idx = _rapidHighlightedSuggestionIndex.clamp(0, currentSuggestions.length - 1);
+      matched = currentSuggestions[idx];
     } else {
-      // 2. Exact match on Roll Number
-      final exactRoll = allStudents.where((s) => s.rollNumber?.toLowerCase() == q).toList();
-      if (exactRoll.isNotEmpty) {
-        matched = exactRoll.first;
+      // 2. Exact match on Admission Number
+      final exactAdm = allStudents.where((s) => s.admissionNumber?.toLowerCase() == q).toList();
+      if (exactAdm.isNotEmpty) {
+        matched = exactAdm.first;
       } else {
-        // 3. Partial match
-        final matches = allStudents.where((s) {
-          final adm = s.admissionNumber?.toLowerCase() ?? '';
-          final roll = s.rollNumber?.toLowerCase() ?? '';
-          final name = s.name.toLowerCase();
-          return adm.contains(q) || roll.contains(q) || name.contains(q);
-        }).toList();
+        // 3. Exact match on Roll Number
+        final exactRoll = allStudents.where((s) => s.rollNumber?.toLowerCase() == q).toList();
+        if (exactRoll.isNotEmpty) {
+          matched = exactRoll.first;
+        } else {
+          // 4. Partial match on Adm, Roll, or Name
+          final matches = allStudents.where((s) {
+            final adm = s.admissionNumber?.toLowerCase() ?? '';
+            final roll = s.rollNumber?.toLowerCase() ?? '';
+            final name = s.name.toLowerCase();
+            return adm.contains(q) || roll.contains(q) || name.contains(q);
+          }).toList();
 
-        if (matches.isNotEmpty) {
-          matched = matches.first;
+          if (matches.isNotEmpty) {
+            matched = matches.first;
+          }
         }
       }
     }
@@ -1476,6 +1690,7 @@ class _FeeCollectionViewState extends ConsumerState<FeeCollectionView> with Sing
             duration: const Duration(seconds: 2),
           ),
         );
+        _focusRapidSearch();
       }
     }
   }
@@ -1567,8 +1782,14 @@ class _FeeCollectionViewState extends ConsumerState<FeeCollectionView> with Sing
       });
 
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (_rapidTenderedFocusNode.canRequestFocus) {
-          _rapidTenderedFocusNode.requestFocus();
+        if (_rapidPaymentMethod == PaymentMethod.cash) {
+          if (_rapidTenderedFocusNode.canRequestFocus) {
+            _rapidTenderedFocusNode.requestFocus();
+          }
+        } else {
+          if (_rapidPaidFocusNode.canRequestFocus) {
+            _rapidPaidFocusNode.requestFocus();
+          }
         }
       });
     }
@@ -1600,6 +1821,10 @@ class _FeeCollectionViewState extends ConsumerState<FeeCollectionView> with Sing
         );
       }
       return;
+    }
+
+    if (_rapidPaymentMethod == PaymentMethod.cash && _rapidTenderedController.text.trim().isEmpty) {
+      _rapidTenderedController.text = _rapidPaidAmountController.text.trim();
     }
 
     final paidAmount = double.tryParse(_rapidPaidAmountController.text.trim()) ?? 0.0;
@@ -2629,7 +2854,7 @@ Thank you for your payment!''';
                             Text('Payment Method *', style: GoogleFonts.poppins(fontSize: 11, fontWeight: FontWeight.w600)),
                             const SizedBox(height: 4),
                             DropdownButtonFormField<PaymentMethod>(
-                              value: _selectedMethod,
+                              initialValue: _selectedMethod,
                               decoration: InputDecoration(
                                 border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
                                 contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
@@ -3137,7 +3362,7 @@ Thank you for your payment!''';
                 ),
                 const SizedBox(height: 16),
                 DropdownButtonFormField<String>(
-                  value: selectedGrade,
+                  initialValue: selectedGrade,
                   decoration: const InputDecoration(labelText: 'Target Grade / Class', border: OutlineInputBorder()),
                   items: grades.map((g) => DropdownMenuItem(value: g, child: Text(g))).toList(),
                   onChanged: (val) {
