@@ -290,7 +290,7 @@ class ReportGenerator {
                             ),
                             pw.SizedBox(height: 1),
                             pw.Text(
-                              'Adm No: ${student.admissionNumber ?? "N/A"}  •  ID: ${student.id.substring(0, student.id.length > 8 ? 8 : student.id.length)}',
+                              'Adm No: ${student.admissionNumber ?? "N/A"}  |  ID: ${student.id.substring(0, student.id.length > 8 ? 8 : student.id.length)}',
                               style: const pw.TextStyle(fontSize: 6.8, color: PdfColors.grey700),
                               maxLines: 1,
                             ),
@@ -443,7 +443,7 @@ class ReportGenerator {
                     crossAxisAlignment: pw.CrossAxisAlignment.start,
                     children: [
                       pw.Text(
-                        isPaidFull ? '✓ STATUS: PAID' : '⚠ STATUS: PARTIAL',
+                        isPaidFull ? 'STATUS: PAID IN FULL' : 'STATUS: PARTIAL PAYMENT',
                         style: pw.TextStyle(
                           fontSize: 7.2,
                           fontWeight: pw.FontWeight.bold,
@@ -603,7 +603,7 @@ class ReportGenerator {
               mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
               children: [
                 pw.Text(
-                  'Eduvia School Management System • Official Receipt',
+                  'Eduvia School Management System | Official Receipt',
                   style: pw.TextStyle(fontSize: 5.5, color: greyColor, fontStyle: pw.FontStyle.italic),
                 ),
                 pw.Text(
@@ -1009,7 +1009,7 @@ class ReportGenerator {
                             ),
                             pw.SizedBox(height: 1),
                             pw.Text(
-                              'Adm No: ${student.admissionNumber ?? "N/A"}  •  Roll: ${student.rollNumber ?? "N/A"}',
+                              'Adm No: ${student.admissionNumber ?? "N/A"}  |  Roll: ${student.rollNumber ?? "N/A"}',
                               style: const pw.TextStyle(fontSize: 6.8, color: PdfColors.grey700),
                               maxLines: 1,
                             ),
@@ -1204,7 +1204,7 @@ class ReportGenerator {
                     crossAxisAlignment: pw.CrossAxisAlignment.start,
                     children: [
                       pw.Text(
-                        isPaidFull ? '✓ STATUS: PAID' : '⚠ STATUS: PARTIAL',
+                        isPaidFull ? 'STATUS: PAID IN FULL' : 'STATUS: PARTIAL PAYMENT',
                         style: pw.TextStyle(
                           fontSize: 7.2,
                           fontWeight: pw.FontWeight.bold,
@@ -1358,7 +1358,7 @@ class ReportGenerator {
               mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
               children: [
                 pw.Text(
-                  'Eduvia School Management System • Official Receipt',
+                  'Eduvia School Management System | Official Receipt',
                   style: pw.TextStyle(fontSize: 5.5, color: greyColor, fontStyle: pw.FontStyle.italic),
                 ),
                 pw.Text(
@@ -1723,12 +1723,12 @@ class ReportGenerator {
 
               // Details List
               _buildTcFieldRow('1. Full Name of Student:', '${student.firstName ?? student.name} ${student.lastName ?? ""}'.trim()),
-              _buildTcFieldRow('2. Mother\'s Name:', student.motherName ?? '—'),
-              _buildTcFieldRow('3. Father\'s / Guardian\'s Name:', student.fatherName ?? student.motherName ?? '—'),
+              _buildTcFieldRow('2. Mother\'s Name:', student.motherName ?? '-'),
+              _buildTcFieldRow('3. Father\'s / Guardian\'s Name:', student.fatherName ?? student.motherName ?? '-'),
               _buildTcFieldRow('4. Nationality & Religion:', 'Indian / ${student.religion ?? "General"}'),
               _buildTcFieldRow('5. Category / Caste:', student.caste ?? 'General'),
-              _buildTcFieldRow('6. Date of Admission in School:', student.admissionDate ?? '—'),
-              _buildTcFieldRow('7. Date of Birth (in Christian Era):', student.dob ?? '—'),
+              _buildTcFieldRow('6. Date of Admission in School:', student.admissionDate ?? '-'),
+              _buildTcFieldRow('7. Date of Birth (in Christian Era):', student.dob ?? '-'),
               _buildTcFieldRow('8. Class in which pupil last studied:', student.gradeLevel),
               _buildTcFieldRow('9. School / Board Annual Exam Last Taken:', '${student.gradeLevel} Passed'),
               _buildTcFieldRow('10. Whether qualified for promotion:', 'Yes, Qualified for Next Class'),
