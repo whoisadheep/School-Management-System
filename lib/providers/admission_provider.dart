@@ -34,6 +34,7 @@ class AdmissionState {
   final String permanentAddress;
   final bool sameAsResidential;
   final String transportRouteId;
+  final String transportStopId;
   final String hostelId;
 
   final String? stepError;
@@ -56,16 +57,17 @@ class AdmissionState {
     this.section = 'A',
     DateTime? admissionDate,
     this.fatherName = '',
-    this.fatherOccupation = '',
+    this.fatherOccupation = 'Business / Self-Employed',
     this.fatherPhone = '',
     this.motherName = '',
-    this.motherOccupation = '',
+    this.motherOccupation = 'Housewife',
     this.motherPhone = '',
     this.primaryContactNumber = '',
     this.residentialAddress = '',
     this.permanentAddress = '',
     this.sameAsResidential = true,
     this.transportRouteId = 'None',
+    this.transportStopId = '',
     this.hostelId = 'Day Scholar',
     this.stepError,
     this.isSubmitting = false,
@@ -112,6 +114,7 @@ class AdmissionState {
     String? permanentAddress,
     bool? sameAsResidential,
     String? transportRouteId,
+    String? transportStopId,
     String? hostelId,
     String? stepError,
     bool? isSubmitting,
@@ -143,6 +146,7 @@ class AdmissionState {
       permanentAddress: permanentAddress ?? this.permanentAddress,
       sameAsResidential: sameAsResidential ?? this.sameAsResidential,
       transportRouteId: transportRouteId ?? this.transportRouteId,
+      transportStopId: transportStopId ?? this.transportStopId,
       hostelId: hostelId ?? this.hostelId,
       stepError: stepError,
       isSubmitting: isSubmitting ?? this.isSubmitting,
@@ -217,7 +221,8 @@ class AdmissionFormNotifier extends StateNotifier<AdmissionState> {
     }
   }
 
-  void updateTransportRouteId(String val) => state = state.copyWith(transportRouteId: val, stepError: null);
+  void updateTransportRouteId(String val) => state = state.copyWith(transportRouteId: val, transportStopId: '', stepError: null);
+  void updateTransportStopId(String val) => state = state.copyWith(transportStopId: val, stepError: null);
   void updateHostelId(String val) => state = state.copyWith(hostelId: val, stepError: null);
 
   Future<void> regenerateAdmissionNumber([String? academicYear]) async {
@@ -343,11 +348,46 @@ class AdmissionFormNotifier extends StateNotifier<AdmissionState> {
       await _dbService.insertStudent(student);
 
       // Auto-generate initial fee ledger for student's admission session
+      String sessionName = '${DateTime.now().year}-${DateTime.now().year + 1}';
       try {
         final currentSession = await _dbService.getCurrentAcademicYear();
-        final sessionName = currentSession?.name ?? '${DateTime.now().year}-${DateTime.now().year + 1}';
+        if (currentSession != null && currentSession.name.isNotEmpty) {
+          sessionName = currentSession.name;
+        }
         await _dbService.generateLedgerForStudent(student.id, student.gradeLevel, sessionName);
       } catch (_) {}
+
+      // Assign student to transport route & stop if selected
+      if (state.transportRouteId.isNotEmpty && state.transportRouteId != 'None') {
+        try {
+          final stops = await _dbService.getStopsForRoute(state.transportRouteId);
+          String stopId = state.transportStopId;
+          if (stopId.isEmpty || !stops.any((s) => s.id == stopId)) {
+            if (stops.isNotEmpty) {
+              stopId = stops.first.id;
+            } else {
+              final defaultStop = RouteStop.create(
+                routeId: state.transportRouteId,
+                stopName: 'Campus Stop',
+                stopOrder: 1,
+                fee: 0,
+              );
+              await _dbService.saveRouteStops(state.transportRouteId, [defaultStop]);
+              stopId = defaultStop.id;
+            }
+          }
+          await _dbService.assignStudentToRoute(
+            studentId: student.id,
+            routeId: state.transportRouteId,
+            stopId: stopId,
+            academicYear: sessionName,
+          );
+          ref.invalidate(routesListProvider);
+          ref.invalidate(fleetOverviewProvider);
+          ref.invalidate(routeWithStudentsProvider(state.transportRouteId));
+          ref.invalidate(allStudentTransportsProvider(sessionName));
+        } catch (_) {}
+      }
 
       ref.invalidate(studentsListProvider);
       ref.invalidate(studentFeeLedgerProvider);

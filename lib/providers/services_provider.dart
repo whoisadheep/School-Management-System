@@ -522,6 +522,13 @@ final routeWithStudentsProvider = FutureProvider.family<Map<String, dynamic>, St
   return await dbService.getRouteWithStudents(routeId);
 });
 
+/// Provider for route stops of a specific route
+final routeStopsProvider = FutureProvider.family<List<RouteStop>, String>((ref, routeId) async {
+  if (routeId.isEmpty || routeId == 'None') return [];
+  final dbService = ref.watch(databaseServiceProvider);
+  return await dbService.getStopsForRoute(routeId);
+});
+
 /// Provider for Fleet Overview statistics and occupancy
 final fleetOverviewProvider = FutureProvider<List<Map<String, dynamic>>>((ref) async {
   final dbService = ref.watch(databaseServiceProvider);

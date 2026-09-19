@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../../models/models.dart';
 import '../../../providers/admission_provider.dart';
 import '../../../providers/license_provider.dart';
 import '../../../providers/services_provider.dart';
@@ -17,6 +18,35 @@ class AdmissionView extends ConsumerStatefulWidget {
 }
 
 class _AdmissionViewState extends ConsumerState<AdmissionView> {
+  static const List<String> _fatherOccupations = [
+    'Business / Self-Employed',
+    'Private Sector / Salaried',
+    'Government Service',
+    'Professional (Doctor / Engineer / Lawyer / CA)',
+    'Agriculture / Farmer',
+    'Defence / Armed Forces / Police',
+    'Teacher / Professor / Educator',
+    'Daily Wage / Artisan',
+    'Househusband / Homemaker',
+    'Retired',
+    'Other',
+  ];
+
+  static const List<String> _motherOccupations = [
+    'Housewife',
+    'Housewife / Homemaker',
+    'Private Sector / Salaried',
+    'Government Service',
+    'Business / Self-Employed',
+    'Professional (Doctor / Engineer / Lawyer / CA)',
+    'Teacher / Professor / Educator',
+    'Healthcare / Nurse / Medical',
+    'Agriculture / Farmer',
+    'Daily Wage / Artisan',
+    'Retired',
+    'Other',
+  ];
+
   // Focus nodes
   final _fnFirstName = FocusNode();
   final _fnLastName = FocusNode();
@@ -79,10 +109,10 @@ class _AdmissionViewState extends ConsumerState<AdmissionView> {
       _ctrlAadhaar.clear();
       _ctrlRollNo.clear();
       _ctrlFatherName.clear();
-      _ctrlFatherOcc.clear();
+      _ctrlFatherOcc.text = next.fatherOccupation;
       _ctrlFatherPhone.clear();
       _ctrlMotherName.clear();
-      _ctrlMotherOcc.clear();
+      _ctrlMotherOcc.text = next.motherOccupation;
       _ctrlMotherPhone.clear();
       _ctrlPrimaryPhone.clear();
       _ctrlResAddr.clear();
@@ -394,9 +424,11 @@ class _AdmissionViewState extends ConsumerState<AdmissionView> {
                             final newPath = await FileStorageService.copyFileToAppDirectory(result.files.single.path!);
                             notifier.updatePhotographPath(newPath);
                           } catch (e) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(content: Text('Failed to save image: $e')),
-                            );
+                            if (context.mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(content: Text('Failed to save image: $e')),
+                              );
+                            }
                           }
                         }
                       },
@@ -604,6 +636,7 @@ class _AdmissionViewState extends ConsumerState<AdmissionView> {
       child: Column(
         children: [
           Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Expanded(
                 child: _buildTextField(
@@ -615,11 +648,13 @@ class _AdmissionViewState extends ConsumerState<AdmissionView> {
               ),
               const SizedBox(width: 16),
               Expanded(
-                child: _buildTextField(
+                child: _buildOccupationDropdownField(
                   label: "Father's Occupation",
+                  value: state.fatherOccupation,
+                  options: _fatherOccupations,
+                  onChanged: notifier.updateFatherOccupation,
                   focusNode: _fnFatherOcc,
                   controller: _ctrlFatherOcc,
-                  onChanged: notifier.updateFatherOccupation,
                 ),
               ),
               const SizedBox(width: 16),
@@ -637,6 +672,7 @@ class _AdmissionViewState extends ConsumerState<AdmissionView> {
           const SizedBox(height: 16),
 
           Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Expanded(
                 child: _buildTextField(
@@ -648,11 +684,13 @@ class _AdmissionViewState extends ConsumerState<AdmissionView> {
               ),
               const SizedBox(width: 16),
               Expanded(
-                child: _buildTextField(
+                child: _buildOccupationDropdownField(
                   label: "Mother's Occupation",
+                  value: state.motherOccupation,
+                  options: _motherOccupations,
+                  onChanged: notifier.updateMotherOccupation,
                   focusNode: _fnMotherOcc,
                   controller: _ctrlMotherOcc,
-                  onChanged: notifier.updateMotherOccupation,
                 ),
               ),
               const SizedBox(width: 16),
@@ -749,6 +787,7 @@ class _AdmissionViewState extends ConsumerState<AdmissionView> {
                     const SizedBox(height: 16),
 
                     Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Expanded(
                           child: Consumer(
@@ -762,11 +801,56 @@ class _AdmissionViewState extends ConsumerState<AdmissionView> {
                                 }
                               }
                               
-                              return _buildMapDropdownField(
-                                label: 'Transport Facility Route',
-                                value: state.transportRouteId,
-                                items: routeMap,
-                                onChanged: (val) => notifier.updateTransportRouteId(val!),
+                              return Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  _buildMapDropdownField(
+                                    label: 'Transport Facility Route',
+                                    value: state.transportRouteId,
+                                    items: routeMap,
+                                    onChanged: (val) => notifier.updateTransportRouteId(val!),
+                                  ),
+                                  if (state.transportRouteId.isNotEmpty && state.transportRouteId != 'None') ...[
+                                    const SizedBox(height: 14),
+                                    Consumer(
+                                      builder: (context, ref, child) {
+                                        final stopsAsync = ref.watch(routeStopsProvider(state.transportRouteId));
+                                        return stopsAsync.when(
+                                          data: (stops) {
+                                            final Map<String, String> stopMap = {};
+                                            if (stops.isEmpty) {
+                                              stopMap[''] = 'Campus Stop (Auto-created, ₹0/mo)';
+                                            } else {
+                                              for (final s in stops) {
+                                                final feeStr = s.fee > 0 ? ' (₹${s.fee.toStringAsFixed(0)}/mo)' : ' (₹0/mo)';
+                                                stopMap[s.id] = '${s.stopName}$feeStr';
+                                              }
+                                            }
+                                            final currentValue = stopMap.containsKey(state.transportStopId)
+                                                ? state.transportStopId
+                                                : stopMap.keys.first;
+
+                                            return _buildMapDropdownField(
+                                              label: 'Pickup / Drop Stop & Fee',
+                                              value: currentValue,
+                                              items: stopMap,
+                                              onChanged: (val) {
+                                                if (val != null) {
+                                                  notifier.updateTransportStopId(val);
+                                                }
+                                              },
+                                            );
+                                          },
+                                          loading: () => const Padding(
+                                            padding: EdgeInsets.symmetric(vertical: 8),
+                                            child: LinearProgressIndicator(minHeight: 2),
+                                          ),
+                                          error: (_, __) => const SizedBox.shrink(),
+                                        );
+                                      },
+                                    ),
+                                  ],
+                                ],
                               );
                             },
                           ),
@@ -823,9 +907,22 @@ class _AdmissionViewState extends ConsumerState<AdmissionView> {
                             (r) => r.id == state.transportRouteId,
                             orElse: () => null,
                           );
-                          final routeName = route?.routeName ?? state.transportRouteId;
+                          final routeName = route?.routeName ?? (state.transportRouteId == 'None' ? 'None' : state.transportRouteId);
+                          
+                          if (state.transportRouteId != 'None' && state.transportRouteId.isNotEmpty) {
+                            final stopsAsync = ref.watch(routeStopsProvider(state.transportRouteId));
+                            final stops = stopsAsync.value;
+                            final stop = stops != null && stops.isNotEmpty
+                                ? stops.cast<RouteStop?>().firstWhere(
+                                    (s) => s?.id == state.transportStopId,
+                                    orElse: () => stops.first,
+                                  )
+                                : null;
+                            final stopInfo = stop != null ? ' (${stop.stopName}, ₹${stop.fee.toStringAsFixed(0)}/mo)' : '';
+                            return _buildSummaryRow('Transport / Hostel', '$routeName$stopInfo / ${state.hostelId}');
+                          }
                           return _buildSummaryRow('Transport / Hostel', '$routeName / ${state.hostelId}');
-                        }
+                        },
                       ),
                     ],
                   ),
@@ -925,6 +1022,49 @@ class _AdmissionViewState extends ConsumerState<AdmissionView> {
             return DropdownMenuItem(value: item, child: Text(item));
           }).toList(),
         ),
+      ],
+    );
+  }
+
+  Widget _buildOccupationDropdownField({
+    required String label,
+    required String value,
+    required List<String> options,
+    required ValueChanged<String> onChanged,
+    required FocusNode focusNode,
+    required TextEditingController controller,
+  }) {
+    final bool isKnownOption = options.where((o) => o != 'Other').contains(value);
+    final String dropdownValue = isKnownOption ? value : 'Other';
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _buildDropdownField(
+          label: label,
+          value: dropdownValue,
+          items: options,
+          onChanged: (selected) {
+            if (selected == 'Other') {
+              controller.clear();
+              onChanged('Other');
+            } else if (selected != null) {
+              controller.text = selected;
+              onChanged(selected);
+            }
+          },
+        ),
+        if (!isKnownOption || dropdownValue == 'Other') ...[
+          const SizedBox(height: 8),
+          _buildTextField(
+            label: 'Specify $label',
+            focusNode: focusNode,
+            controller: controller,
+            onChanged: (val) {
+              onChanged(val.trim().isEmpty ? 'Other' : val);
+            },
+          ),
+        ],
       ],
     );
   }

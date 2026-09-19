@@ -1,7 +1,7 @@
 {
-  "latest_version": "1.0.20",
-  "download_url": "https://github.com/whoisadheep/School-Management-System/releases/download/v1.0.20/Eduvia-Installer.exe",
+  "latest_version": "1.0.21",
+  "download_url": "https://github.com/whoisadheep/School-Management-System/releases/download/v1.0.21/Eduvia-Installer.exe",
   "sha256": "",
-  "changelog": "Satisfying audio micro-feedback for POS receipts and navigation, redesigned Rapid Express Desk with executive power theme and no emojis, automatic past fee arrears carry-forward, and 2-step end-of-session promotion clearance.",
+  "changelog": "Instantaneous 0ms native Win32 audio micro-feedback, Father & Mother occupation dropdowns with Housewife option in admission wizard, and automatic student transport route & stop assignment with fee ledger synchronization.",
   "mandatory_update": false
 }
