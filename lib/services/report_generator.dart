@@ -121,14 +121,22 @@ class ReportGenerator {
     required PdfColor greyColor,
     required PdfColor lightGrey,
   }) {
-    return pw.SizedBox(
+    final isPaidFull = (student.currentBalance - transaction.amountPaid) <= 0;
+
+    return pw.Container(
       height: 385,
+      padding: const pw.EdgeInsets.all(7),
+      decoration: pw.BoxDecoration(
+        color: PdfColors.white,
+        borderRadius: const pw.BorderRadius.all(pw.Radius.circular(4)),
+        border: pw.Border.all(color: PdfColors.grey300, width: 0.6),
+      ),
       child: pw.Column(
         crossAxisAlignment: pw.CrossAxisAlignment.start,
         children: [
           // ── Header Section ──
           pw.Container(
-            padding: const pw.EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+            padding: const pw.EdgeInsets.symmetric(horizontal: 8, vertical: 6),
             decoration: pw.BoxDecoration(
               color: primaryColor,
               borderRadius: const pw.BorderRadius.all(pw.Radius.circular(4)),
@@ -143,8 +151,8 @@ class ReportGenerator {
                     children: [
                       if (schoolLogo != null) ...[
                         pw.Container(
-                          width: 24,
-                          height: 24,
+                          width: 28,
+                          height: 28,
                           decoration: const pw.BoxDecoration(
                             color: PdfColors.white,
                             borderRadius: pw.BorderRadius.all(pw.Radius.circular(3)),
@@ -155,7 +163,7 @@ class ReportGenerator {
                             fit: pw.BoxFit.contain,
                           ),
                         ),
-                        pw.SizedBox(width: 5),
+                        pw.SizedBox(width: 6),
                       ],
                       pw.Expanded(
                         child: pw.Column(
@@ -165,7 +173,7 @@ class ReportGenerator {
                               schoolName,
                               style: pw.TextStyle(
                                 color: PdfColors.white,
-                                fontSize: 9,
+                                fontSize: 10.5,
                                 fontWeight: pw.FontWeight.bold,
                               ),
                               maxLines: 1,
@@ -175,7 +183,7 @@ class ReportGenerator {
                               schoolAddress,
                               style: const pw.TextStyle(
                                 color: PdfColors.white,
-                                fontSize: 5.5,
+                                fontSize: 6.8,
                               ),
                               maxLines: 1,
                             ),
@@ -183,7 +191,7 @@ class ReportGenerator {
                               schoolContact,
                               style: const pw.TextStyle(
                                 color: PdfColors.white,
-                                fontSize: 5.5,
+                                fontSize: 6.8,
                               ),
                               maxLines: 1,
                             ),
@@ -193,9 +201,9 @@ class ReportGenerator {
                     ],
                   ),
                 ),
-                pw.SizedBox(width: 4),
+                pw.SizedBox(width: 6),
                 pw.Container(
-                  padding: const pw.EdgeInsets.symmetric(horizontal: 5, vertical: 2.5),
+                  padding: const pw.EdgeInsets.symmetric(horizontal: 6, vertical: 3.5),
                   decoration: const pw.BoxDecoration(
                     color: PdfColors.white,
                     borderRadius: pw.BorderRadius.all(pw.Radius.circular(3)),
@@ -207,7 +215,7 @@ class ReportGenerator {
                         copyTitle,
                         style: pw.TextStyle(
                           color: primaryColor,
-                          fontSize: 6.2,
+                          fontSize: 7.2,
                           fontWeight: pw.FontWeight.bold,
                         ),
                       ),
@@ -215,7 +223,7 @@ class ReportGenerator {
                         'FEE RECEIPT',
                         style: pw.TextStyle(
                           color: darkColor,
-                          fontSize: 5.2,
+                          fontSize: 6.2,
                           fontWeight: pw.FontWeight.bold,
                         ),
                       ),
@@ -226,7 +234,7 @@ class ReportGenerator {
             ),
           ),
 
-          pw.SizedBox(height: 4),
+          pw.SizedBox(height: 6),
 
           // ── Student & Receipt Meta Data ──
           pw.Row(
@@ -235,7 +243,7 @@ class ReportGenerator {
               // Left: Student Info
               pw.Expanded(
                 child: pw.Container(
-                  padding: const pw.EdgeInsets.all(4),
+                  padding: const pw.EdgeInsets.symmetric(horizontal: 6, vertical: 5),
                   decoration: pw.BoxDecoration(
                     color: lightGrey,
                     borderRadius: const pw.BorderRadius.all(pw.Radius.circular(3)),
@@ -247,29 +255,32 @@ class ReportGenerator {
                       pw.Text(
                         'STUDENT DETAILS',
                         style: pw.TextStyle(
-                          fontSize: 5.5,
+                          fontSize: 6.8,
                           fontWeight: pw.FontWeight.bold,
                           color: greyColor,
+                          letterSpacing: 0.3,
                         ),
                       ),
-                      pw.Divider(thickness: 0.5, color: PdfColors.grey300, height: 3),
+                      pw.Divider(thickness: 0.5, color: PdfColors.grey300, height: 4),
                       pw.Text(
                         student.name,
                         style: pw.TextStyle(
-                          fontSize: 7.5,
+                          fontSize: 9.2,
                           fontWeight: pw.FontWeight.bold,
                           color: darkColor,
                         ),
                         maxLines: 1,
                       ),
+                      pw.SizedBox(height: 1.5),
                       pw.Text(
                         'Grade: ${student.gradeLevel}',
-                        style: const pw.TextStyle(fontSize: 6),
+                        style: pw.TextStyle(fontSize: 7.2, color: darkColor),
                         maxLines: 1,
                       ),
+                      pw.SizedBox(height: 1),
                       pw.Text(
                         'Student ID: ${student.id.substring(0, student.id.length > 8 ? 8 : student.id.length)}',
-                        style: const pw.TextStyle(fontSize: 5.5, color: PdfColors.grey700),
+                        style: const pw.TextStyle(fontSize: 6.8, color: PdfColors.grey700),
                         maxLines: 1,
                       ),
                     ],
@@ -277,12 +288,12 @@ class ReportGenerator {
                 ),
               ),
 
-              pw.SizedBox(width: 4),
+              pw.SizedBox(width: 5),
 
               // Right: Receipt Meta
               pw.Expanded(
                 child: pw.Container(
-                  padding: const pw.EdgeInsets.all(4),
+                  padding: const pw.EdgeInsets.symmetric(horizontal: 6, vertical: 5),
                   decoration: pw.BoxDecoration(
                     color: lightGrey,
                     borderRadius: const pw.BorderRadius.all(pw.Radius.circular(3)),
@@ -294,25 +305,28 @@ class ReportGenerator {
                       pw.Text(
                         'RECEIPT DETAILS',
                         style: pw.TextStyle(
-                          fontSize: 5.5,
+                          fontSize: 6.8,
                           fontWeight: pw.FontWeight.bold,
                           color: greyColor,
+                          letterSpacing: 0.3,
                         ),
                       ),
-                      pw.Divider(thickness: 0.5, color: PdfColors.grey300, height: 3),
+                      pw.Divider(thickness: 0.5, color: PdfColors.grey300, height: 4),
                       pw.Text(
                         formattedReceiptNumber,
-                        style: pw.TextStyle(fontSize: 6.8, fontWeight: pw.FontWeight.bold, color: darkColor),
+                        style: pw.TextStyle(fontSize: 8.5, fontWeight: pw.FontWeight.bold, color: darkColor),
                         maxLines: 1,
                       ),
+                      pw.SizedBox(height: 1.5),
                       pw.Text(
                         dateFormatter.format(transaction.timestamp),
-                        style: const pw.TextStyle(fontSize: 5.5),
+                        style: const pw.TextStyle(fontSize: 6.8, color: PdfColors.grey800),
                         maxLines: 1,
                       ),
+                      pw.SizedBox(height: 1),
                       pw.Text(
                         'Mode: ${transaction.paymentMethod.displayName}',
-                        style: pw.TextStyle(fontSize: 5.8, fontWeight: pw.FontWeight.bold),
+                        style: pw.TextStyle(fontSize: 7.2, fontWeight: pw.FontWeight.bold, color: darkColor),
                         maxLines: 1,
                       ),
                     ],
@@ -322,106 +336,165 @@ class ReportGenerator {
             ],
           ),
 
-          pw.SizedBox(height: 4),
+          pw.SizedBox(height: 6),
 
           // ── Payment Details Table ──
           pw.Table(
             border: pw.TableBorder.all(color: PdfColors.grey300, width: 0.5),
             columnWidths: {
-              0: const pw.FlexColumnWidth(2.5),
-              1: const pw.FlexColumnWidth(4.5),
-              2: const pw.FlexColumnWidth(2.5),
+              0: const pw.FlexColumnWidth(2.6),
+              1: const pw.FlexColumnWidth(4.4),
+              2: const pw.FlexColumnWidth(3.0),
             },
             children: [
               pw.TableRow(
                 decoration: pw.BoxDecoration(color: primaryColor),
                 children: [
                   pw.Padding(
-                    padding: const pw.EdgeInsets.symmetric(horizontal: 3, vertical: 2),
-                    child: pw.Text('Invoice ID', style: pw.TextStyle(color: PdfColors.white, fontWeight: pw.FontWeight.bold, fontSize: 6)),
+                    padding: const pw.EdgeInsets.symmetric(horizontal: 4, vertical: 3.5),
+                    child: pw.Text('Invoice ID', style: pw.TextStyle(color: PdfColors.white, fontWeight: pw.FontWeight.bold, fontSize: 7.2)),
                   ),
                   pw.Padding(
-                    padding: const pw.EdgeInsets.symmetric(horizontal: 3, vertical: 2),
-                    child: pw.Text('Description', style: pw.TextStyle(color: PdfColors.white, fontWeight: pw.FontWeight.bold, fontSize: 6)),
+                    padding: const pw.EdgeInsets.symmetric(horizontal: 4, vertical: 3.5),
+                    child: pw.Text('Description', style: pw.TextStyle(color: PdfColors.white, fontWeight: pw.FontWeight.bold, fontSize: 7.2)),
                   ),
                   pw.Padding(
-                    padding: const pw.EdgeInsets.symmetric(horizontal: 3, vertical: 2),
-                    child: pw.Text('Amount Paid', style: pw.TextStyle(color: PdfColors.white, fontWeight: pw.FontWeight.bold, fontSize: 6), textAlign: pw.TextAlign.right),
+                    padding: const pw.EdgeInsets.symmetric(horizontal: 4, vertical: 3.5),
+                    child: pw.Text('Amount Paid', style: pw.TextStyle(color: PdfColors.white, fontWeight: pw.FontWeight.bold, fontSize: 7.2), textAlign: pw.TextAlign.right),
                   ),
                 ],
               ),
               pw.TableRow(
                 children: [
                   pw.Padding(
-                    padding: const pw.EdgeInsets.symmetric(horizontal: 3, vertical: 2),
-                    child: pw.Text(invoice.id.substring(0, invoice.id.length > 8 ? 8 : invoice.id.length).toUpperCase(), style: const pw.TextStyle(fontSize: 5.8)),
+                    padding: const pw.EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+                    child: pw.Text(invoice.id.substring(0, invoice.id.length > 8 ? 8 : invoice.id.length).toUpperCase(), style: const pw.TextStyle(fontSize: 7.2)),
                   ),
                   pw.Padding(
-                    padding: const pw.EdgeInsets.symmetric(horizontal: 3, vertical: 2),
-                    child: pw.Text(feeHeadName ?? invoice.notes ?? 'School Fee Invoice', style: const pw.TextStyle(fontSize: 5.8), maxLines: 1),
+                    padding: const pw.EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+                    child: pw.Text(feeHeadName ?? invoice.notes ?? 'School Fee Invoice', style: const pw.TextStyle(fontSize: 7.2), maxLines: 1),
                   ),
                   pw.Padding(
-                    padding: const pw.EdgeInsets.symmetric(horizontal: 3, vertical: 2),
-                    child: pw.Text(currencyFormatter.format(transaction.amountPaid), style: pw.TextStyle(fontSize: 5.8, fontWeight: pw.FontWeight.bold), textAlign: pw.TextAlign.right),
+                    padding: const pw.EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+                    child: pw.Text(currencyFormatter.format(transaction.amountPaid), style: pw.TextStyle(fontSize: 7.5, fontWeight: pw.FontWeight.bold), textAlign: pw.TextAlign.right),
                   ),
                 ],
               ),
             ],
           ),
 
-          pw.SizedBox(height: 3),
+          pw.SizedBox(height: 6),
 
-          // ── Summary Table ──
+          // ── Summary Row with Status Badge & Totals ──
           pw.Row(
-            mainAxisAlignment: pw.MainAxisAlignment.end,
+            crossAxisAlignment: pw.CrossAxisAlignment.start,
             children: [
-              pw.Container(
-                width: 155,
-                padding: const pw.EdgeInsets.symmetric(horizontal: 5, vertical: 3.5),
-                decoration: pw.BoxDecoration(
-                  color: lightGrey,
-                  borderRadius: const pw.BorderRadius.all(pw.Radius.circular(3)),
-                  border: pw.Border.all(color: PdfColors.grey300, width: 0.5),
-                ),
-                child: pw.Column(
-                  children: [
-                    pw.Row(
-                      mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-                      children: [
-                        pw.Text('Invoice Total:', style: const pw.TextStyle(fontSize: 5.5)),
-                        pw.Text(currencyFormatter.format(invoice.totalAmount), style: const pw.TextStyle(fontSize: 5.5)),
-                      ],
+              // Left: Payment Status Pill
+              pw.Expanded(
+                flex: 4,
+                child: pw.Container(
+                  padding: const pw.EdgeInsets.symmetric(horizontal: 6, vertical: 5),
+                  decoration: pw.BoxDecoration(
+                    color: isPaidFull ? PdfColors.green50 : PdfColors.orange50,
+                    borderRadius: const pw.BorderRadius.all(pw.Radius.circular(3)),
+                    border: pw.Border.all(
+                      color: isPaidFull ? PdfColors.green300 : PdfColors.orange300,
+                      width: 0.5,
                     ),
-                    pw.SizedBox(height: 1.5),
-                    pw.Row(
-                      mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-                      children: [
-                        pw.Text('Amount Paid Now:', style: pw.TextStyle(fontSize: 6.2, fontWeight: pw.FontWeight.bold)),
-                        pw.Text(currencyFormatter.format(transaction.amountPaid), style: pw.TextStyle(fontSize: 7, fontWeight: pw.FontWeight.bold, color: primaryColor)),
-                      ],
-                    ),
-                    pw.Divider(thickness: 0.5, height: 3),
-                    pw.Row(
-                      mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-                      children: [
-                        pw.Text('Remaining Balance:', style: pw.TextStyle(fontSize: 5.5, fontWeight: pw.FontWeight.bold)),
-                        pw.Text(
-                          currencyFormatter.format(student.currentBalance - transaction.amountPaid),
-                          style: pw.TextStyle(
-                            fontSize: 5.5,
-                            fontWeight: pw.FontWeight.bold,
-                            color: (student.currentBalance - transaction.amountPaid) > 0 ? PdfColors.red800 : PdfColors.green800,
-                          ),
+                  ),
+                  child: pw.Column(
+                    crossAxisAlignment: pw.CrossAxisAlignment.start,
+                    children: [
+                      pw.Text(
+                        isPaidFull ? 'STATUS: PAID' : 'STATUS: PARTIAL',
+                        style: pw.TextStyle(
+                          fontSize: 7,
+                          fontWeight: pw.FontWeight.bold,
+                          color: isPaidFull ? PdfColors.green800 : PdfColors.orange800,
                         ),
-                      ],
-                    ),
-                  ],
+                      ),
+                      pw.SizedBox(height: 2),
+                      pw.Text(
+                        'Payment received with thanks.',
+                        style: const pw.TextStyle(fontSize: 6, color: PdfColors.grey700),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              pw.SizedBox(width: 5),
+              // Right: Totals Card
+              pw.Expanded(
+                flex: 6,
+                child: pw.Container(
+                  padding: const pw.EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+                  decoration: pw.BoxDecoration(
+                    color: lightGrey,
+                    borderRadius: const pw.BorderRadius.all(pw.Radius.circular(3)),
+                    border: pw.Border.all(color: PdfColors.grey300, width: 0.5),
+                  ),
+                  child: pw.Column(
+                    children: [
+                      pw.Row(
+                        mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                        children: [
+                          pw.Text('Invoice Total:', style: const pw.TextStyle(fontSize: 6.8, color: PdfColors.grey700)),
+                          pw.Text(currencyFormatter.format(invoice.totalAmount), style: const pw.TextStyle(fontSize: 6.8)),
+                        ],
+                      ),
+                      pw.SizedBox(height: 2),
+                      pw.Row(
+                        mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                        children: [
+                          pw.Text('Amount Paid Now:', style: pw.TextStyle(fontSize: 7.5, fontWeight: pw.FontWeight.bold)),
+                          pw.Text(
+                            currencyFormatter.format(transaction.amountPaid),
+                            style: pw.TextStyle(fontSize: 8.5, fontWeight: pw.FontWeight.bold, color: primaryColor),
+                          ),
+                        ],
+                      ),
+                      pw.Divider(thickness: 0.5, height: 4),
+                      pw.Row(
+                        mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                        children: [
+                          pw.Text('Remaining Balance:', style: pw.TextStyle(fontSize: 6.8, fontWeight: pw.FontWeight.bold)),
+                          pw.Text(
+                            currencyFormatter.format(student.currentBalance - transaction.amountPaid),
+                            style: pw.TextStyle(
+                              fontSize: 6.8,
+                              fontWeight: pw.FontWeight.bold,
+                              color: (student.currentBalance - transaction.amountPaid) > 0 ? PdfColors.red800 : PdfColors.green800,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
                 ),
               ),
             ],
           ),
 
           pw.Spacer(),
+
+          // ── Note ──
+          pw.Container(
+            padding: const pw.EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+            decoration: pw.BoxDecoration(
+              color: lightGrey,
+              borderRadius: const pw.BorderRadius.all(pw.Radius.circular(2)),
+            ),
+            child: pw.Row(
+              children: [
+                pw.Text(
+                  'Note: Fees once paid are non-refundable. Please keep this receipt for records.',
+                  style: pw.TextStyle(fontSize: 5.5, color: greyColor, fontStyle: pw.FontStyle.italic),
+                ),
+              ],
+            ),
+          ),
+
+          pw.SizedBox(height: 8),
 
           // ── Footer & Signatures ──
           pw.Row(
@@ -431,27 +504,27 @@ class ReportGenerator {
               pw.Column(
                 crossAxisAlignment: pw.CrossAxisAlignment.start,
                 children: [
-                  pw.Container(width: 75, height: 0.5, color: PdfColors.grey400),
-                  pw.SizedBox(height: 1.5),
-                  pw.Text('Parent / Guardian', style: pw.TextStyle(fontSize: 5, color: greyColor)),
+                  pw.Container(width: 85, height: 0.6, color: PdfColors.grey400),
+                  pw.SizedBox(height: 2),
+                  pw.Text('Parent / Guardian', style: pw.TextStyle(fontSize: 6.5, color: greyColor)),
                 ],
               ),
               pw.Column(
                 crossAxisAlignment: pw.CrossAxisAlignment.end,
                 children: [
-                  pw.Container(width: 75, height: 0.5, color: PdfColors.grey400),
-                  pw.SizedBox(height: 1.5),
-                  pw.Text('Authorized Cashier / Stamp', style: pw.TextStyle(fontSize: 5, color: greyColor)),
+                  pw.Container(width: 85, height: 0.6, color: PdfColors.grey400),
+                  pw.SizedBox(height: 2),
+                  pw.Text('Authorized Cashier / Stamp', style: pw.TextStyle(fontSize: 6.5, color: greyColor)),
                 ],
               ),
             ],
           ),
 
-          pw.SizedBox(height: 2.5),
+          pw.SizedBox(height: 4),
           pw.Center(
             child: pw.Text(
               'Computer-generated receipt issued by $schoolName.',
-              style: pw.TextStyle(fontSize: 4.8, color: greyColor, fontStyle: pw.FontStyle.italic),
+              style: pw.TextStyle(fontSize: 5.5, color: greyColor, fontStyle: pw.FontStyle.italic),
             ),
           ),
         ],
@@ -681,14 +754,22 @@ class ReportGenerator {
         ? consolidatedLedgers.sublist(3).fold<double>(0.0, (sum, l) => sum + (l.amountPaid > 0 ? l.amountPaid : l.amountDue))
         : 0.0;
 
-    return pw.SizedBox(
+    final isPaidFull = (student.currentBalance - totalAmountPaid) <= 0;
+
+    return pw.Container(
       height: 385,
+      padding: const pw.EdgeInsets.all(7),
+      decoration: pw.BoxDecoration(
+        color: PdfColors.white,
+        borderRadius: const pw.BorderRadius.all(pw.Radius.circular(4)),
+        border: pw.Border.all(color: PdfColors.grey300, width: 0.6),
+      ),
       child: pw.Column(
         crossAxisAlignment: pw.CrossAxisAlignment.start,
         children: [
           // ── Header Section ──
           pw.Container(
-            padding: const pw.EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+            padding: const pw.EdgeInsets.symmetric(horizontal: 8, vertical: 6),
             decoration: pw.BoxDecoration(
               color: primaryColor,
               borderRadius: const pw.BorderRadius.all(pw.Radius.circular(4)),
@@ -703,8 +784,8 @@ class ReportGenerator {
                     children: [
                       if (schoolLogo != null) ...[
                         pw.Container(
-                          width: 24,
-                          height: 24,
+                          width: 28,
+                          height: 28,
                           decoration: const pw.BoxDecoration(
                             color: PdfColors.white,
                             borderRadius: pw.BorderRadius.all(pw.Radius.circular(3)),
@@ -715,7 +796,7 @@ class ReportGenerator {
                             fit: pw.BoxFit.contain,
                           ),
                         ),
-                        pw.SizedBox(width: 5),
+                        pw.SizedBox(width: 6),
                       ],
                       pw.Expanded(
                         child: pw.Column(
@@ -725,7 +806,7 @@ class ReportGenerator {
                               schoolName,
                               style: pw.TextStyle(
                                 color: PdfColors.white,
-                                fontSize: 9,
+                                fontSize: 10.5,
                                 fontWeight: pw.FontWeight.bold,
                               ),
                               maxLines: 1,
@@ -735,7 +816,7 @@ class ReportGenerator {
                               schoolAddress,
                               style: const pw.TextStyle(
                                 color: PdfColors.white,
-                                fontSize: 5.5,
+                                fontSize: 6.8,
                               ),
                               maxLines: 1,
                             ),
@@ -743,7 +824,7 @@ class ReportGenerator {
                               schoolContact,
                               style: const pw.TextStyle(
                                 color: PdfColors.white,
-                                fontSize: 5.5,
+                                fontSize: 6.8,
                               ),
                               maxLines: 1,
                             ),
@@ -753,9 +834,9 @@ class ReportGenerator {
                     ],
                   ),
                 ),
-                pw.SizedBox(width: 4),
+                pw.SizedBox(width: 6),
                 pw.Container(
-                  padding: const pw.EdgeInsets.symmetric(horizontal: 5, vertical: 2.5),
+                  padding: const pw.EdgeInsets.symmetric(horizontal: 6, vertical: 3.5),
                   decoration: const pw.BoxDecoration(
                     color: PdfColors.white,
                     borderRadius: pw.BorderRadius.all(pw.Radius.circular(3)),
@@ -767,7 +848,7 @@ class ReportGenerator {
                         copyTitle,
                         style: pw.TextStyle(
                           color: primaryColor,
-                          fontSize: 6.2,
+                          fontSize: 7.2,
                           fontWeight: pw.FontWeight.bold,
                         ),
                       ),
@@ -775,7 +856,7 @@ class ReportGenerator {
                         academicYear != null ? 'RECEIPT - $academicYear' : 'FEE RECEIPT',
                         style: pw.TextStyle(
                           color: darkColor,
-                          fontSize: 5.2,
+                          fontSize: 6.2,
                           fontWeight: pw.FontWeight.bold,
                         ),
                       ),
@@ -786,7 +867,7 @@ class ReportGenerator {
             ),
           ),
 
-          pw.SizedBox(height: 4),
+          pw.SizedBox(height: 6),
 
           // ── Receipt & Student Meta Data Grid ──
           pw.Row(
@@ -795,7 +876,7 @@ class ReportGenerator {
               // Left: Student Info
               pw.Expanded(
                 child: pw.Container(
-                  padding: const pw.EdgeInsets.all(4),
+                  padding: const pw.EdgeInsets.symmetric(horizontal: 6, vertical: 5),
                   decoration: pw.BoxDecoration(
                     color: lightGrey,
                     borderRadius: const pw.BorderRadius.all(pw.Radius.circular(3)),
@@ -807,29 +888,32 @@ class ReportGenerator {
                       pw.Text(
                         'STUDENT DETAILS',
                         style: pw.TextStyle(
-                          fontSize: 5.5,
+                          fontSize: 6.8,
                           fontWeight: pw.FontWeight.bold,
                           color: greyColor,
+                          letterSpacing: 0.3,
                         ),
                       ),
-                      pw.Divider(thickness: 0.5, color: PdfColors.grey300, height: 3),
+                      pw.Divider(thickness: 0.5, color: PdfColors.grey300, height: 4),
                       pw.Text(
                         student.name,
                         style: pw.TextStyle(
-                          fontSize: 7.5,
+                          fontSize: 9.2,
                           fontWeight: pw.FontWeight.bold,
                           color: darkColor,
                         ),
                         maxLines: 1,
                       ),
+                      pw.SizedBox(height: 1.5),
                       pw.Text(
                         'Class: ${student.gradeLevel} ${student.section != null ? "- ${student.section}" : ""}',
-                        style: const pw.TextStyle(fontSize: 6),
+                        style: pw.TextStyle(fontSize: 7.2, color: darkColor),
                         maxLines: 1,
                       ),
+                      pw.SizedBox(height: 1),
                       pw.Text(
                         'Adm No: ${student.admissionNumber ?? "N/A"}   Roll: ${student.rollNumber ?? "N/A"}',
-                        style: const pw.TextStyle(fontSize: 5.5, color: PdfColors.grey700),
+                        style: const pw.TextStyle(fontSize: 6.8, color: PdfColors.grey700),
                         maxLines: 1,
                       ),
                     ],
@@ -837,12 +921,12 @@ class ReportGenerator {
                 ),
               ),
 
-              pw.SizedBox(width: 4),
+              pw.SizedBox(width: 5),
 
               // Right: Receipt Meta
               pw.Expanded(
                 child: pw.Container(
-                  padding: const pw.EdgeInsets.all(4),
+                  padding: const pw.EdgeInsets.symmetric(horizontal: 6, vertical: 5),
                   decoration: pw.BoxDecoration(
                     color: lightGrey,
                     borderRadius: const pw.BorderRadius.all(pw.Radius.circular(3)),
@@ -854,25 +938,28 @@ class ReportGenerator {
                       pw.Text(
                         'TRANSACTION DETAILS',
                         style: pw.TextStyle(
-                          fontSize: 5.5,
+                          fontSize: 6.8,
                           fontWeight: pw.FontWeight.bold,
                           color: greyColor,
+                          letterSpacing: 0.3,
                         ),
                       ),
-                      pw.Divider(thickness: 0.5, color: PdfColors.grey300, height: 3),
+                      pw.Divider(thickness: 0.5, color: PdfColors.grey300, height: 4),
                       pw.Text(
                         formattedReceiptNumber,
-                        style: pw.TextStyle(fontSize: 6.8, fontWeight: pw.FontWeight.bold, color: darkColor),
+                        style: pw.TextStyle(fontSize: 8.5, fontWeight: pw.FontWeight.bold, color: darkColor),
                         maxLines: 1,
                       ),
+                      pw.SizedBox(height: 1.5),
                       pw.Text(
                         dateFormatter.format(DateTime.now()),
-                        style: const pw.TextStyle(fontSize: 5.5),
+                        style: const pw.TextStyle(fontSize: 6.8, color: PdfColors.grey800),
                         maxLines: 1,
                       ),
+                      pw.SizedBox(height: 1),
                       pw.Text(
                         'Mode: ${paymentMethod.displayName}',
-                        style: pw.TextStyle(fontSize: 5.8, fontWeight: pw.FontWeight.bold),
+                        style: pw.TextStyle(fontSize: 7.2, fontWeight: pw.FontWeight.bold, color: darkColor),
                         maxLines: 1,
                       ),
                     ],
@@ -882,16 +969,16 @@ class ReportGenerator {
             ],
           ),
 
-          pw.SizedBox(height: 4),
+          pw.SizedBox(height: 6),
 
           // ── Payment Details Table ──
           pw.Table(
             border: pw.TableBorder.all(color: PdfColors.grey300, width: 0.5),
             columnWidths: {
-              0: const pw.FlexColumnWidth(0.6),
-              1: const pw.FlexColumnWidth(3.6),
-              2: const pw.FlexColumnWidth(3.0),
-              3: const pw.FlexColumnWidth(2.4),
+              0: const pw.FlexColumnWidth(0.7),
+              1: const pw.FlexColumnWidth(3.8),
+              2: const pw.FlexColumnWidth(2.9),
+              3: const pw.FlexColumnWidth(2.6),
             },
             children: [
               // Table Header
@@ -899,20 +986,20 @@ class ReportGenerator {
                 decoration: pw.BoxDecoration(color: primaryColor),
                 children: [
                   pw.Padding(
-                    padding: const pw.EdgeInsets.symmetric(horizontal: 2.5, vertical: 2),
-                    child: pw.Text('#', style: pw.TextStyle(color: PdfColors.white, fontWeight: pw.FontWeight.bold, fontSize: 6), textAlign: pw.TextAlign.center),
+                    padding: const pw.EdgeInsets.symmetric(horizontal: 3, vertical: 3.5),
+                    child: pw.Text('#', style: pw.TextStyle(color: PdfColors.white, fontWeight: pw.FontWeight.bold, fontSize: 7.2), textAlign: pw.TextAlign.center),
                   ),
                   pw.Padding(
-                    padding: const pw.EdgeInsets.symmetric(horizontal: 2.5, vertical: 2),
-                    child: pw.Text('Fee Head', style: pw.TextStyle(color: PdfColors.white, fontWeight: pw.FontWeight.bold, fontSize: 6)),
+                    padding: const pw.EdgeInsets.symmetric(horizontal: 4, vertical: 3.5),
+                    child: pw.Text('Fee Head', style: pw.TextStyle(color: PdfColors.white, fontWeight: pw.FontWeight.bold, fontSize: 7.2)),
                   ),
                   pw.Padding(
-                    padding: const pw.EdgeInsets.symmetric(horizontal: 2.5, vertical: 2),
-                    child: pw.Text('Period', style: pw.TextStyle(color: PdfColors.white, fontWeight: pw.FontWeight.bold, fontSize: 6)),
+                    padding: const pw.EdgeInsets.symmetric(horizontal: 4, vertical: 3.5),
+                    child: pw.Text('Period', style: pw.TextStyle(color: PdfColors.white, fontWeight: pw.FontWeight.bold, fontSize: 7.2)),
                   ),
                   pw.Padding(
-                    padding: const pw.EdgeInsets.symmetric(horizontal: 2.5, vertical: 2),
-                    child: pw.Text('Amount', style: pw.TextStyle(color: PdfColors.white, fontWeight: pw.FontWeight.bold, fontSize: 6), textAlign: pw.TextAlign.right),
+                    padding: const pw.EdgeInsets.symmetric(horizontal: 4, vertical: 3.5),
+                    child: pw.Text('Amount', style: pw.TextStyle(color: PdfColors.white, fontWeight: pw.FontWeight.bold, fontSize: 7.2), textAlign: pw.TextAlign.right),
                   ),
                 ],
               ),
@@ -928,22 +1015,22 @@ class ReportGenerator {
                   decoration: isEven ? pw.BoxDecoration(color: lightGrey) : null,
                   children: [
                     pw.Padding(
-                      padding: const pw.EdgeInsets.symmetric(horizontal: 2.5, vertical: 1.8),
-                      child: pw.Text('$idx', style: const pw.TextStyle(fontSize: 5.8), textAlign: pw.TextAlign.center),
+                      padding: const pw.EdgeInsets.symmetric(horizontal: 3, vertical: 3),
+                      child: pw.Text('$idx', style: const pw.TextStyle(fontSize: 7.2), textAlign: pw.TextAlign.center),
                     ),
                     pw.Padding(
-                      padding: const pw.EdgeInsets.symmetric(horizontal: 2.5, vertical: 1.8),
-                      child: pw.Text(headName, style: pw.TextStyle(fontSize: 5.8, fontWeight: pw.FontWeight.bold), maxLines: 1),
+                      padding: const pw.EdgeInsets.symmetric(horizontal: 4, vertical: 3),
+                      child: pw.Text(headName, style: pw.TextStyle(fontSize: 7.2, fontWeight: pw.FontWeight.bold), maxLines: 1),
                     ),
                     pw.Padding(
-                      padding: const pw.EdgeInsets.symmetric(horizontal: 2.5, vertical: 1.8),
-                      child: pw.Text(month, style: const pw.TextStyle(fontSize: 5.8), maxLines: 1),
+                      padding: const pw.EdgeInsets.symmetric(horizontal: 4, vertical: 3),
+                      child: pw.Text(month, style: const pw.TextStyle(fontSize: 7.2), maxLines: 1),
                     ),
                     pw.Padding(
-                      padding: const pw.EdgeInsets.symmetric(horizontal: 2.5, vertical: 1.8),
+                      padding: const pw.EdgeInsets.symmetric(horizontal: 4, vertical: 3),
                       child: pw.Text(
                         currencyFormatter.format(item.amountPaid > 0 ? item.amountPaid : item.amountDue),
-                        style: pw.TextStyle(fontSize: 5.8, fontWeight: pw.FontWeight.bold),
+                        style: pw.TextStyle(fontSize: 7.5, fontWeight: pw.FontWeight.bold),
                         textAlign: pw.TextAlign.right,
                       ),
                     ),
@@ -955,22 +1042,22 @@ class ReportGenerator {
                   decoration: pw.BoxDecoration(color: lightGrey),
                   children: [
                     pw.Padding(
-                      padding: const pw.EdgeInsets.symmetric(horizontal: 2.5, vertical: 1.8),
-                      child: pw.Text('+', style: const pw.TextStyle(fontSize: 5.8), textAlign: pw.TextAlign.center),
+                      padding: const pw.EdgeInsets.symmetric(horizontal: 3, vertical: 3),
+                      child: pw.Text('+', style: const pw.TextStyle(fontSize: 7.2), textAlign: pw.TextAlign.center),
                     ),
                     pw.Padding(
-                      padding: const pw.EdgeInsets.symmetric(horizontal: 2.5, vertical: 1.8),
-                      child: pw.Text('Other ($remainingCount fees)', style: pw.TextStyle(fontSize: 5.8, fontWeight: pw.FontWeight.bold)),
+                      padding: const pw.EdgeInsets.symmetric(horizontal: 4, vertical: 3),
+                      child: pw.Text('Other ($remainingCount fees)', style: pw.TextStyle(fontSize: 7.2, fontWeight: pw.FontWeight.bold)),
                     ),
                     pw.Padding(
-                      padding: const pw.EdgeInsets.symmetric(horizontal: 2.5, vertical: 1.8),
-                      child: pw.Text('Multiple schedules', style: const pw.TextStyle(fontSize: 5.8)),
+                      padding: const pw.EdgeInsets.symmetric(horizontal: 4, vertical: 3),
+                      child: pw.Text('Multiple schedules', style: const pw.TextStyle(fontSize: 7.2)),
                     ),
                     pw.Padding(
-                      padding: const pw.EdgeInsets.symmetric(horizontal: 2.5, vertical: 1.8),
+                      padding: const pw.EdgeInsets.symmetric(horizontal: 4, vertical: 3),
                       child: pw.Text(
                         currencyFormatter.format(remainingSum),
-                        style: pw.TextStyle(fontSize: 5.8, fontWeight: pw.FontWeight.bold),
+                        style: pw.TextStyle(fontSize: 7.5, fontWeight: pw.FontWeight.bold),
                         textAlign: pw.TextAlign.right,
                       ),
                     ),
@@ -980,55 +1067,119 @@ class ReportGenerator {
             ],
           ),
 
-          pw.SizedBox(height: 3),
+          pw.SizedBox(height: 6),
 
-          // ── Summary Table ──
+          // ── Summary Row with Status Badge & Totals ──
           pw.Row(
-            mainAxisAlignment: pw.MainAxisAlignment.end,
+            crossAxisAlignment: pw.CrossAxisAlignment.start,
             children: [
-              pw.Container(
-                width: 155,
-                padding: const pw.EdgeInsets.symmetric(horizontal: 5, vertical: 3.5),
-                decoration: pw.BoxDecoration(
-                  color: lightGrey,
-                  borderRadius: const pw.BorderRadius.all(pw.Radius.circular(3)),
-                  border: pw.Border.all(color: PdfColors.grey300, width: 0.5),
+              // Left: Payment Status Pill & Reference
+              pw.Expanded(
+                flex: 4,
+                child: pw.Container(
+                  padding: const pw.EdgeInsets.symmetric(horizontal: 6, vertical: 5),
+                  decoration: pw.BoxDecoration(
+                    color: isPaidFull ? PdfColors.green50 : PdfColors.orange50,
+                    borderRadius: const pw.BorderRadius.all(pw.Radius.circular(3)),
+                    border: pw.Border.all(
+                      color: isPaidFull ? PdfColors.green300 : PdfColors.orange300,
+                      width: 0.5,
+                    ),
+                  ),
+                  child: pw.Column(
+                    crossAxisAlignment: pw.CrossAxisAlignment.start,
+                    children: [
+                      pw.Text(
+                        isPaidFull ? 'STATUS: PAID' : 'STATUS: PARTIAL',
+                        style: pw.TextStyle(
+                          fontSize: 7,
+                          fontWeight: pw.FontWeight.bold,
+                          color: isPaidFull ? PdfColors.green800 : PdfColors.orange800,
+                        ),
+                      ),
+                      pw.SizedBox(height: 2),
+                      if (referenceNumber != null && referenceNumber.trim().isNotEmpty) ...[
+                        pw.Text(
+                          'Ref: $referenceNumber',
+                          style: pw.TextStyle(fontSize: 6, fontWeight: pw.FontWeight.bold, color: darkColor),
+                          maxLines: 1,
+                        ),
+                        pw.SizedBox(height: 1),
+                      ],
+                      pw.Text(
+                        'Payment received with thanks.',
+                        style: const pw.TextStyle(fontSize: 6, color: PdfColors.grey700),
+                      ),
+                    ],
+                  ),
                 ),
-                child: pw.Column(
-                  children: [
-                    pw.Row(
-                      mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-                      children: [
-                        pw.Text('Items: ${paidLedgers.length}', style: const pw.TextStyle(fontSize: 5.5)),
-                        pw.Text('Total Paid:', style: pw.TextStyle(fontSize: 6.2, fontWeight: pw.FontWeight.bold)),
-                        pw.Text(
-                          currencyFormatter.format(totalAmountPaid),
-                          style: pw.TextStyle(fontSize: 7, fontWeight: pw.FontWeight.bold, color: primaryColor),
-                        ),
-                      ],
-                    ),
-                    pw.SizedBox(height: 1.5),
-                    pw.Row(
-                      mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-                      children: [
-                        pw.Text('Remaining Balance:', style: pw.TextStyle(fontSize: 5.5, fontWeight: pw.FontWeight.bold)),
-                        pw.Text(
-                          currencyFormatter.format(student.currentBalance - totalAmountPaid),
-                          style: pw.TextStyle(
-                            fontSize: 5.5,
-                            fontWeight: pw.FontWeight.bold,
-                            color: (student.currentBalance - totalAmountPaid) > 0 ? PdfColors.red800 : PdfColors.green800,
+              ),
+              pw.SizedBox(width: 5),
+              // Right: Totals Card
+              pw.Expanded(
+                flex: 6,
+                child: pw.Container(
+                  padding: const pw.EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+                  decoration: pw.BoxDecoration(
+                    color: lightGrey,
+                    borderRadius: const pw.BorderRadius.all(pw.Radius.circular(3)),
+                    border: pw.Border.all(color: PdfColors.grey300, width: 0.5),
+                  ),
+                  child: pw.Column(
+                    children: [
+                      pw.Row(
+                        mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                        children: [
+                          pw.Text('Items: ${paidLedgers.length}', style: const pw.TextStyle(fontSize: 6.8, color: PdfColors.grey700)),
+                          pw.Text('Total Paid Now:', style: pw.TextStyle(fontSize: 7.5, fontWeight: pw.FontWeight.bold)),
+                          pw.Text(
+                            currencyFormatter.format(totalAmountPaid),
+                            style: pw.TextStyle(fontSize: 8.5, fontWeight: pw.FontWeight.bold, color: primaryColor),
                           ),
-                        ),
-                      ],
-                    ),
-                  ],
+                        ],
+                      ),
+                      pw.Divider(thickness: 0.5, height: 4),
+                      pw.Row(
+                        mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                        children: [
+                          pw.Text('Remaining Balance:', style: pw.TextStyle(fontSize: 6.8, fontWeight: pw.FontWeight.bold)),
+                          pw.Text(
+                            currencyFormatter.format(student.currentBalance - totalAmountPaid),
+                            style: pw.TextStyle(
+                              fontSize: 6.8,
+                              fontWeight: pw.FontWeight.bold,
+                              color: (student.currentBalance - totalAmountPaid) > 0 ? PdfColors.red800 : PdfColors.green800,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
                 ),
               ),
             ],
           ),
 
           pw.Spacer(),
+
+          // ── Note ──
+          pw.Container(
+            padding: const pw.EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+            decoration: pw.BoxDecoration(
+              color: lightGrey,
+              borderRadius: const pw.BorderRadius.all(pw.Radius.circular(2)),
+            ),
+            child: pw.Row(
+              children: [
+                pw.Text(
+                  'Note: Fees once paid are non-refundable. Please keep this receipt for records.',
+                  style: pw.TextStyle(fontSize: 5.5, color: greyColor, fontStyle: pw.FontStyle.italic),
+                ),
+              ],
+            ),
+          ),
+
+          pw.SizedBox(height: 8),
 
           // ── Footer & Signatures ──
           pw.Row(
@@ -1038,35 +1189,27 @@ class ReportGenerator {
               pw.Column(
                 crossAxisAlignment: pw.CrossAxisAlignment.start,
                 children: [
-                  pw.Container(
-                    width: 75,
-                    height: 0.5,
-                    color: PdfColors.grey400,
-                  ),
-                  pw.SizedBox(height: 1.5),
-                  pw.Text('Parent / Guardian', style: pw.TextStyle(fontSize: 5, color: greyColor)),
+                  pw.Container(width: 85, height: 0.6, color: PdfColors.grey400),
+                  pw.SizedBox(height: 2),
+                  pw.Text('Parent / Guardian', style: pw.TextStyle(fontSize: 6.5, color: greyColor)),
                 ],
               ),
               pw.Column(
                 crossAxisAlignment: pw.CrossAxisAlignment.end,
                 children: [
-                  pw.Container(
-                    width: 75,
-                    height: 0.5,
-                    color: PdfColors.grey400,
-                  ),
-                  pw.SizedBox(height: 1.5),
-                  pw.Text('Authorized Cashier / Stamp', style: pw.TextStyle(fontSize: 5, color: greyColor)),
+                  pw.Container(width: 85, height: 0.6, color: PdfColors.grey400),
+                  pw.SizedBox(height: 2),
+                  pw.Text('Authorized Cashier / Stamp', style: pw.TextStyle(fontSize: 6.5, color: greyColor)),
                 ],
               ),
             ],
           ),
 
-          pw.SizedBox(height: 2.5),
+          pw.SizedBox(height: 4),
           pw.Center(
             child: pw.Text(
               'Computer-generated receipt issued by $schoolName.',
-              style: pw.TextStyle(fontSize: 4.8, color: greyColor, fontStyle: pw.FontStyle.italic),
+              style: pw.TextStyle(fontSize: 5.5, color: greyColor, fontStyle: pw.FontStyle.italic),
             ),
           ),
         ],
