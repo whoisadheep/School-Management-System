@@ -5,6 +5,7 @@ import '../../../core/theme/app_theme.dart';
 import '../../../providers/auth_provider.dart';
 import '../../../providers/navigation_provider.dart';
 import '../../widgets/command_palette_dialog.dart';
+import '../../widgets/blobatar.dart';
 
 class DesktopTopBar extends ConsumerWidget {
   const DesktopTopBar({super.key});
@@ -102,10 +103,10 @@ class DesktopTopBar extends ConsumerWidget {
           // User Profile
           Row(
             children: [
-              const CircleAvatar(
-                radius: 20,
-                backgroundColor: Color(0xFFE8E4FF),
-                child: Icon(Icons.person_rounded, color: Color(0xFF4C3BCF), size: 22),
+              AppAvatar(
+                seed: currentAdmin?.username ?? currentAdmin?.fullName ?? 'admin',
+                name: currentAdmin?.fullName ?? 'Admin',
+                size: 38,
               ),
               const SizedBox(width: 10),
               Column(

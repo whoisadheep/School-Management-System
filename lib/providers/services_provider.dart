@@ -43,6 +43,31 @@ final schoolLogoProvider = FutureProvider<Uint8List?>((ref) async {
   return await settingsService.getSchoolLogoBytes();
 });
 
+/// Avatar Style Provider: 'blobatar' (default) or 'initials'
+final avatarStyleProvider = StateNotifierProvider<AvatarStyleNotifier, String>((ref) {
+  final dbService = ref.watch(databaseServiceProvider);
+  return AvatarStyleNotifier(SettingsService(dbService: dbService));
+});
+
+class AvatarStyleNotifier extends StateNotifier<String> {
+  final SettingsService _settings;
+  AvatarStyleNotifier(this._settings) : super('blobatar') {
+    _load();
+  }
+
+  Future<void> _load() async {
+    final val = await _settings.getSetting('avatar_style');
+    if (val != null && val.isNotEmpty) {
+      state = val;
+    }
+  }
+
+  Future<void> setStyle(String newStyle) async {
+    state = newStyle;
+    await _settings.setSetting('avatar_style', newStyle);
+  }
+}
+
 /// InvoiceService Provider
 final invoiceServiceProvider = Provider<InvoiceService>((ref) {
   final dbService = ref.watch(databaseServiceProvider);

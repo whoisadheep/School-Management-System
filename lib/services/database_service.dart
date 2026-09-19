@@ -3360,6 +3360,26 @@ class DatabaseService {
     return nextSeq.toString().padLeft(4, '0');
   }
 
+  /// Generate next sequential roll number for a class & section
+  Future<String> getNextRollNumber(String gradeLevel, String section) async {
+    final db = await _db;
+    final result = await db.rawQuery('''
+      SELECT MAX(CAST(roll_number AS INTEGER)) as max_roll
+      FROM students
+      WHERE (
+        LOWER(TRIM(grade_level)) = LOWER(TRIM(?))
+        OR class_id = (SELECT id FROM classes WHERE LOWER(TRIM(name)) = LOWER(TRIM(?)) LIMIT 1)
+      )
+      AND (
+        UPPER(TRIM(COALESCE(section, 'A'))) = UPPER(TRIM(?))
+      )
+      AND is_active = 1
+    ''', [gradeLevel, gradeLevel, section]);
+
+    final maxRoll = (result.firstOrNull?['max_roll'] as int?) ?? 0;
+    return (maxRoll + 1).toString();
+  }
+
   /// Retrieves chronological payment and receipt history for a student.
   /// Batched fee payments are grouped under the same receipt/reference number.
   Future<List<StudentPaymentRecord>> getStudentPaymentHistory(

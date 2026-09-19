@@ -15,6 +15,7 @@ import '../../../services/file_storage_service.dart';
 import '../../../services/report_generator.dart';
 import '../../../services/settings_service.dart';
 import '../../widgets/pdf_preview_dialog.dart';
+import '../../widgets/blobatar.dart';
 import '../../../services/app_logger.dart';
 import '../../layout/widgets/glass_card.dart';
 import '../fees/student_fee_ledger_view.dart';
@@ -600,18 +601,7 @@ class _StudentDirectoryViewState extends ConsumerState<StudentDirectoryView>
     );
   }
 
-  String _getInitials(Student student) {
-    if (student.firstName != null && student.lastName != null && student.firstName!.isNotEmpty && student.lastName!.isNotEmpty) {
-      return '${student.firstName![0]}${student.lastName![0]}'.toUpperCase();
-    }
-    if (student.name.length >= 2) {
-      return student.name.substring(0, 2).toUpperCase();
-    }
-    if (student.name.isNotEmpty) {
-      return student.name[0].toUpperCase();
-    }
-    return 'S';
-  }
+
 
   Color _avatarColor(String grade) {
     final colors = [
@@ -705,9 +695,11 @@ class _StudentDirectoryViewState extends ConsumerState<StudentDirectoryView>
                           DataCell(
                             Row(
                               children: [
-                                CircleAvatar(
-                                  backgroundColor: _avatarColor(student.gradeLevel),
-                                  child: Text(_getInitials(student), style: GoogleFonts.poppins(color: Colors.white, fontWeight: FontWeight.w600)),
+                                AppAvatar(
+                                  seed: student.admissionNumber ?? student.name,
+                                  name: name,
+                                  size: 38,
+                                  fallbackColor: _avatarColor(student.gradeLevel),
                                 ),
                                 const SizedBox(width: 12),
                                 Column(
@@ -863,29 +855,21 @@ class _StudentDirectoryViewState extends ConsumerState<StudentDirectoryView>
                           )
                         ],
                       ),
-                      child: CircleAvatar(
-                        radius: 50,
-                        backgroundColor: AppTheme.primarySoft,
-                        backgroundImage: (student.photographPath != null &&
-                                student.photographPath!.isNotEmpty &&
-                                File(student.photographPath!).existsSync())
-                            ? FileImage(File(student.photographPath!))
-                            : null,
-                        child: (student.photographPath == null ||
-                                student.photographPath!.isEmpty ||
-                                !File(student.photographPath!).existsSync())
-                            ? Text(
-                                student.name.isNotEmpty
-                                    ? student.name[0].toUpperCase()
-                                    : 'S',
-                                style: GoogleFonts.poppins(
-                                  fontSize: 40,
-                                  color: AppTheme.primaryPurple,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              )
-                            : null,
-                      ),
+                      child: (student.photographPath != null &&
+                              student.photographPath!.isNotEmpty &&
+                              File(student.photographPath!).existsSync())
+                          ? CircleAvatar(
+                              radius: 50,
+                              backgroundColor: AppTheme.primarySoft,
+                              backgroundImage: FileImage(File(student.photographPath!)),
+                            )
+                          : AppAvatar(
+                              seed: student.admissionNumber ?? student.name,
+                              name: student.name,
+                              size: 100,
+                              borderRadius: 50,
+                              fallbackColor: AppTheme.primarySoft,
+                            ),
                     ),
                   ),
                 ],

@@ -2939,7 +2939,8 @@ class DatabaseHelper {
   Future<void> syncClassSectionIntegrity(Database db) async {
     try {
       final studentRows = await db.rawQuery(
-        'SELECT DISTINCT grade_level, section FROM students WHERE grade_level IS NOT NULL AND TRIM(grade_level) != ""'
+        'SELECT DISTINCT grade_level, section FROM students WHERE grade_level IS NOT NULL AND TRIM(grade_level) != ?',
+        [''],
       );
       if (studentRows.isEmpty) return;
 

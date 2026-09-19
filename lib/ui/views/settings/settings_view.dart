@@ -14,6 +14,7 @@ import '../../../services/settings_service.dart';
 import '../../../services/app_logger.dart';
 import 'data_import_view.dart';
 import '../../../providers/onboarding_provider.dart';
+import '../../widgets/blobatar.dart';
 
 final backupsListProvider = FutureProvider<List<BackupFileInfo>>((ref) async {
   final backupService = BackupService();
@@ -41,6 +42,7 @@ class _SettingsViewState extends ConsumerState<SettingsView>
   final _backupPathController = TextEditingController();
   Uint8List? _logoBytes;
   String? _logoPath;
+  int _blobatarPreviewSeed = 0;
 
   final SettingsService _settingsService = SettingsService();
   final BackupService _backupService = BackupService();
@@ -738,7 +740,215 @@ class _SettingsViewState extends ConsumerState<SettingsView>
             ],
           ),
         ),
+        const SizedBox(height: 24),
+
+        // Avatar & Identity Style Card
+        _buildAvatarStyleCard(),
       ],
+    );
+  }
+
+  Widget _buildAvatarStyleCard() {
+    final avatarStyle = ref.watch(avatarStyleProvider);
+    final isBlobatar = avatarStyle == 'blobatar';
+
+    return _buildCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _buildSectionLabel('AVATAR & IDENTITY STYLE'),
+          const SizedBox(height: 6),
+          Text(
+            'Choose how students and staff members without uploaded photos are displayed across Eduvia.',
+            style: GoogleFonts.poppins(fontSize: 12.5, color: AppTheme.textSecondary),
+          ),
+          const SizedBox(height: 20),
+
+          // Style Selection Cards (Blobatar vs Initials)
+          Row(
+            children: [
+              // Option 1: Blobatar
+              Expanded(
+                child: InkWell(
+                  onTap: () {
+                    ref.read(avatarStyleProvider.notifier).setStyle('blobatar');
+                  },
+                  borderRadius: BorderRadius.circular(12),
+                  child: Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: isBlobatar ? AppTheme.primaryPurple.withValues(alpha: 0.06) : AppTheme.bgMain,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                        color: isBlobatar ? AppTheme.primaryPurple : AppTheme.divider,
+                        width: isBlobatar ? 2 : 1,
+                      ),
+                    ),
+                    child: Row(
+                      children: [
+                        Blobatar(seed: 'sample-$_blobatarPreviewSeed', size: 48),
+                        const SizedBox(width: 14),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                children: [
+                                  Text(
+                                    'Blobatar (Cute Blobs)',
+                                    style: GoogleFonts.poppins(
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 13.5,
+                                      color: isBlobatar ? AppTheme.primaryPurple : AppTheme.textPrimary,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 6),
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                    decoration: BoxDecoration(
+                                      color: AppTheme.primaryPurple,
+                                      borderRadius: BorderRadius.circular(6),
+                                    ),
+                                    child: Text(
+                                      'RECOMMENDED',
+                                      style: GoogleFonts.poppins(
+                                        fontSize: 9,
+                                        fontWeight: FontWeight.bold,
+                                        color: Colors.white,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 2),
+                              Text(
+                                'Unique, organic, expressive mascots generated deterministically for every student.',
+                                style: GoogleFonts.poppins(fontSize: 11, color: AppTheme.textSecondary),
+                              ),
+                            ],
+                          ),
+                        ),
+                        Icon(
+                          isBlobatar ? Icons.check_circle_rounded : Icons.radio_button_unchecked_rounded,
+                          color: isBlobatar ? AppTheme.primaryPurple : AppTheme.textHint,
+                          size: 22,
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 16),
+
+              // Option 2: Classic Initials
+              Expanded(
+                child: InkWell(
+                  onTap: () {
+                    ref.read(avatarStyleProvider.notifier).setStyle('initials');
+                  },
+                  borderRadius: BorderRadius.circular(12),
+                  child: Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: !isBlobatar ? AppTheme.primaryPurple.withValues(alpha: 0.06) : AppTheme.bgMain,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                        color: !isBlobatar ? AppTheme.primaryPurple : AppTheme.divider,
+                        width: !isBlobatar ? 2 : 1,
+                      ),
+                    ),
+                    child: Row(
+                      children: [
+                        CircleAvatar(
+                          radius: 24,
+                          backgroundColor: AppTheme.primaryPurple,
+                          child: Text(
+                            'ED',
+                            style: GoogleFonts.poppins(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16),
+                          ),
+                        ),
+                        const SizedBox(width: 14),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'Classic Initials',
+                                style: GoogleFonts.poppins(
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 13.5,
+                                  color: !isBlobatar ? AppTheme.primaryPurple : AppTheme.textPrimary,
+                                ),
+                              ),
+                              const SizedBox(height: 2),
+                              Text(
+                                'Traditional colored circles showing first and last name initials.',
+                                style: GoogleFonts.poppins(fontSize: 11, color: AppTheme.textSecondary),
+                              ),
+                            ],
+                          ),
+                        ),
+                        Icon(
+                          !isBlobatar ? Icons.check_circle_rounded : Icons.radio_button_unchecked_rounded,
+                          color: !isBlobatar ? AppTheme.primaryPurple : AppTheme.textHint,
+                          size: 22,
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+
+          if (isBlobatar) ...[
+            const SizedBox(height: 18),
+            Container(
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: AppTheme.bgMain,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: AppTheme.divider),
+              ),
+              child: Row(
+                children: [
+                  Text(
+                    'Sample Blobs:',
+                    style: GoogleFonts.poppins(fontSize: 12, fontWeight: FontWeight.w600, color: AppTheme.textSecondary),
+                  ),
+                  const SizedBox(width: 12),
+                  ...List.generate(6, (i) {
+                    final seed = 'sample-$_blobatarPreviewSeed-$i';
+                    return Padding(
+                      padding: const EdgeInsets.only(right: 10),
+                      child: Tooltip(
+                        message: 'Seed: $seed',
+                        child: Blobatar(seed: seed, size: 38),
+                      ),
+                    );
+                  }),
+                  const Spacer(),
+                  OutlinedButton.icon(
+                    icon: const Icon(Icons.casino_rounded, size: 16),
+                    label: const Text('Shuffle Blobs', style: TextStyle(fontSize: 12)),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: AppTheme.primaryPurple,
+                      side: const BorderSide(color: AppTheme.primaryPurple),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    ),
+                    onPressed: () {
+                      setState(() {
+                        _blobatarPreviewSeed++;
+                      });
+                    },
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ],
+      ),
     );
   }
 

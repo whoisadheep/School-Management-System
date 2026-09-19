@@ -40,6 +40,14 @@ class AdmissionState {
   final String? stepError;
   final bool isSubmitting;
 
+  // Flow State & Rapid Batch Entry
+  final bool isBatchMode;
+  final int sessionAdmittedCount;
+  final double avgPaceSeconds;
+  final Student? lastAdmittedStudent;
+  final DateTime formStartTime;
+  final bool showSuccessHud;
+
   AdmissionState({
     this.currentStep = 0,
     this.firstName = '',
@@ -71,8 +79,15 @@ class AdmissionState {
     this.hostelId = 'Day Scholar',
     this.stepError,
     this.isSubmitting = false,
+    this.isBatchMode = false,
+    this.sessionAdmittedCount = 0,
+    this.avgPaceSeconds = 0.0,
+    this.lastAdmittedStudent,
+    DateTime? formStartTime,
+    this.showSuccessHud = false,
   })  : admissionNumber = admissionNumber ?? _generateDefaultAdmissionNumber(),
-        admissionDate = admissionDate ?? DateTime.now();
+        admissionDate = admissionDate ?? DateTime.now(),
+        formStartTime = formStartTime ?? DateTime.now();
 
   static String _generateDefaultAdmissionNumber() {
     return '0001';
@@ -118,6 +133,12 @@ class AdmissionState {
     String? hostelId,
     String? stepError,
     bool? isSubmitting,
+    bool? isBatchMode,
+    int? sessionAdmittedCount,
+    double? avgPaceSeconds,
+    Student? lastAdmittedStudent,
+    DateTime? formStartTime,
+    bool? showSuccessHud,
   }) {
     return AdmissionState(
       currentStep: currentStep ?? this.currentStep,
@@ -150,6 +171,12 @@ class AdmissionState {
       hostelId: hostelId ?? this.hostelId,
       stepError: stepError,
       isSubmitting: isSubmitting ?? this.isSubmitting,
+      isBatchMode: isBatchMode ?? this.isBatchMode,
+      sessionAdmittedCount: sessionAdmittedCount ?? this.sessionAdmittedCount,
+      avgPaceSeconds: avgPaceSeconds ?? this.avgPaceSeconds,
+      lastAdmittedStudent: lastAdmittedStudent ?? this.lastAdmittedStudent,
+      formStartTime: formStartTime ?? this.formStartTime,
+      showSuccessHud: showSuccessHud ?? this.showSuccessHud,
     );
   }
 }
@@ -175,6 +202,48 @@ class AdmissionFormNotifier extends StateNotifier<AdmissionState> {
     state = state.copyWith(currentStep: step, stepError: null);
   }
 
+  void toggleBatchMode() {
+    state = state.copyWith(isBatchMode: !state.isBatchMode);
+  }
+
+  void setBatchMode(bool val) {
+    state = state.copyWith(isBatchMode: val);
+  }
+
+  void copyFatherPhoneToPrimary() {
+    final phone = state.fatherPhone.trim();
+    if (phone.isNotEmpty) {
+      state = state.copyWith(primaryContactNumber: phone, stepError: null);
+    }
+  }
+
+  void copyMotherPhoneToPrimary() {
+    final phone = state.motherPhone.trim();
+    if (phone.isNotEmpty) {
+      state = state.copyWith(primaryContactNumber: phone, stepError: null);
+    }
+  }
+
+  void dismissSuccessHud() {
+    state = state.copyWith(showSuccessHud: false);
+  }
+
+  void startNextAdmission() {
+    state = state.copyWith(
+      showSuccessHud: false,
+      currentStep: 0,
+      formStartTime: DateTime.now(),
+      stepError: null,
+    );
+  }
+
+  Future<void> autoSuggestRollNumber() async {
+    try {
+      final nextRoll = await _dbService.getNextRollNumber(state.gradeLevel, state.section);
+      state = state.copyWith(rollNumber: nextRoll, stepError: null);
+    } catch (_) {}
+  }
+
   void updateFirstName(String val) => state = state.copyWith(firstName: val, stepError: null);
   void updateLastName(String val) => state = state.copyWith(lastName: val, stepError: null);
   void updateDob(DateTime? val) => state = state.copyWith(dob: val, stepError: null);
@@ -187,8 +256,20 @@ class AdmissionFormNotifier extends StateNotifier<AdmissionState> {
   void updateAadhaarNumber(String val) => state = state.copyWith(aadhaarNumber: val, stepError: null);
   void updateAdmissionNumber(String val) => state = state.copyWith(admissionNumber: val, stepError: null);
   void updateRollNumber(String val) => state = state.copyWith(rollNumber: val, stepError: null);
-  void updateGradeLevel(String val) => state = state.copyWith(gradeLevel: val, stepError: null);
-  void updateSection(String val) => state = state.copyWith(section: val, stepError: null);
+  void updateGradeLevel(String val) {
+    state = state.copyWith(gradeLevel: val, stepError: null);
+    if (state.rollNumber.isEmpty || state.isBatchMode) {
+      autoSuggestRollNumber();
+    }
+  }
+
+  void updateSection(String val) {
+    state = state.copyWith(section: val, stepError: null);
+    if (state.rollNumber.isEmpty || state.isBatchMode) {
+      autoSuggestRollNumber();
+    }
+  }
+
   void updateAdmissionDate(DateTime val) => state = state.copyWith(admissionDate: val, stepError: null);
 
   void updateFatherName(String val) => state = state.copyWith(fatherName: val, stepError: null);
@@ -394,9 +475,52 @@ class AdmissionFormNotifier extends StateNotifier<AdmissionState> {
       ref.invalidate(studentLedgerSummaryProvider);
       ref.invalidate(dashboardMetricsProvider);
 
-      // Reset draft state after successful admission and fetch next sequential admission number
-      resetForm();
-      await initAdmissionNumber();
+      // Track flow metrics
+      final now = DateTime.now();
+      final elapsed = now.difference(state.formStartTime).inSeconds;
+      final newCount = state.sessionAdmittedCount + 1;
+      final newAvg = state.avgPaceSeconds == 0
+          ? elapsed.toDouble()
+          : ((state.avgPaceSeconds * state.sessionAdmittedCount) + elapsed) / newCount;
+
+      if (state.isBatchMode) {
+        // Increment roll number for next student
+        final currentRoll = int.tryParse(state.rollNumber.trim()) ?? 0;
+        final nextRoll = currentRoll > 0 ? (currentRoll + 1).toString() : '';
+        final nextAdm = await _dbService.getNextAdmissionNumber(sessionName);
+
+        state = AdmissionState(
+          currentStep: 0,
+          gradeLevel: state.gradeLevel,
+          section: state.section,
+          admissionDate: state.admissionDate,
+          admissionNumber: nextAdm,
+          rollNumber: nextRoll,
+          transportRouteId: state.transportRouteId,
+          transportStopId: state.transportStopId,
+          hostelId: state.hostelId,
+          residentialAddress: state.sameAsResidential ? state.residentialAddress : '',
+          permanentAddress: state.permanentAddress,
+          sameAsResidential: state.sameAsResidential,
+          isBatchMode: true,
+          sessionAdmittedCount: newCount,
+          avgPaceSeconds: newAvg,
+          lastAdmittedStudent: student,
+          formStartTime: DateTime.now(),
+          showSuccessHud: true,
+        );
+      } else {
+        final nextAdm = await _dbService.getNextAdmissionNumber(sessionName);
+        state = AdmissionState(
+          admissionNumber: nextAdm,
+          sessionAdmittedCount: newCount,
+          avgPaceSeconds: newAvg,
+          lastAdmittedStudent: student,
+          formStartTime: DateTime.now(),
+          showSuccessHud: true,
+        );
+      }
+
       return true;
     } catch (e) {
       state = state.copyWith(isSubmitting: false, stepError: 'Admission Failed: ${e.toString()}');
@@ -405,7 +529,15 @@ class AdmissionFormNotifier extends StateNotifier<AdmissionState> {
   }
 
   void resetForm() {
-    state = AdmissionState();
+    final savedCount = state.sessionAdmittedCount;
+    final savedAvg = state.avgPaceSeconds;
+    final savedBatch = state.isBatchMode;
+    state = AdmissionState(
+      sessionAdmittedCount: savedCount,
+      avgPaceSeconds: savedAvg,
+      isBatchMode: savedBatch,
+      formStartTime: DateTime.now(),
+    );
     initAdmissionNumber();
   }
 }

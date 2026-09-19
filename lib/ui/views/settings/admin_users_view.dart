@@ -10,6 +10,7 @@ import '../../../providers/auth_provider.dart';
 import '../../../models/admin_user.dart';
 import '../../../models/audit_log.dart';
 import '../../layout/widgets/glass_card.dart';
+import '../../widgets/blobatar.dart';
 import '../../../core/auth/permission_helper.dart';
 
 final adminUsersProvider = FutureProvider.autoDispose<List<AdminUser>>((ref) async {
@@ -132,12 +133,14 @@ class _AdminUsersViewState extends ConsumerState<AdminUsersView> {
                           ],
                         ),
                         const SizedBox(height: 8),
-                        CircleAvatar(
-                          radius: 36,
-                          backgroundColor: u.isActive ? AppTheme.primaryPurple : Colors.grey.shade400,
-                          child: Text(
-                            u.fullName.isNotEmpty ? u.fullName[0].toUpperCase() : '?',
-                            style: GoogleFonts.poppins(fontSize: 28, color: Colors.white, fontWeight: FontWeight.bold),
+                        Opacity(
+                          opacity: u.isActive ? 1.0 : 0.5,
+                          child: AppAvatar(
+                            seed: u.username.isNotEmpty ? u.username : u.fullName,
+                            name: u.fullName,
+                            size: 72,
+                            borderRadius: 36,
+                            fallbackColor: u.isActive ? AppTheme.primaryPurple : Colors.grey.shade400,
                           ),
                         ),
                         const SizedBox(height: 16),

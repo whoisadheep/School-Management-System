@@ -15,6 +15,7 @@ import '../../../services/file_storage_service.dart';
 import '../../../core/auth/permission_helper.dart';
 import '../../../services/app_logger.dart';
 import 'staff_detail_view.dart';
+import '../../widgets/blobatar.dart';
 
 class StaffFilter {
   final String? role;
@@ -1091,16 +1092,13 @@ class _StaffDirectoryViewState extends ConsumerState<StaffDirectoryView>
                       child: ListTile(
                         contentPadding: const EdgeInsets.symmetric(
                             horizontal: 24, vertical: 8),
-                        leading: CircleAvatar(
-                          backgroundColor: staff.isActive
+                        leading: AppAvatar(
+                          seed: (staff.staffCode != null && staff.staffCode!.isNotEmpty) ? staff.staffCode! : staff.fullName,
+                          name: staff.fullName,
+                          size: 40,
+                          fallbackColor: staff.isActive
                               ? AppTheme.primaryPurple.withValues(alpha: 0.1)
                               : Colors.grey.withValues(alpha: 0.2),
-                          child: Text(staff.firstName[0].toUpperCase(),
-                              style: GoogleFonts.poppins(
-                                  color: staff.isActive
-                                      ? AppTheme.primaryPurple
-                                      : Colors.grey,
-                                  fontWeight: FontWeight.w600)),
                         ),
                         title: Text(staff.fullName,
                             style: GoogleFonts.poppins(

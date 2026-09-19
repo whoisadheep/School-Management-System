@@ -54,6 +54,8 @@ class _CommandPaletteDialogState extends ConsumerState<CommandPaletteDialog> {
   final ScrollController _scrollController = ScrollController();
   int _selectedIndex = 0;
   List<Staff> _allStaff = [];
+  Offset? _lastPointerPosition;
+  DateTime _lastKeyboardNavTime = DateTime.fromMillisecondsSinceEpoch(0);
 
   @override
   void initState() {
@@ -112,6 +114,7 @@ class _CommandPaletteDialogState extends ConsumerState<CommandPaletteDialog> {
   void _moveSelection(int delta) {
     final items = _computeFilteredItems();
     if (items.isEmpty) return;
+    _lastKeyboardNavTime = DateTime.now();
     setState(() {
       _selectedIndex = (_selectedIndex + delta) % items.length;
       if (_selectedIndex < 0) {
@@ -122,9 +125,21 @@ class _CommandPaletteDialogState extends ConsumerState<CommandPaletteDialog> {
   }
 
   void _scrollToIndex(int index) {
+    if (!_scrollController.hasClients) return;
     const itemHeight = 56.0;
-    final targetOffset = (index * itemHeight) - 100.0;
-    if (_scrollController.hasClients) {
+    final viewportHeight = _scrollController.position.viewportDimension;
+    final currentOffset = _scrollController.offset;
+    final itemTop = index * itemHeight;
+    final itemBottom = itemTop + itemHeight;
+
+    double? targetOffset;
+    if (itemTop < currentOffset) {
+      targetOffset = itemTop;
+    } else if (itemBottom > currentOffset + viewportHeight) {
+      targetOffset = itemBottom - viewportHeight;
+    }
+
+    if (targetOffset != null) {
       _scrollController.animateTo(
         targetOffset.clamp(0.0, _scrollController.position.maxScrollExtent),
         duration: const Duration(milliseconds: 100),
@@ -673,17 +688,27 @@ class _CommandPaletteDialogState extends ConsumerState<CommandPaletteDialog> {
                                   ),
                                 ),
                               ),
-                            InkWell(
-                              onTap: () {
-                                Navigator.of(context).pop();
-                                item.onSelect();
-                              },
-                              onHover: (hovered) {
-                                if (hovered && _selectedIndex != index) {
+                            MouseRegion(
+                              onHover: (event) {
+                                if (DateTime.now().difference(_lastKeyboardNavTime).inMilliseconds < 250) {
+                                  _lastPointerPosition = event.position;
+                                  return;
+                                }
+                                if (_lastPointerPosition != null) {
+                                  final distance = (event.position - _lastPointerPosition!).distance;
+                                  if (distance < 2.0) return;
+                                }
+                                _lastPointerPosition = event.position;
+                                if (_selectedIndex != index) {
                                   setState(() => _selectedIndex = index);
                                 }
                               },
-                              child: Container(
+                              child: InkWell(
+                                onTap: () {
+                                  Navigator.of(context).pop();
+                                  item.onSelect();
+                                },
+                                child: Container(
                                 margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                                 padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
                                 decoration: BoxDecoration(
@@ -767,8 +792,9 @@ class _CommandPaletteDialogState extends ConsumerState<CommandPaletteDialog> {
                                 ),
                               ),
                             ),
-                          ],
-                        );
+                          ),
+                        ],
+                      );
                       },
                     ),
             ),
