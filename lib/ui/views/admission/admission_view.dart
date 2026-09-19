@@ -34,7 +34,6 @@ class _AdmissionViewState extends ConsumerState<AdmissionView> {
 
   static const List<String> _motherOccupations = [
     'Housewife',
-    'Housewife / Homemaker',
     'Private Sector / Salaried',
     'Government Service',
     'Business / Self-Employed',

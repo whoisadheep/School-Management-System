@@ -2417,6 +2417,9 @@ class DatabaseHelper {
         } catch (_) {}
       }
 
+      // Sync and ensure all student classes and sections exist and students are linked
+      await syncClassSectionIntegrity(db);
+
       // 2. Fee Heads, Fee Structures & Ledger
       await db.execute('''
         CREATE TABLE IF NOT EXISTS fee_heads (
@@ -2928,6 +2931,145 @@ class DatabaseHelper {
       ''');
     } catch (e) {
       print('DatabaseHelper ensureSchemaIntegrity warning: $e');
+    }
+  }
+
+  /// Ensures all classes and sections corresponding to enrolled students exist,
+  /// seeds default curriculum for any new classes, and links students to class_id and section_id.
+  Future<void> syncClassSectionIntegrity(Database db) async {
+    try {
+      final studentRows = await db.rawQuery(
+        'SELECT DISTINCT grade_level, section FROM students WHERE grade_level IS NOT NULL AND TRIM(grade_level) != ""'
+      );
+      if (studentRows.isEmpty) return;
+
+      final existingClasses = await db.query('classes');
+      final existingSections = await db.query('sections');
+
+      final classList = List<Map<String, dynamic>>.from(existingClasses);
+      final sectionList = List<Map<String, dynamic>>.from(existingSections);
+
+      Map<String, dynamic>? findClass(String gradeLevel) {
+        final clean = gradeLevel.trim().toLowerCase();
+        for (final c in classList) {
+          final cName = (c['name'] as String).trim().toLowerCase();
+          if (cName == clean ||
+              cName == 'grade $clean' ||
+              cName == 'class $clean' ||
+              cName.replaceFirst('grade ', '') == clean ||
+              cName.replaceFirst('class ', '') == clean) {
+            return c;
+          }
+        }
+        return null;
+      }
+
+      for (final r in studentRows) {
+        final rawGrade = (r['grade_level'] as String?)?.trim();
+        final rawSec = (r['section'] as String?)?.trim();
+        if (rawGrade == null || rawGrade.isEmpty) continue;
+        final secName = (rawSec != null && rawSec.isNotEmpty) ? rawSec.toUpperCase() : 'A';
+
+        // 1. Find or create Class
+        var matchedClass = findClass(rawGrade);
+        String classId;
+        String canonicalClassName;
+        if (matchedClass != null) {
+          classId = matchedClass['id'] as String;
+          canonicalClassName = matchedClass['name'] as String;
+        } else {
+          canonicalClassName = RegExp(r'^\d+$').hasMatch(rawGrade) ? 'Grade $rawGrade' : rawGrade;
+          classId = 'cls-${canonicalClassName.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '')}';
+          await db.execute(
+            "INSERT OR IGNORE INTO classes (id, name, academic_year, capacity, created_at) VALUES (?, ?, '2026-2027', 40, datetime('now'))",
+            [classId, canonicalClassName],
+          );
+          final newClassMap = {
+            'id': classId,
+            'name': canonicalClassName,
+            'academic_year': '2026-2027',
+            'capacity': 40,
+          };
+          classList.add(newClassMap);
+        }
+
+        // 2. Find or create Section
+        var matchedSec = sectionList.firstWhere(
+          (s) => s['class_id'] == classId && (s['name'] as String).toUpperCase() == secName,
+          orElse: () => <String, dynamic>{},
+        );
+        String sectionId;
+        if (matchedSec.isNotEmpty) {
+          sectionId = matchedSec['id'] as String;
+        } else {
+          sectionId = 'sec-${classId.replaceFirst('cls-', '')}-${secName.toLowerCase()}';
+          await db.execute(
+            "INSERT OR IGNORE INTO sections (id, class_id, name, capacity) VALUES (?, ?, ?, 40)",
+            [sectionId, classId, secName],
+          );
+          final newSecMap = {
+            'id': sectionId,
+            'class_id': classId,
+            'name': secName,
+            'capacity': 40,
+          };
+          sectionList.add(newSecMap);
+        }
+
+        // 3. Update all students matching this grade & section who are missing class_id or section_id
+        await db.execute('''
+          UPDATE students 
+          SET class_id = ?, section_id = ?
+          WHERE (class_id IS NULL OR class_id = '' OR section_id IS NULL OR section_id = '')
+            AND (
+              LOWER(TRIM(grade_level)) = LOWER(TRIM(?))
+              OR LOWER(TRIM(grade_level)) = LOWER(TRIM(REPLACE(?, 'Grade ', '')))
+              OR LOWER(TRIM(grade_level)) = LOWER(TRIM(REPLACE(?, 'Class ', '')))
+              OR LOWER(TRIM(?)) = 'grade ' || LOWER(TRIM(grade_level))
+              OR LOWER(TRIM(?)) = 'class ' || LOWER(TRIM(grade_level))
+            )
+            AND UPPER(TRIM(COALESCE(section, 'A'))) = UPPER(TRIM(?))
+        ''', [classId, sectionId, rawGrade, canonicalClassName, canonicalClassName, canonicalClassName, canonicalClassName, secName]);
+      }
+
+      // 4. Fallback for any remaining unlinked students with class_id set
+      await db.execute('''
+        UPDATE students
+        SET section_id = (
+          SELECT s.id FROM sections s 
+          WHERE s.class_id = students.class_id 
+          LIMIT 1
+        )
+        WHERE (section_id IS NULL OR section_id = '') AND (class_id IS NOT NULL AND class_id != '')
+      ''');
+
+      // 5. Ensure standard default subjects exist for all classes in class_subjects
+      for (final c in classList) {
+        final cid = c['id'] as String;
+        final cname = (c['name'] as String).toLowerCase();
+        final subCountRes = await db.rawQuery('SELECT COUNT(*) as count FROM class_subjects WHERE class_id = ?', [cid]);
+        final subCount = (subCountRes.first['count'] as int?) ?? 0;
+        if (subCount == 0) {
+          final numMatch = RegExp(r'\d+').firstMatch(cname)?.group(0);
+          final gradeNum = int.tryParse(numMatch ?? '');
+          List<String> defaultSubs;
+          if (gradeNum != null && gradeNum >= 1 && gradeNum <= 5) {
+            defaultSubs = ['Mathematics', 'English', 'Hindi', 'General Science', 'Social Studies'];
+          } else {
+            defaultSubs = ['Mathematics', 'English', 'Hindi', 'Science', 'Social Science', 'Computer Science'];
+          }
+
+          for (final subName in defaultSubs) {
+            final subId = 'csub-${cid.replaceAll(RegExp(r'[^a-zA-Z0-9]'), '')}-${subName.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '')}';
+            await db.execute(
+              "INSERT OR IGNORE INTO class_subjects (id, class_id, subject_name, default_max_marks, default_pass_marks) VALUES (?, ?, ?, 100.0, 35.0)",
+              [subId, cid, subName],
+            );
+          }
+        }
+      }
+    } catch (e) {
+      print('DatabaseHelper syncClassSectionIntegrity warning: $e');
     }
   }
 }

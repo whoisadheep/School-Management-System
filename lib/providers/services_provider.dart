@@ -298,6 +298,12 @@ final sectionStudentCountProvider = FutureProvider.family<int, String>((ref, sec
   return await dbService.getStudentCountForSection(sectionId);
 });
 
+/// Phase 2: Class Student Count Provider (total enrolled in class)
+final classStudentCountProvider = FutureProvider.family<int, String>((ref, classId) async {
+  final dbService = ref.watch(databaseServiceProvider);
+  return await dbService.getStudentCountForClass(classId);
+});
+
 /// Phase 2: Class Subjects Provider (family by classId)
 final classSubjectsProvider = FutureProvider.family<List<ClassSubject>, String>((ref, classId) async {
   final dbService = ref.watch(databaseServiceProvider);

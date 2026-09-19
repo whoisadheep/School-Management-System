@@ -662,8 +662,18 @@ class _ClassSectionSetupViewState extends ConsumerState<ClassSectionSetupView> {
                                                   fontWeight: FontWeight.bold,
                                                   color: AppTheme.textPrimary)),
                                           const SizedBox(height: 2),
-                                          Text('Academic Year: ${classModel.academicYear ?? "Current"}  •  Default Capacity: ${classModel.capacity ?? 40} Seats',
-                                              style: GoogleFonts.poppins(fontSize: 12, color: AppTheme.textSecondary)),
+                                          Consumer(
+                                            builder: (context, ref, _) {
+                                              final classStudentCountAsync = ref.watch(classStudentCountProvider(classModel.id));
+                                              final countText = classStudentCountAsync.when(
+                                                data: (cnt) => '  •  Enrolled: $cnt Students',
+                                                loading: () => '',
+                                                error: (_, __) => '',
+                                              );
+                                              return Text('Academic Year: ${classModel.academicYear ?? "Current"}$countText  •  Default Capacity: ${classModel.capacity ?? 40} Seats',
+                                                  style: GoogleFonts.poppins(fontSize: 12, color: AppTheme.textSecondary));
+                                            },
+                                          ),
                                         ],
                                       ),
                                     ),
@@ -919,6 +929,7 @@ class _ClassSectionSetupViewState extends ConsumerState<ClassSectionSetupView> {
 
                                                           await dbService.deleteSection(sec.id);
                                                           ref.invalidate(sectionsForClassProvider(classModel.id));
+                                                          ref.invalidate(classStudentCountProvider(classModel.id));
                                                         },
                                                       ),
                                                     ],
@@ -1153,6 +1164,8 @@ class _ClassSectionSetupViewState extends ConsumerState<ClassSectionSetupView> {
                 }
 
                 ref.invalidate(sectionsForClassProvider(classModel.id));
+                ref.invalidate(classStudentCountProvider(classModel.id));
+                if (section != null) ref.invalidate(sectionStudentCountProvider(section.id));
 
                 if (context.mounted) {
                   Navigator.pop(context);

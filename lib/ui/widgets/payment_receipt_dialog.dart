@@ -112,15 +112,18 @@ class _PaymentReceiptDialogState extends State<PaymentReceiptDialog> {
     buffer.writeln('━━━━━━━━━━━━━━━━━━━━━');
     buffer.writeln('📋 *FEES BREAKDOWN:*');
 
-    for (var l in widget.paidLedgers) {
-      final name = l.feeHeadName ?? l.feeHeadId;
-      final label = l.monthLabel ?? 'One-Time';
-      final amt = currency.format(l.amountDue > 0 ? l.amountDue : l.amountPaid);
-      buffer.writeln('• $name ($label): $amt');
+    final consolidated = ConsolidatedFeeItem.consolidate(widget.paidLedgers);
+    for (var item in consolidated) {
+      final amt = currency.format(item.amountPaid > 0 ? item.amountPaid : item.amountDue);
+      buffer.writeln('• ${item.feeHeadName} (${item.periodLabel}): $amt');
     }
 
     buffer.writeln('━━━━━━━━━━━━━━━━━━━━━');
     buffer.writeln('💰 *TOTAL PAID: ${currency.format(widget.totalAmount)}*');
+    final remainingBalance = widget.student.currentBalance - widget.totalAmount;
+    if (remainingBalance > 0.01) {
+      buffer.writeln('⏳ *Remaining Due (Rolled Over): ${currency.format(remainingBalance)}*');
+    }
     buffer.writeln('━━━━━━━━━━━━━━━━━━━━━');
     buffer.writeln('Thank you for the prompt payment!');
     buffer.writeln('*$_schoolName*');
@@ -358,46 +361,50 @@ class _PaymentReceiptDialogState extends State<PaymentReceiptDialog> {
                       Text('FEES COLLECTED', style: GoogleFonts.poppins(fontSize: 10, fontWeight: FontWeight.bold, color: AppTheme.textSecondary)),
                       const SizedBox(height: 6),
 
-                      Container(
-                        decoration: BoxDecoration(
-                          color: Colors.white,
-                          borderRadius: BorderRadius.circular(8),
-                          border: Border.all(color: AppTheme.divider),
-                        ),
-                        child: Column(
-                          children: widget.paidLedgers.asMap().entries.map((entry) {
-                            final idx = entry.key;
-                            final l = entry.value;
-                            final name = l.feeHeadName ?? l.feeHeadId;
-                            final month = l.monthLabel ?? 'One-Time';
-                            final amt = currencyFormatter.format(l.amountDue > 0 ? l.amountDue : l.amountPaid);
+                      Builder(
+                        builder: (context) {
+                          final consolidated = ConsolidatedFeeItem.consolidate(widget.paidLedgers);
 
-                            return Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                              decoration: BoxDecoration(
-                                color: idx % 2 == 1 ? AppTheme.bgSurface.withValues(alpha: 0.5) : Colors.white,
-                                border: idx < widget.paidLedgers.length - 1
-                                    ? const Border(bottom: BorderSide(color: AppTheme.divider, width: 0.5))
-                                    : null,
-                              ),
-                              child: Row(
-                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                children: [
-                                  Row(
+                          return Container(
+                            decoration: BoxDecoration(
+                              color: Colors.white,
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(color: AppTheme.divider),
+                            ),
+                            child: Column(
+                              children: consolidated.asMap().entries.map((entry) {
+                                final idx = entry.key;
+                                final item = entry.value;
+                                final amt = currencyFormatter.format(item.amountPaid > 0 ? item.amountPaid : item.amountDue);
+
+                                return Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                  decoration: BoxDecoration(
+                                    color: idx % 2 == 1 ? AppTheme.bgSurface.withValues(alpha: 0.5) : Colors.white,
+                                    border: idx < consolidated.length - 1
+                                        ? const Border(bottom: BorderSide(color: AppTheme.divider, width: 0.5))
+                                        : null,
+                                  ),
+                                  child: Row(
+                                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                     children: [
-                                      const Icon(Icons.check_circle_outline, size: 14, color: AppTheme.success),
-                                      const SizedBox(width: 8),
-                                      Text(name, style: GoogleFonts.poppins(fontSize: 12, fontWeight: FontWeight.w600, color: AppTheme.textPrimary)),
-                                      const SizedBox(width: 6),
-                                      Text('($month)', style: GoogleFonts.poppins(fontSize: 11, color: AppTheme.textSecondary)),
+                                      Row(
+                                        children: [
+                                          const Icon(Icons.check_circle_outline, size: 14, color: AppTheme.success),
+                                          const SizedBox(width: 8),
+                                          Text(item.feeHeadName, style: GoogleFonts.poppins(fontSize: 12, fontWeight: FontWeight.w600, color: AppTheme.textPrimary)),
+                                          const SizedBox(width: 6),
+                                          Text('(${item.periodLabel})', style: GoogleFonts.poppins(fontSize: 11, color: AppTheme.textSecondary)),
+                                        ],
+                                      ),
+                                      Text(amt, style: GoogleFonts.poppins(fontSize: 12, fontWeight: FontWeight.w600, color: AppTheme.textPrimary)),
                                     ],
                                   ),
-                                  Text(amt, style: GoogleFonts.poppins(fontSize: 12, fontWeight: FontWeight.w600, color: AppTheme.textPrimary)),
-                                ],
-                              ),
-                            );
-                          }).toList(),
-                        ),
+                                );
+                              }).toList(),
+                            ),
+                          );
+                        },
                       ),
 
                       const SizedBox(height: 14),
@@ -410,17 +417,45 @@ class _PaymentReceiptDialogState extends State<PaymentReceiptDialog> {
                           borderRadius: BorderRadius.circular(8),
                           border: Border.all(color: AppTheme.primaryPurple.withValues(alpha: 0.2)),
                         ),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        child: Column(
                           children: [
-                            Text(
-                              'TOTAL PAID:',
-                              style: GoogleFonts.poppins(fontSize: 13, fontWeight: FontWeight.bold, color: AppTheme.textPrimary),
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Text(
+                                  'TOTAL PAID:',
+                                  style: GoogleFonts.poppins(fontSize: 13, fontWeight: FontWeight.bold, color: AppTheme.textPrimary),
+                                ),
+                                Text(
+                                  currencyFormatter.format(widget.totalAmount),
+                                  style: GoogleFonts.poppins(fontSize: 16, fontWeight: FontWeight.bold, color: AppTheme.primaryPurple),
+                                ),
+                              ],
                             ),
-                            Text(
-                              currencyFormatter.format(widget.totalAmount),
-                              style: GoogleFonts.poppins(fontSize: 16, fontWeight: FontWeight.bold, color: AppTheme.primaryPurple),
-                            ),
+                            if ((widget.student.currentBalance - widget.totalAmount) > 0.01) ...[
+                              const SizedBox(height: 6),
+                              const Divider(height: 1, color: AppTheme.divider),
+                              const SizedBox(height: 6),
+                              Row(
+                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                children: [
+                                  Row(
+                                    children: [
+                                      const Icon(Icons.info_outline_rounded, size: 14, color: AppTheme.warning),
+                                      const SizedBox(width: 5),
+                                      Text(
+                                        'Remaining Due (Rolled Over):',
+                                        style: GoogleFonts.poppins(fontSize: 11, fontWeight: FontWeight.w600, color: AppTheme.warning),
+                                      ),
+                                    ],
+                                  ),
+                                  Text(
+                                    currencyFormatter.format(widget.student.currentBalance - widget.totalAmount),
+                                    style: GoogleFonts.poppins(fontSize: 12, fontWeight: FontWeight.bold, color: AppTheme.error),
+                                  ),
+                                ],
+                              ),
+                            ],
                           ],
                         ),
                       ),

@@ -259,12 +259,87 @@ class DatabaseService {
   // 1. STUDENT CRUD OPERATIONS
   // ============================================================================
 
+  /// Resolves or auto-creates class_id and section_id from gradeLevel and section name
+  Future<Map<String, String?>> resolveClassAndSection({
+    required String gradeLevel,
+    String? section,
+  }) async {
+    final db = await _db;
+    final secName = (section != null && section.trim().isNotEmpty) ? section.trim().toUpperCase() : 'A';
+    final cleanGrade = gradeLevel.trim();
+
+    // 1. Find matching class
+    final classRows = await db.rawQuery('''
+      SELECT id, name FROM classes
+      WHERE LOWER(TRIM(name)) = LOWER(TRIM(?))
+         OR LOWER(TRIM(name)) = 'grade ' || LOWER(TRIM(?))
+         OR LOWER(TRIM(name)) = 'class ' || LOWER(TRIM(?))
+         OR LOWER(TRIM(REPLACE(name, 'Grade ', ''))) = LOWER(TRIM(?))
+         OR LOWER(TRIM(REPLACE(name, 'Class ', ''))) = LOWER(TRIM(?))
+      LIMIT 1
+    ''', [cleanGrade, cleanGrade, cleanGrade, cleanGrade, cleanGrade]);
+
+    String? classId;
+    if (classRows.isNotEmpty) {
+      classId = classRows.first['id'] as String?;
+    } else {
+      final canonicalName = RegExp(r'^\d+$').hasMatch(cleanGrade) ? 'Grade $cleanGrade' : cleanGrade;
+      final newClassId = 'cls-${canonicalName.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '')}';
+      await _insertLogged(db, 'classes', {
+        'id': newClassId,
+        'name': canonicalName,
+        'academic_year': '2026-2027',
+        'capacity': 40,
+        'created_at': DateTime.now().toIso8601String(),
+      });
+      classId = newClassId;
+    }
+
+    // 2. Find matching section
+    String? sectionId;
+    if (classId != null) {
+      final secRows = await db.rawQuery('''
+        SELECT id FROM sections
+        WHERE class_id = ? AND UPPER(TRIM(name)) = UPPER(TRIM(?))
+        LIMIT 1
+      ''', [classId, secName]);
+
+      if (secRows.isNotEmpty) {
+        sectionId = secRows.first['id'] as String?;
+      } else {
+        final newSecId = 'sec-${classId.replaceFirst('cls-', '')}-${secName.toLowerCase()}';
+        await _insertLogged(db, 'sections', {
+          'id': newSecId,
+          'class_id': classId,
+          'name': secName,
+          'capacity': 40,
+        });
+        sectionId = newSecId;
+      }
+    }
+
+    return {'classId': classId, 'sectionId': sectionId};
+  }
+
   /// Insert a new student record into SQLite
   Future<int> insertStudent(Student student) async {
     final db = await _db;
+    var studentToInsert = student;
+    if (student.classId == null || student.sectionId == null) {
+      try {
+        final resolved = await resolveClassAndSection(
+          gradeLevel: student.gradeLevel,
+          section: student.section,
+        );
+        studentToInsert = student.copyWith(
+          classId: student.classId ?? resolved['classId'],
+          sectionId: student.sectionId ?? resolved['sectionId'],
+        );
+      } catch (_) {}
+    }
     return await _insertLogged(db, 
       'students',
-      student.toMap(),
+      studentToInsert.toMap(),
       conflictAlgorithm: ConflictAlgorithm.replace,
     );
   }
@@ -332,14 +407,27 @@ class DatabaseService {
   /// Update an existing student record
   Future<int> updateStudent(Student student) async {
     final db = await _db;
-    final updatedMap = student.toMap();
+    var studentToUpdate = student;
+    if (student.classId == null || student.sectionId == null) {
+      try {
+        final resolved = await resolveClassAndSection(
+          gradeLevel: student.gradeLevel,
+          section: student.section,
+        );
+        studentToUpdate = student.copyWith(
+          classId: student.classId ?? resolved['classId'],
+          sectionId: student.sectionId ?? resolved['sectionId'],
+        );
+      } catch (_) {}
+    }
+    final updatedMap = studentToUpdate.toMap();
     updatedMap['updated_at'] = DateTime.now().toIso8601String();
 
     return await _updateLogged(db, 
       'students',
       updatedMap,
       where: 'id = ?',
-      whereArgs: [student.id],
+      whereArgs: [studentToUpdate.id],
     );
   }
 
@@ -1622,11 +1710,21 @@ class DatabaseService {
   // CLASS & SECTION MASTER DATA
   // ============================================================================
 
-  /// Get all classes
+  /// Get all classes (sorted naturally by grade number)
   Future<List<ClassModel>> getAllClasses() async {
     final db = await _db;
     final results = await db.query('classes', orderBy: 'name ASC');
-    return results.map((m) => ClassModel.fromMap(m)).toList();
+    final list = results.map((m) => ClassModel.fromMap(m)).toList();
+    list.sort((a, b) {
+      final numA = int.tryParse(RegExp(r'\d+').firstMatch(a.name)?.group(0) ?? '');
+      final numB = int.tryParse(RegExp(r'\d+').firstMatch(b.name)?.group(0) ?? '');
+      if (numA != null && numB != null) {
+        final cmp = numA.compareTo(numB);
+        if (cmp != 0) return cmp;
+      }
+      return a.name.compareTo(b.name);
+    });
+    return list;
   }
 
   Future<void> cloneClassesToAcademicYear(String sourceYear, String targetYear) async {
@@ -1676,12 +1774,30 @@ class DatabaseService {
   /// Create class
   Future<int> createClass(ClassModel classModel) async {
     final db = await _db;
-    return await _insertLogged(db, 'classes', classModel.toMap());
+    final res = await _insertLogged(db, 'classes', classModel.toMap());
+    try {
+      await db.execute('''
+        UPDATE students 
+        SET class_id = ?
+        WHERE (class_id IS NULL OR class_id = '')
+          AND (
+            LOWER(TRIM(grade_level)) = LOWER(TRIM(?))
+            OR LOWER(TRIM(grade_level)) = LOWER(TRIM(REPLACE(?, 'Grade ', '')))
+            OR LOWER(TRIM(grade_level)) = LOWER(TRIM(REPLACE(?, 'Class ', '')))
+            OR LOWER(TRIM(?)) = 'grade ' || LOWER(TRIM(grade_level))
+            OR LOWER(TRIM(?)) = 'class ' || LOWER(TRIM(grade_level))
+          )
+      ''', [classModel.id, classModel.name, classModel.name, classModel.name, classModel.name, classModel.name]);
+    } catch (_) {}
+    return res;
   }
 
   /// Update class
   Future<int> updateClass(ClassModel classModel) async {
     final db = await _db;
+    try {
+      await db.execute('UPDATE students SET grade_level = ? WHERE class_id = ?', [classModel.name, classModel.id]);
+    } catch (_) {}
     return await _updateLogged(db, 'classes', classModel.toMap(), where: 'id = ?', whereArgs: [classModel.id]);
   }
 
@@ -1701,12 +1817,34 @@ class DatabaseService {
   /// Create section
   Future<int> createSection(Section section) async {
     final db = await _db;
-    return await _insertLogged(db, 'sections', section.toMap());
+    final res = await _insertLogged(db, 'sections', section.toMap());
+    try {
+      final cls = await getClassById(section.classId);
+      final clsName = cls?.name ?? '';
+      await db.execute('''
+        UPDATE students 
+        SET class_id = ?, section_id = ?
+        WHERE (section_id IS NULL OR section_id = '')
+          AND (
+            class_id = ?
+            OR LOWER(TRIM(grade_level)) = LOWER(TRIM(?))
+            OR LOWER(TRIM(grade_level)) = LOWER(TRIM(REPLACE(?, 'Grade ', '')))
+            OR LOWER(TRIM(grade_level)) = LOWER(TRIM(REPLACE(?, 'Class ', '')))
+            OR LOWER(TRIM(?)) = 'grade ' || LOWER(TRIM(grade_level))
+            OR LOWER(TRIM(?)) = 'class ' || LOWER(TRIM(grade_level))
+          )
+          AND UPPER(TRIM(COALESCE(section, 'A'))) = UPPER(TRIM(?))
+      ''', [section.classId, section.id, section.classId, clsName, clsName, clsName, clsName, clsName, section.name]);
+    } catch (_) {}
+    return res;
   }
 
   /// Update section
   Future<int> updateSection(Section section) async {
     final db = await _db;
+    try {
+      await db.execute('UPDATE students SET section = ? WHERE section_id = ?', [section.name, section.id]);
+    } catch (_) {}
     return await _updateLogged(db, 'sections', section.toMap(), where: 'id = ?', whereArgs: [section.id]);
   }
 
@@ -1727,13 +1865,53 @@ class DatabaseService {
     );
   }
 
-  /// Get student count for section
+  /// Get student count for section (resilient: matches direct section_id or class/section name fallback)
   Future<int> getStudentCountForSection(String sectionId) async {
     final db = await _db;
-    final result = await db.rawQuery(
-      'SELECT COUNT(*) as cnt FROM students WHERE section_id = ? AND is_active = 1',
-      [sectionId],
-    );
+    final result = await db.rawQuery('''
+      SELECT COUNT(*) as cnt 
+      FROM students s
+      JOIN sections sec ON sec.id = ?
+      LEFT JOIN classes c ON sec.class_id = c.id
+      WHERE s.is_active = 1
+        AND (
+          s.section_id = sec.id
+          OR (
+            (s.section_id IS NULL OR s.section_id = '')
+            AND (
+              s.class_id = sec.class_id
+              OR LOWER(TRIM(s.grade_level)) = LOWER(TRIM(c.name))
+              OR LOWER(TRIM(s.grade_level)) = LOWER(TRIM(REPLACE(c.name, 'Grade ', '')))
+              OR LOWER(TRIM(s.grade_level)) = LOWER(TRIM(REPLACE(c.name, 'Class ', '')))
+              OR LOWER(TRIM(c.name)) = 'grade ' || LOWER(TRIM(s.grade_level))
+              OR LOWER(TRIM(c.name)) = 'class ' || LOWER(TRIM(s.grade_level))
+            )
+            AND UPPER(TRIM(COALESCE(s.section, 'A'))) = UPPER(TRIM(sec.name))
+          )
+        )
+    ''', [sectionId]);
+    if (result.isEmpty) return 0;
+    return (result.first['cnt'] as num?)?.toInt() ?? 0;
+  }
+
+  /// Get total student count for a class across all its sections
+  Future<int> getStudentCountForClass(String classId) async {
+    final db = await _db;
+    final result = await db.rawQuery('''
+      SELECT COUNT(*) as cnt 
+      FROM students s
+      LEFT JOIN classes c ON c.id = ?
+      WHERE s.is_active = 1
+        AND (
+          s.class_id = ?
+          OR s.section_id IN (SELECT id FROM sections WHERE class_id = ?)
+          OR LOWER(TRIM(s.grade_level)) = LOWER(TRIM(c.name))
+          OR LOWER(TRIM(s.grade_level)) = LOWER(TRIM(REPLACE(c.name, 'Grade ', '')))
+          OR LOWER(TRIM(s.grade_level)) = LOWER(TRIM(REPLACE(c.name, 'Class ', '')))
+          OR LOWER(TRIM(c.name)) = 'grade ' || LOWER(TRIM(s.grade_level))
+          OR LOWER(TRIM(c.name)) = 'class ' || LOWER(TRIM(s.grade_level))
+        )
+    ''', [classId, classId, classId]);
     if (result.isEmpty) return 0;
     return (result.first['cnt'] as num?)?.toInt() ?? 0;
   }

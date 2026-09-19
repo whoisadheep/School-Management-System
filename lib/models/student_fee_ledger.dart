@@ -208,3 +208,158 @@ class StudentFeeDuesSummary {
     this.unpaidDetails = const [],
   });
 }
+
+/// Represents a consolidated fee item grouping multiple contiguous months
+/// of the same fee head (e.g. "Tuition Fee" with "From April to June").
+class ConsolidatedFeeItem {
+  final String feeHeadId;
+  final String feeHeadName;
+  final String periodLabel;
+  final double amountDue;
+  final double amountPaid;
+  final double remainingAmount;
+  final DateTime dueDate;
+  final LedgerStatus status;
+  final bool isPastArrear;
+  final List<StudentFeeLedger> originalLedgers;
+
+  const ConsolidatedFeeItem({
+    required this.feeHeadId,
+    required this.feeHeadName,
+    required this.periodLabel,
+    required this.amountDue,
+    required this.amountPaid,
+    required this.remainingAmount,
+    required this.dueDate,
+    this.status = LedgerStatus.pending,
+    this.isPastArrear = false,
+    required this.originalLedgers,
+  });
+
+  /// Consolidates a list of StudentFeeLedger items by feeHeadId.
+  /// If a student owes or paid Tuition Fee for April, May, June,
+  /// this merges them into a single Tuition Fee item with period "From April to June".
+  static List<ConsolidatedFeeItem> consolidate(
+    List<StudentFeeLedger> ledgers, {
+    int Function(String? monthLabel)? monthIndexResolver,
+    int? currentFromMonthIndex,
+  }) {
+    if (ledgers.isEmpty) return [];
+
+    // Group ledgers by feeHeadId
+    final Map<String, List<StudentFeeLedger>> groups = {};
+    for (final l in ledgers) {
+      final key = l.feeHeadId;
+      groups.putIfAbsent(key, () => []).add(l);
+    }
+
+    final List<ConsolidatedFeeItem> result = [];
+
+    for (final entry in groups.entries) {
+      final list = entry.value;
+      if (list.isEmpty) continue;
+
+      // Sort by due date
+      list.sort((a, b) => a.dueDate.compareTo(b.dueDate));
+
+      // Separate into past arrears and regular selection if resolver provided
+      final List<StudentFeeLedger> arrears = [];
+      final List<StudentFeeLedger> regular = [];
+
+      if (monthIndexResolver != null && currentFromMonthIndex != null && currentFromMonthIndex >= 0) {
+        for (final item in list) {
+          final mIdx = monthIndexResolver(item.monthLabel);
+          if (mIdx != -1 && mIdx < currentFromMonthIndex) {
+            arrears.add(item);
+          } else {
+            regular.add(item);
+          }
+        }
+      } else {
+        regular.addAll(list);
+      }
+
+      if (arrears.isNotEmpty) {
+        result.add(_buildConsolidated(arrears, isArrear: true));
+      }
+      if (regular.isNotEmpty) {
+        result.add(_buildConsolidated(regular, isArrear: false));
+      }
+    }
+
+    return result;
+  }
+
+  static ConsolidatedFeeItem _buildConsolidated(List<StudentFeeLedger> items, {required bool isArrear}) {
+    final first = items.first;
+    final headName = first.feeHeadName ?? first.feeHeadId;
+
+    final double totalDue = items.fold(0.0, (sum, l) => sum + l.amountDue);
+    final double totalPaid = items.fold(0.0, (sum, l) => sum + l.amountPaid);
+    final double totalRemaining = items.fold(0.0, (sum, l) => sum + l.remainingAmount);
+    final bool allPaid = items.every((l) => l.status == LedgerStatus.paid);
+    final bool anyPartial = items.any((l) => l.status == LedgerStatus.partial);
+
+    final LedgerStatus status = allPaid
+        ? LedgerStatus.paid
+        : (anyPartial ? LedgerStatus.partial : LedgerStatus.pending);
+
+    // Build period label
+    final monthLabels = items
+        .map((l) => l.monthLabel)
+        .where((m) => m != null && m.isNotEmpty)
+        .cast<String>()
+        .toList();
+
+    String periodLabel;
+    if (monthLabels.isEmpty) {
+      periodLabel = 'Annual / One-Time';
+    } else if (monthLabels.length == 1) {
+      final m = shortMonth(monthLabels.first);
+      periodLabel = isArrear ? '$m (Arrears)' : m;
+    } else {
+      final firstMonth = shortMonth(monthLabels.first);
+      final lastMonth = shortMonth(monthLabels.last);
+      if (firstMonth == lastMonth) {
+        periodLabel = isArrear ? '$firstMonth (Arrears)' : firstMonth;
+      } else {
+        periodLabel = isArrear
+            ? 'From $firstMonth to $lastMonth (Arrears)'
+            : 'From $firstMonth to $lastMonth';
+      }
+    }
+
+    return ConsolidatedFeeItem(
+      feeHeadId: first.feeHeadId,
+      feeHeadName: headName,
+      periodLabel: periodLabel,
+      amountDue: totalDue,
+      amountPaid: totalPaid,
+      remainingAmount: totalRemaining,
+      dueDate: items.last.dueDate,
+      status: status,
+      isPastArrear: isArrear,
+      originalLedgers: items,
+    );
+  }
+
+  /// Converts a full or partial month name (e.g. "January", "April 2026")
+  /// into standard short format: Jan, Feb, Mar, Apr, May, Jun, Jul, Aug, Sept, Oct, Nov, Dec.
+  static String shortMonth(String raw) {
+    final clean = raw.trim().split(' ').first;
+    final lower = clean.toLowerCase();
+    if (lower.startsWith('jan')) return 'Jan';
+    if (lower.startsWith('feb')) return 'Feb';
+    if (lower.startsWith('mar')) return 'Mar';
+    if (lower.startsWith('apr')) return 'Apr';
+    if (lower.startsWith('may')) return 'May';
+    if (lower.startsWith('jun')) return 'Jun';
+    if (lower.startsWith('jul')) return 'Jul';
+    if (lower.startsWith('aug')) return 'Aug';
+    if (lower.startsWith('sep')) return 'Sept';
+    if (lower.startsWith('oct')) return 'Oct';
+    if (lower.startsWith('nov')) return 'Nov';
+    if (lower.startsWith('dec')) return 'Dec';
+    return clean;
+  }
+}

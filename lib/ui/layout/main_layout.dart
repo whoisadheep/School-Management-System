@@ -45,12 +45,37 @@ class MainLayout extends ConsumerStatefulWidget {
 }
 
 class _MainLayoutState extends ConsumerState<MainLayout> {
+  bool _isPaletteOpen = false;
+
   @override
   void initState() {
     super.initState();
+    HardwareKeyboard.instance.addHandler(_handleGlobalKey);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _checkUpdates();
     });
+  }
+
+  @override
+  void dispose() {
+    HardwareKeyboard.instance.removeHandler(_handleGlobalKey);
+    super.dispose();
+  }
+
+  bool _handleGlobalKey(KeyEvent event) {
+    if (event is KeyDownEvent) {
+      final isCtrl = HardwareKeyboard.instance.isControlPressed;
+      final isMeta = HardwareKeyboard.instance.isMetaPressed;
+      if (isCtrl || isMeta) {
+        if (event.logicalKey == LogicalKeyboardKey.keyK) {
+          if (!_isPaletteOpen && mounted) {
+            _openCommandPalette(context);
+            return true;
+          }
+        }
+      }
+    }
+    return false;
   }
 
   Future<void> _checkUpdates() async {
@@ -65,12 +90,16 @@ class _MainLayoutState extends ConsumerState<MainLayout> {
   }
 
   void _openCommandPalette(BuildContext context) {
+    if (_isPaletteOpen) return;
+    _isPaletteOpen = true;
     showDialog(
       context: context,
       barrierColor: Colors.black.withValues(alpha: 0.45),
       barrierDismissible: true,
       builder: (context) => const CommandPaletteDialog(),
-    );
+    ).then((_) {
+      _isPaletteOpen = false;
+    });
   }
 
   @override
