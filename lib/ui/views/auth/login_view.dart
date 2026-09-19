@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../../providers/auth_provider.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../widgets/blobatar.dart';
 import 'forgot_password_view.dart';
 
 class AdminLoginView extends ConsumerStatefulWidget {
@@ -93,6 +94,23 @@ class _AdminLoginViewState extends ConsumerState<AdminLoginView> {
                       ],
                     ),
                     const Spacer(),
+
+                    // Cute Blob Cartoon Trio
+                    const Center(
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Blobatar(seed: 'eduvia-student', size: 72, borderRadius: 36),
+                          SizedBox(width: 16),
+                          Blobatar(seed: 'eduvia-teacher', size: 96, borderRadius: 48),
+                          SizedBox(width: 16),
+                          Blobatar(seed: 'eduvia-admin', size: 72, borderRadius: 36),
+                        ],
+                      ),
+                    ),
+
+                    const SizedBox(height: 40),
+
                     // Tagline
                     Text(
                       'School\nManagement,\nSimplified.',

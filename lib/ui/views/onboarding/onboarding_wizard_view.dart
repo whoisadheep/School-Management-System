@@ -19,8 +19,7 @@ class OnboardingWizardView extends ConsumerStatefulWidget {
   ConsumerState<OnboardingWizardView> createState() => _OnboardingWizardViewState();
 }
 
-class _OnboardingWizardViewState extends ConsumerState<OnboardingWizardView>
-    with TickerProviderStateMixin {
+class _OnboardingWizardViewState extends ConsumerState<OnboardingWizardView> {
   final PageController _pageController = PageController();
   final _formKey1 = GlobalKey<FormState>();
   final _formKey2 = GlobalKey<FormState>();
@@ -60,60 +59,10 @@ class _OnboardingWizardViewState extends ConsumerState<OnboardingWizardView>
 
   int _currentStep = 0;
   bool _isFinishing = false;
-  bool _celebrationVisible = false;
-
-  // Animation Controllers
-  late AnimationController _floatController;
-  late Animation<double> _floatAnimation;
-
-  late AnimationController _pulseController;
-  late Animation<double> _pulseAnimation;
-
-  late AnimationController _celebrationController;
-  late Animation<double> _celebrationScale;
-
-  @override
-  void initState() {
-    super.initState();
-
-    // Gentle float animation for header mascot
-    _floatController = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 2200),
-    )..repeat(reverse: true);
-
-    _floatAnimation = Tween<double>(begin: -5, end: 5).animate(
-      CurvedAnimation(parent: _floatController, curve: Curves.easeInOut),
-    );
-
-    // Cute pulsing ring for active stepper
-    _pulseController = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 1400),
-    )..repeat(reverse: true);
-
-    _pulseAnimation = Tween<double>(begin: 0.85, end: 1.15).animate(
-      CurvedAnimation(parent: _pulseController, curve: Curves.easeInOut),
-    );
-
-    // Celebratory bounce on completion
-    _celebrationController = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 900),
-    );
-
-    _celebrationScale = CurvedAnimation(
-      parent: _celebrationController,
-      curve: Curves.elasticOut,
-    );
-  }
 
   @override
   void dispose() {
     _pageController.dispose();
-    _floatController.dispose();
-    _pulseController.dispose();
-    _celebrationController.dispose();
     _schoolNameController.dispose();
     _schoolAddressController.dispose();
     _schoolContactController.dispose();
@@ -137,8 +86,8 @@ class _OnboardingWizardViewState extends ConsumerState<OnboardingWizardView>
       setState(() => _currentStep++);
       _pageController.animateToPage(
         _currentStep,
-        duration: const Duration(milliseconds: 450),
-        curve: Curves.easeInOutCubic,
+        duration: const Duration(milliseconds: 350),
+        curve: Curves.easeInOut,
       );
     }
   }
@@ -148,8 +97,8 @@ class _OnboardingWizardViewState extends ConsumerState<OnboardingWizardView>
       setState(() => _currentStep--);
       _pageController.animateToPage(
         _currentStep,
-        duration: const Duration(milliseconds: 450),
-        curve: Curves.easeInOutCubic,
+        duration: const Duration(milliseconds: 350),
+        curve: Curves.easeInOut,
       );
     }
   }
@@ -159,12 +108,7 @@ class _OnboardingWizardViewState extends ConsumerState<OnboardingWizardView>
       if (!_formKey3.currentState!.validate()) return;
     }
 
-    setState(() {
-      _isFinishing = true;
-      _celebrationVisible = true;
-    });
-
-    _celebrationController.forward(from: 0.0);
+    setState(() => _isFinishing = true);
 
     try {
       final settings = SettingsService();
@@ -217,18 +161,12 @@ class _OnboardingWizardViewState extends ConsumerState<OnboardingWizardView>
       ref.invalidate(schoolNameProvider);
       ref.invalidate(schoolLogoProvider);
 
-      // Hold celebration for 1.4s so the user enjoys the cute animation
-      await Future.delayed(const Duration(milliseconds: 1400));
-
       if (mounted) {
         ref.read(onboardingPendingProvider.notifier).state = false;
       }
     } catch (e) {
       if (mounted) {
-        setState(() {
-          _isFinishing = false;
-          _celebrationVisible = false;
-        });
+        setState(() => _isFinishing = false);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Error saving setup: $e'),
@@ -241,249 +179,243 @@ class _OnboardingWizardViewState extends ConsumerState<OnboardingWizardView>
 
   @override
   Widget build(BuildContext context) {
+    final screenWidth = MediaQuery.of(context).size.width;
+    final isWide = screenWidth > 900;
+
     return Scaffold(
-      body: Stack(
+      body: Row(
         children: [
-          // Background Gradient with soft ambient circles
-          Container(
-            decoration: const BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                colors: [
-                  AppTheme.primaryPurple,
-                  Color(0xFF3B2F99),
-                  Color(0xFF221668),
-                ],
-              ),
-            ),
-          ),
-
-          // Floating Ambient Glow Circles
-          Positioned(
-            top: -60,
-            left: -60,
-            child: Container(
-              width: 240,
-              height: 240,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: Colors.white.withValues(alpha: 0.05),
-              ),
-            ),
-          ),
-          Positioned(
-            bottom: -80,
-            right: -80,
-            child: Container(
-              width: 320,
-              height: 320,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: Colors.white.withValues(alpha: 0.04),
-              ),
-            ),
-          ),
-
-          // Main Wizard Card
-          Center(
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.symmetric(vertical: 30),
+          // ── Left Branding Panel ──
+          if (isWide)
+            Expanded(
+              flex: 4,
               child: Container(
-                width: 640,
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(24),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withValues(alpha: 0.25),
-                      blurRadius: 30,
-                      offset: const Offset(0, 10),
-                    ),
-                  ],
-                ),
-                clipBehavior: Clip.antiAlias,
+                color: AppTheme.primaryPurple,
+                padding: const EdgeInsets.symmetric(horizontal: 56, vertical: 48),
                 child: Column(
-                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    _buildCuteHeader(),
-                    _buildStepperBar(),
-                    const Divider(height: 1, color: AppTheme.divider),
-                    SizedBox(
-                      height: 420,
-                      child: PageView(
-                        controller: _pageController,
-                        physics: const NeverScrollableScrollPhysics(),
-                        children: [
-                          _buildStep1SchoolIdentity(),
-                          _buildStep2AcademicAndFinance(),
-                          _buildStep3AdminSecurity(),
-                        ],
-                      ),
+                    Row(
+                      children: [
+                        Container(
+                          width: 36,
+                          height: 36,
+                          decoration: BoxDecoration(
+                            color: Colors.white.withValues(alpha: 0.15),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          clipBehavior: Clip.antiAlias,
+                          child: Image.asset(
+                            'assets/icons/app_icon.png',
+                            width: 36,
+                            height: 36,
+                            fit: BoxFit.contain,
+                            errorBuilder: (_, __, ___) => const Icon(Icons.school_rounded, color: Colors.white, size: 22),
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        Text(
+                          'Eduvia',
+                          style: GoogleFonts.poppins(color: Colors.white, fontSize: 20, fontWeight: FontWeight.w600),
+                        ),
+                      ],
                     ),
-                    const Divider(height: 1, color: AppTheme.divider),
-                    _buildBottomNavigationBar(),
-                  ],
-                ),
-              ),
-            ),
-          ),
-
-          // Celebratory Success Overlay
-          if (_celebrationVisible) _buildCelebrationOverlay(),
-        ],
-      ),
-    );
-  }
-
-  // --------------------------------------------------------------------------
-  // Header with Cute Bouncing Icon Mascot
-  // --------------------------------------------------------------------------
-  Widget _buildCuteHeader() {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 24),
-      decoration: const BoxDecoration(
-        color: Color(0xFFFAF9FF),
-      ),
-      child: Row(
-        children: [
-          AnimatedBuilder(
-            animation: _floatAnimation,
-            builder: (context, child) {
-              return Transform.translate(
-                offset: Offset(0, _floatAnimation.value),
-                child: child,
-              );
-            },
-            child: Container(
-              width: 56,
-              height: 56,
-              decoration: BoxDecoration(
-                gradient: const LinearGradient(
-                  colors: [Color(0xFF8B5CF6), AppTheme.primaryPurple],
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                ),
-                borderRadius: BorderRadius.circular(16),
-                boxShadow: [
-                  BoxShadow(
-                    color: AppTheme.primaryPurple.withValues(alpha: 0.35),
-                    blurRadius: 12,
-                    offset: const Offset(0, 4),
-                  ),
-                ],
-              ),
-              child: const Center(
-                child: Icon(Icons.school_rounded, color: Colors.white, size: 30),
-              ),
-            ),
-          ),
-          const SizedBox(width: 18),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
+                    const Spacer(),
                     Text(
-                      'Welcome to Eduvia!',
+                      'Let\'s get\nyour school\nset up.',
                       style: GoogleFonts.poppins(
-                        fontSize: 20,
+                        color: Colors.white,
+                        fontSize: 38,
                         fontWeight: FontWeight.w700,
-                        color: AppTheme.textPrimary,
-                        letterSpacing: -0.3,
+                        height: 1.2,
                       ),
                     ),
-                    const SizedBox(width: 6),
-                    const Text('✨', style: TextStyle(fontSize: 18)),
+                    const SizedBox(height: 20),
+                    Text(
+                      'Just a few details and you\'re ready.\nThis takes about 2 minutes.',
+                      style: GoogleFonts.poppins(
+                        color: Colors.white.withValues(alpha: 0.7),
+                        fontSize: 15,
+                        height: 1.6,
+                      ),
+                    ),
+                    const SizedBox(height: 40),
+                    // Step indicators
+                    _buildSideStepIndicator(0, 'School Identity', Icons.account_balance_outlined),
+                    const SizedBox(height: 16),
+                    _buildSideStepIndicator(1, 'Academic Session', Icons.calendar_month_outlined),
+                    const SizedBox(height: 16),
+                    _buildSideStepIndicator(2, 'Admin Security', Icons.shield_outlined),
+                    const Spacer(),
+                    Text(
+                      '🔒  All data stays on this machine.',
+                      style: GoogleFonts.poppins(color: Colors.white.withValues(alpha: 0.5), fontSize: 12),
+                    ),
                   ],
                 ),
-                const SizedBox(height: 3),
-                Text(
-                  'Let\'s set up your school profile in 2 simple minutes.',
-                  style: GoogleFonts.poppins(
-                    fontSize: 13,
-                    color: AppTheme.textSecondary,
-                    fontWeight: FontWeight.w400,
-                  ),
-                ),
-              ],
+              ),
             ),
-          ),
-        ],
-      ),
-    );
-  }
 
-  // --------------------------------------------------------------------------
-  // Cute Stepper Bar with Animated Pills
-  // --------------------------------------------------------------------------
-  Widget _buildStepperBar() {
-    final steps = [
-      {'title': 'Identity', 'icon': Icons.account_balance_rounded},
-      {'title': 'Session', 'icon': Icons.calendar_month_rounded},
-      {'title': 'Security', 'icon': Icons.shield_rounded},
-    ];
+          // ── Right Form Panel ──
+          Expanded(
+            flex: 5,
+            child: Container(
+              color: Colors.white,
+              child: Column(
+                children: [
+                  // Top bar (mobile only - shows step info)
+                  if (!isWide)
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+                      color: AppTheme.primaryPurple,
+                      child: SafeArea(
+                        bottom: false,
+                        child: Row(
+                          children: [
+                            Image.asset(
+                              'assets/icons/app_icon.png',
+                              width: 28,
+                              height: 28,
+                              errorBuilder: (_, __, ___) => const Icon(Icons.school_rounded, color: Colors.white, size: 24),
+                            ),
+                            const SizedBox(width: 10),
+                            Text(
+                              'Eduvia Setup',
+                              style: GoogleFonts.poppins(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w600),
+                            ),
+                            const Spacer(),
+                            Text(
+                              'Step ${_currentStep + 1} of 3',
+                              style: GoogleFonts.poppins(color: Colors.white.withValues(alpha: 0.8), fontSize: 13),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
 
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 14),
-      color: Colors.white,
-      child: Row(
-        children: List.generate(steps.length, (index) {
-          final isActive = _currentStep == index;
-          final isCompleted = _currentStep > index;
+                  // Horizontal stepper (mobile only)
+                  if (!isWide) _buildMobileStepperBar(),
 
-          return Expanded(
-            child: Row(
-              children: [
-                Expanded(
-                  child: AnimatedContainer(
-                    duration: const Duration(milliseconds: 350),
-                    padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 10),
+                  // Form content
+                  Expanded(
+                    child: PageView(
+                      controller: _pageController,
+                      physics: const NeverScrollableScrollPhysics(),
+                      children: [
+                        _buildStep1SchoolIdentity(),
+                        _buildStep2AcademicAndFinance(),
+                        _buildStep3AdminSecurity(),
+                      ],
+                    ),
+                  ),
+
+                  // Bottom bar
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 20),
                     decoration: BoxDecoration(
-                      color: isActive
-                          ? AppTheme.primaryPurple
-                          : (isCompleted ? const Color(0xFFDCFCE7) : const Color(0xFFF1F5F9)),
-                      borderRadius: BorderRadius.circular(12),
+                      color: Colors.white,
+                      border: Border(top: BorderSide(color: Colors.grey.shade200)),
                     ),
                     child: Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        Icon(
-                          isCompleted ? Icons.check_circle_rounded : (steps[index]['icon'] as IconData),
-                          size: 16,
-                          color: isActive
-                              ? Colors.white
-                              : (isCompleted ? const Color(0xFF16A34A) : AppTheme.textSecondary),
-                        ),
-                        const SizedBox(width: 8),
-                        Flexible(
-                          child: Text(
-                            steps[index]['title'] as String,
-                            style: GoogleFonts.poppins(
-                              fontSize: 12,
-                              fontWeight: isActive ? FontWeight.w600 : FontWeight.w500,
-                              color: isActive
-                                  ? Colors.white
-                                  : (isCompleted ? const Color(0xFF15803D) : AppTheme.textSecondary),
-                            ),
-                            overflow: TextOverflow.ellipsis,
+                        if (_currentStep > 0)
+                          TextButton.icon(
+                            icon: const Icon(Icons.arrow_back_rounded, size: 18),
+                            label: Text('Back', style: GoogleFonts.poppins(fontWeight: FontWeight.w500)),
+                            style: TextButton.styleFrom(foregroundColor: AppTheme.textSecondary),
+                            onPressed: _previousStep,
+                          )
+                        else
+                          const SizedBox.shrink(),
+                        ElevatedButton(
+                          onPressed: _isFinishing
+                              ? null
+                              : (_currentStep == 2 ? _finishOnboarding : _nextStep),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: AppTheme.primaryPurple,
+                            foregroundColor: Colors.white,
+                            disabledBackgroundColor: AppTheme.primaryPurple.withValues(alpha: 0.6),
+                            padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 14),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                            elevation: 0,
                           ),
+                          child: _isFinishing
+                              ? const SizedBox(
+                                  width: 20,
+                                  height: 20,
+                                  child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2.5),
+                                )
+                              : Text(
+                                  _currentStep == 2 ? 'Finish Setup' : 'Continue',
+                                  style: GoogleFonts.poppins(fontWeight: FontWeight.w600, fontSize: 14),
+                                ),
                         ),
                       ],
                     ),
                   ),
-                ),
-                if (index < steps.length - 1)
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 8),
-                    child: Icon(
-                      Icons.chevron_right_rounded,
-                      size: 18,
-                      color: isCompleted ? AppTheme.primaryPurple : Colors.grey.shade300,
-                    ),
-                  ),
-              ],
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ── Side step indicator for wide layout ──
+  Widget _buildSideStepIndicator(int step, String label, IconData icon) {
+    final isActive = _currentStep == step;
+    final isCompleted = _currentStep > step;
+
+    return Row(
+      children: [
+        Container(
+          width: 32,
+          height: 32,
+          decoration: BoxDecoration(
+            color: isCompleted
+                ? Colors.white
+                : (isActive ? Colors.white.withValues(alpha: 0.2) : Colors.white.withValues(alpha: 0.08)),
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Center(
+            child: isCompleted
+                ? const Icon(Icons.check_rounded, size: 18, color: AppTheme.primaryPurple)
+                : Icon(icon, size: 18, color: isActive ? Colors.white : Colors.white.withValues(alpha: 0.5)),
+          ),
+        ),
+        const SizedBox(width: 12),
+        Text(
+          label,
+          style: GoogleFonts.poppins(
+            color: isActive || isCompleted ? Colors.white : Colors.white.withValues(alpha: 0.5),
+            fontSize: 14,
+            fontWeight: isActive ? FontWeight.w600 : FontWeight.w400,
+          ),
+        ),
+      ],
+    );
+  }
+
+  // ── Horizontal stepper for mobile/narrow ──
+  Widget _buildMobileStepperBar() {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+      child: Row(
+        children: List.generate(3, (i) {
+          final isActive = _currentStep == i;
+          final isCompleted = _currentStep > i;
+          return Expanded(
+            child: Container(
+              margin: EdgeInsets.only(right: i < 2 ? 8 : 0),
+              height: 4,
+              decoration: BoxDecoration(
+                color: isCompleted || isActive
+                    ? AppTheme.primaryPurple
+                    : Colors.grey.shade200,
+                borderRadius: BorderRadius.circular(2),
+              ),
             ),
           );
         }),
@@ -491,80 +423,60 @@ class _OnboardingWizardViewState extends ConsumerState<OnboardingWizardView>
     );
   }
 
-  // --------------------------------------------------------------------------
-  // Step 1: School Identity Form
-  // --------------------------------------------------------------------------
+  // ── Step 1: School Identity ──
   Widget _buildStep1SchoolIdentity() {
     return SingleChildScrollView(
-      padding: const EdgeInsets.symmetric(horizontal: 36, vertical: 20),
+      padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 32),
       child: Form(
         key: _formKey1,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              'Step 1: School Identity & Details',
-              style: GoogleFonts.poppins(
-                fontSize: 15,
-                fontWeight: FontWeight.w600,
-                color: AppTheme.primaryDark,
-              ),
+              'School Identity',
+              style: GoogleFonts.poppins(fontSize: 22, fontWeight: FontWeight.w700, color: AppTheme.textPrimary),
             ),
             const SizedBox(height: 4),
             Text(
-              'This name and branding will appear on all fee receipts and report cards.',
-              style: GoogleFonts.poppins(fontSize: 12.5, color: AppTheme.textSecondary),
+              'This info appears on receipts, report cards, and documents.',
+              style: GoogleFonts.poppins(fontSize: 13, color: AppTheme.textSecondary),
             ),
-            const SizedBox(height: 18),
+            const SizedBox(height: 28),
+            _label('School Name'),
+            const SizedBox(height: 6),
             TextFormField(
               controller: _schoolNameController,
-              decoration: InputDecoration(
-                labelText: 'Official School Name *',
-                hintText: 'e.g. St. Xavier\'s International School',
-                prefixIcon: const Icon(Icons.school_outlined, size: 20),
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-              ),
-              validator: (v) => v == null || v.trim().isEmpty ? 'Please enter your school name' : null,
+              style: GoogleFonts.poppins(fontSize: 14),
+              decoration: _inputDeco(hint: 'e.g. St. Xavier\'s International School', icon: Icons.school_outlined),
+              validator: (v) => v == null || v.trim().isEmpty ? 'Required' : null,
             ),
-            const SizedBox(height: 14),
+            const SizedBox(height: 18),
+            _label('Campus Address'),
+            const SizedBox(height: 6),
             TextFormField(
               controller: _schoolAddressController,
-              decoration: InputDecoration(
-                labelText: 'Campus Address',
-                hintText: 'e.g. 123 Education Boulevard, District',
-                prefixIcon: const Icon(Icons.location_on_outlined, size: 20),
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-              ),
+              style: GoogleFonts.poppins(fontSize: 14),
+              decoration: _inputDeco(hint: '123 Education Boulevard, District', icon: Icons.location_on_outlined),
             ),
-            const SizedBox(height: 14),
-            Row(
-              children: [
-                Expanded(
-                  child: TextFormField(
-                    controller: _schoolContactController,
-                    decoration: InputDecoration(
-                      labelText: 'Contact Phone & Email',
-                      hintText: '+91 98765 43210 | info@school.edu',
-                      prefixIcon: const Icon(Icons.phone_outlined, size: 20),
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                    ),
-                  ),
-                ),
-              ],
+            const SizedBox(height: 18),
+            _label('Contact Phone & Email'),
+            const SizedBox(height: 6),
+            TextFormField(
+              controller: _schoolContactController,
+              style: GoogleFonts.poppins(fontSize: 14),
+              decoration: _inputDeco(hint: '+91 98765 43210 | info@school.edu', icon: Icons.phone_outlined),
             ),
-            const SizedBox(height: 14),
+            const SizedBox(height: 18),
+            _label('School Motto'),
+            const SizedBox(height: 6),
             TextFormField(
               controller: _schoolMottoController,
-              decoration: InputDecoration(
-                labelText: 'School Motto / Tagline',
-                hintText: 'e.g. Inspiring Excellence, Building Futures',
-                prefixIcon: const Icon(Icons.lightbulb_outline, size: 20),
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-              ),
+              style: GoogleFonts.poppins(fontSize: 14),
+              decoration: _inputDeco(hint: 'Inspiring Excellence, Building Futures', icon: Icons.lightbulb_outline),
             ),
             const SizedBox(height: 24),
-            Text('School Logo', style: GoogleFonts.poppins(fontSize: 14, fontWeight: FontWeight.w600)),
-            const SizedBox(height: 12),
+            _label('School Logo'),
+            const SizedBox(height: 8),
             GestureDetector(
               onTap: () async {
                 final result = await FilePicker.platform.pickFiles(type: FileType.image, allowedExtensions: ['png', 'jpg', 'jpeg']);
@@ -578,157 +490,144 @@ class _OnboardingWizardViewState extends ConsumerState<OnboardingWizardView>
                 }
               },
               child: _logoBytes != null
-                  ? Container(
-                      width: 80,
-                      height: 80,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        image: DecorationImage(image: MemoryImage(_logoBytes!), fit: BoxFit.cover),
-                        border: Border.all(color: AppTheme.primaryPurple, width: 2),
-                      ),
+                  ? Row(
+                      children: [
+                        Container(
+                          width: 64,
+                          height: 64,
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(12),
+                            image: DecorationImage(image: MemoryImage(_logoBytes!), fit: BoxFit.cover),
+                            border: Border.all(color: AppTheme.primaryPurple, width: 1.5),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        TextButton(
+                          onPressed: () => setState(() { _logoBytes = null; _logoPath = null; }),
+                          child: Text('Remove', style: GoogleFonts.poppins(color: AppTheme.error, fontSize: 13)),
+                        ),
+                      ],
                     )
                   : Container(
-                      width: 80,
-                      height: 80,
+                      width: 64,
+                      height: 64,
                       decoration: BoxDecoration(
-                        color: AppTheme.bgSurface,
-                        shape: BoxShape.circle,
-                        border: Border.all(color: AppTheme.divider, width: 1),
+                        color: const Color(0xFFF9FAFB),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: const Color(0xFFE5E7EB)),
                       ),
                       child: const Column(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          Icon(Icons.add_a_photo, color: AppTheme.textSecondary, size: 24),
-                          SizedBox(height: 4),
-                          Text('Upload', style: TextStyle(color: AppTheme.textSecondary, fontSize: 12)),
+                          Icon(Icons.add_a_photo_outlined, color: AppTheme.textSecondary, size: 22),
+                          SizedBox(height: 2),
+                          Text('Upload', style: TextStyle(color: AppTheme.textSecondary, fontSize: 10)),
                         ],
                       ),
                     ),
             ),
-            if (_logoBytes != null)
-              TextButton(
-                onPressed: () => setState(() { _logoBytes = null; _logoPath = null; }),
-                child: const Text('Remove Logo', style: TextStyle(color: AppTheme.error)),
-              ),
           ],
         ),
       ),
     );
   }
 
-  // --------------------------------------------------------------------------
-  // Step 2: Academic Session & Currency
-  // --------------------------------------------------------------------------
+  // ── Step 2: Academic Session & Currency ──
   Widget _buildStep2AcademicAndFinance() {
     final currencies = [
-      {'symbol': '₹', 'label': '₹ INR (Rupees)'},
-      {'symbol': '\$', 'label': '\$ USD (Dollars)'},
-      {'symbol': '€', 'label': '€ EUR (Euros)'},
-      {'symbol': '£', 'label': '£ GBP (Pounds)'},
-      {'symbol': 'AED', 'label': 'AED (Dirhams)'},
+      {'symbol': '₹', 'label': '₹ INR'},
+      {'symbol': '\$', 'label': '\$ USD'},
+      {'symbol': '€', 'label': '€ EUR'},
+      {'symbol': '£', 'label': '£ GBP'},
+      {'symbol': 'AED', 'label': 'AED'},
     ];
 
     return SingleChildScrollView(
-      padding: const EdgeInsets.symmetric(horizontal: 36, vertical: 20),
+      padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 32),
       child: Form(
         key: _formKey2,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              'Step 2: Academic Session & Currency',
-              style: GoogleFonts.poppins(
-                fontSize: 15,
-                fontWeight: FontWeight.w600,
-                color: AppTheme.primaryDark,
-              ),
+              'Academic Session',
+              style: GoogleFonts.poppins(fontSize: 22, fontWeight: FontWeight.w700, color: AppTheme.textPrimary),
             ),
             const SizedBox(height: 4),
             Text(
-              'Configure your institutional calendar and billing currency symbol.',
-              style: GoogleFonts.poppins(fontSize: 12.5, color: AppTheme.textSecondary),
+              'Set your academic calendar and billing currency.',
+              style: GoogleFonts.poppins(fontSize: 13, color: AppTheme.textSecondary),
             ),
-            const SizedBox(height: 18),
+            const SizedBox(height: 28),
+            _label('Active Academic Year'),
+            const SizedBox(height: 6),
             TextFormField(
               controller: _academicYearController,
-              decoration: InputDecoration(
-                labelText: 'Active Academic Session *',
-                hintText: 'e.g. 2026-2027',
-                prefixIcon: const Icon(Icons.event_note_rounded, size: 20),
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-              ),
-              validator: (v) => v == null || v.trim().isEmpty ? 'Please specify academic year' : null,
+              style: GoogleFonts.poppins(fontSize: 14),
+              decoration: _inputDeco(hint: 'e.g. 2026-2027', icon: Icons.event_note_outlined),
+              validator: (v) => v == null || v.trim().isEmpty ? 'Required' : null,
             ),
-            const SizedBox(height: 20),
-            Text(
-              'Currency Symbol for Fee Receipts',
-              style: GoogleFonts.poppins(
-                fontSize: 13,
-                fontWeight: FontWeight.w600,
-                color: AppTheme.textPrimary,
-              ),
-            ),
+            const SizedBox(height: 24),
+            _label('Currency'),
             const SizedBox(height: 8),
             Wrap(
-              spacing: 10,
-              runSpacing: 10,
+              spacing: 8,
+              runSpacing: 8,
               children: currencies.map((c) {
                 final isSelected = _selectedCurrency == c['symbol'];
-                return ChoiceChip(
-                  label: Text(c['label']!),
-                  selected: isSelected,
-                  selectedColor: AppTheme.primarySoft,
-                  labelStyle: GoogleFonts.poppins(
-                    fontSize: 12.5,
-                    fontWeight: isSelected ? FontWeight.w600 : FontWeight.w400,
-                    color: isSelected ? AppTheme.primaryPurple : AppTheme.textPrimary,
-                  ),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(10),
-                    side: BorderSide(
-                      color: isSelected ? AppTheme.primaryPurple : Colors.grey.shade300,
-                      width: isSelected ? 1.5 : 1,
+                return GestureDetector(
+                  onTap: () => setState(() => _selectedCurrency = c['symbol']!),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                    decoration: BoxDecoration(
+                      color: isSelected ? AppTheme.primarySoft : const Color(0xFFF9FAFB),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(
+                        color: isSelected ? AppTheme.primaryPurple : const Color(0xFFE5E7EB),
+                        width: isSelected ? 1.5 : 1,
+                      ),
+                    ),
+                    child: Text(
+                      c['label']!,
+                      style: GoogleFonts.poppins(
+                        fontSize: 13,
+                        fontWeight: isSelected ? FontWeight.w600 : FontWeight.w400,
+                        color: isSelected ? AppTheme.primaryPurple : AppTheme.textPrimary,
+                      ),
                     ),
                   ),
-                  onSelected: (val) {
-                    if (val) setState(() => _selectedCurrency = c['symbol']!);
-                  },
                 );
               }).toList(),
             ),
-            const SizedBox(height: 20),
-            Text(
-              'Default Fee Billing Frequency',
-              style: GoogleFonts.poppins(
-                fontSize: 13,
-                fontWeight: FontWeight.w600,
-                color: AppTheme.textPrimary,
-              ),
-            ),
+            const SizedBox(height: 24),
+            _label('Fee Billing Frequency'),
             const SizedBox(height: 8),
             Row(
               children: ['Monthly', 'Quarterly', 'Annually'].map((cycle) {
                 final isSelected = _selectedFeeCycle == cycle;
                 return Padding(
-                  padding: const EdgeInsets.only(right: 12),
-                  child: ChoiceChip(
-                    label: Text(cycle),
-                    selected: isSelected,
-                    selectedColor: AppTheme.primarySoft,
-                    labelStyle: GoogleFonts.poppins(
-                      fontSize: 12.5,
-                      fontWeight: isSelected ? FontWeight.w600 : FontWeight.w400,
-                      color: isSelected ? AppTheme.primaryPurple : AppTheme.textPrimary,
-                    ),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(10),
-                      side: BorderSide(
-                        color: isSelected ? AppTheme.primaryPurple : Colors.grey.shade300,
+                  padding: const EdgeInsets.only(right: 8),
+                  child: GestureDetector(
+                    onTap: () => setState(() => _selectedFeeCycle = cycle),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                      decoration: BoxDecoration(
+                        color: isSelected ? AppTheme.primarySoft : const Color(0xFFF9FAFB),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(
+                          color: isSelected ? AppTheme.primaryPurple : const Color(0xFFE5E7EB),
+                          width: isSelected ? 1.5 : 1,
+                        ),
+                      ),
+                      child: Text(
+                        cycle,
+                        style: GoogleFonts.poppins(
+                          fontSize: 13,
+                          fontWeight: isSelected ? FontWeight.w600 : FontWeight.w400,
+                          color: isSelected ? AppTheme.primaryPurple : AppTheme.textPrimary,
+                        ),
                       ),
                     ),
-                    onSelected: (val) {
-                      if (val) setState(() => _selectedFeeCycle = cycle);
-                    },
                   ),
                 );
               }).toList(),
@@ -739,123 +638,130 @@ class _OnboardingWizardViewState extends ConsumerState<OnboardingWizardView>
     );
   }
 
-  // --------------------------------------------------------------------------
-  // Step 3: Admin Security Form
-  // --------------------------------------------------------------------------
+  // ── Step 3: Admin Security ──
   Widget _buildStep3AdminSecurity() {
     return SingleChildScrollView(
-      padding: const EdgeInsets.symmetric(horizontal: 36, vertical: 20),
+      padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 32),
       child: Form(
         key: _formKey3,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              'Step 3: Secure Your Admin Account',
-              style: GoogleFonts.poppins(
-                fontSize: 15,
-                fontWeight: FontWeight.w600,
-                color: AppTheme.primaryDark,
-              ),
+              'Admin Security',
+              style: GoogleFonts.poppins(fontSize: 22, fontWeight: FontWeight.w700, color: AppTheme.textPrimary),
             ),
             const SizedBox(height: 4),
             Text(
-              'Replace the initial default password to protect school records.',
-              style: GoogleFonts.poppins(fontSize: 12.5, color: AppTheme.textSecondary),
+              'Secure your admin account with a strong password.',
+              style: GoogleFonts.poppins(fontSize: 13, color: AppTheme.textSecondary),
             ),
-            const SizedBox(height: 14),
-            CheckboxListTile(
-              contentPadding: EdgeInsets.zero,
-              title: Text(
-                'Keep current password for now (change later in Settings)',
-                style: GoogleFonts.poppins(fontSize: 12.5, color: AppTheme.textPrimary),
-              ),
-              value: _skipPasswordChange,
-              activeColor: AppTheme.primaryPurple,
-              controlAffinity: ListTileControlAffinity.leading,
-              onChanged: (val) {
-                setState(() => _skipPasswordChange = val ?? false);
-              },
+            const SizedBox(height: 20),
+            Row(
+              children: [
+                SizedBox(
+                  width: 20,
+                  height: 20,
+                  child: Checkbox(
+                    value: _skipPasswordChange,
+                    activeColor: AppTheme.primaryPurple,
+                    onChanged: (val) => setState(() => _skipPasswordChange = val ?? false),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    'Keep current password (change later in Settings)',
+                    style: GoogleFonts.poppins(fontSize: 13, color: AppTheme.textPrimary),
+                  ),
+                ),
+              ],
             ),
             if (!_skipPasswordChange) ...[
-              const SizedBox(height: 10),
+              const SizedBox(height: 20),
               Row(
                 children: [
                   Expanded(
-                    child: TextFormField(
-                      controller: _passwordController,
-                      obscureText: _obscurePassword,
-                      decoration: InputDecoration(
-                        labelText: 'New Admin Password',
-                        hintText: 'Enter new password',
-                        prefixIcon: const Icon(Icons.lock_outline_rounded, size: 20),
-                        suffixIcon: IconButton(
-                          icon: Icon(_obscurePassword ? Icons.visibility_off : Icons.visibility, size: 18),
-                          onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        _label('New Password'),
+                        const SizedBox(height: 6),
+                        TextFormField(
+                          controller: _passwordController,
+                          obscureText: _obscurePassword,
+                          style: GoogleFonts.poppins(fontSize: 14),
+                          decoration: _inputDeco(
+                            hint: 'Enter new password',
+                            icon: Icons.lock_outline_rounded,
+                            suffix: IconButton(
+                              icon: Icon(_obscurePassword ? Icons.visibility_off_outlined : Icons.visibility_outlined, size: 20, color: AppTheme.textSecondary),
+                              onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
+                            ),
+                          ),
+                          validator: (v) {
+                            if (_skipPasswordChange) return null;
+                            if (v == null || v.isEmpty) return 'Required';
+                            if (v.length < 4) return 'At least 4 characters';
+                            return null;
+                          },
                         ),
-                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                      ),
-                      validator: (v) {
-                        if (_skipPasswordChange) return null;
-                        if (v == null || v.isEmpty) return 'Please enter a password';
-                        if (v.length < 4) return 'Password must be at least 4 characters';
-                        return null;
-                      },
+                      ],
                     ),
                   ),
-                  const SizedBox(width: 12),
+                  const SizedBox(width: 16),
                   Expanded(
-                    child: TextFormField(
-                      controller: _confirmPasswordController,
-                      obscureText: _obscureConfirmPassword,
-                      decoration: InputDecoration(
-                        labelText: 'Confirm Password',
-                        hintText: 'Re-enter password',
-                        prefixIcon: const Icon(Icons.lock_reset_rounded, size: 20),
-                        suffixIcon: IconButton(
-                          icon: Icon(_obscureConfirmPassword ? Icons.visibility_off : Icons.visibility, size: 18),
-                          onPressed: () => setState(() => _obscureConfirmPassword = !_obscureConfirmPassword),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        _label('Confirm Password'),
+                        const SizedBox(height: 6),
+                        TextFormField(
+                          controller: _confirmPasswordController,
+                          obscureText: _obscureConfirmPassword,
+                          style: GoogleFonts.poppins(fontSize: 14),
+                          decoration: _inputDeco(
+                            hint: 'Re-enter password',
+                            icon: Icons.lock_reset_rounded,
+                            suffix: IconButton(
+                              icon: Icon(_obscureConfirmPassword ? Icons.visibility_off_outlined : Icons.visibility_outlined, size: 20, color: AppTheme.textSecondary),
+                              onPressed: () => setState(() => _obscureConfirmPassword = !_obscureConfirmPassword),
+                            ),
+                          ),
+                          validator: (v) {
+                            if (_skipPasswordChange) return null;
+                            if (v != _passwordController.text) return 'Passwords don\'t match';
+                            return null;
+                          },
                         ),
-                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                      ),
-                      validator: (v) {
-                        if (_skipPasswordChange) return null;
-                        if (v != _passwordController.text) return 'Passwords do not match';
-                        return null;
-                      },
+                      ],
                     ),
                   ),
                 ],
               ),
             ],
-            const SizedBox(height: 14),
+            const SizedBox(height: 20),
+            _label('Security Question'),
+            const SizedBox(height: 6),
             DropdownButtonFormField<String>(
-              value: _selectedSecurityQuestion,
+              initialValue: _selectedSecurityQuestion,
               isExpanded: true,
-              decoration: InputDecoration(
-                labelText: 'Security Recovery Question',
-                prefixIcon: const Icon(Icons.help_outline_rounded, size: 20),
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-              ),
+              style: GoogleFonts.poppins(fontSize: 14, color: AppTheme.textPrimary),
+              decoration: _inputDeco(hint: '', icon: Icons.help_outline_rounded),
               items: _securityQuestions
-                  .map((q) => DropdownMenuItem(
-                        value: q,
-                        child: Text(q, style: GoogleFonts.poppins(fontSize: 12.5)),
-                      ))
+                  .map((q) => DropdownMenuItem(value: q, child: Text(q, style: GoogleFonts.poppins(fontSize: 13))))
                   .toList(),
               onChanged: (val) {
                 if (val != null) setState(() => _selectedSecurityQuestion = val);
               },
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: 16),
+            _label('Recovery Answer'),
+            const SizedBox(height: 6),
             TextFormField(
               controller: _securityAnswerController,
-              decoration: InputDecoration(
-                labelText: 'Recovery Answer',
-                hintText: 'Your secret answer in case you forget password',
-                prefixIcon: const Icon(Icons.verified_user_outlined, size: 20),
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-              ),
+              style: GoogleFonts.poppins(fontSize: 14),
+              decoration: _inputDeco(hint: 'Your secret answer', icon: Icons.verified_user_outlined),
             ),
           ],
         ),
@@ -863,138 +769,39 @@ class _OnboardingWizardViewState extends ConsumerState<OnboardingWizardView>
     );
   }
 
-  // --------------------------------------------------------------------------
-  // Bottom Navigation Bar with Back & Next / Finish
-  // --------------------------------------------------------------------------
-  Widget _buildBottomNavigationBar() {
-    final isLast = _currentStep == 2;
+  // ── Shared helpers ──
 
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          if (_currentStep > 0)
-            OutlinedButton.icon(
-              icon: const Icon(Icons.arrow_back_rounded, size: 16),
-              label: const Text('Back'),
-              style: OutlinedButton.styleFrom(
-                foregroundColor: AppTheme.textPrimary,
-                side: const BorderSide(color: AppTheme.divider),
-                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-              ),
-              onPressed: _previousStep,
-            )
-          else
-            const SizedBox.shrink(),
-          ElevatedButton.icon(
-            icon: isLast
-                ? const Icon(Icons.rocket_launch_rounded, size: 18)
-                : const Icon(Icons.arrow_forward_rounded, size: 18),
-            label: Text(
-              isLast ? 'Finish & Launch Eduvia 🚀' : 'Next Step',
-              style: GoogleFonts.poppins(fontWeight: FontWeight.w600, fontSize: 13.5),
-            ),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppTheme.primaryPurple,
-              foregroundColor: Colors.white,
-              padding: const EdgeInsets.symmetric(horizontal: 26, vertical: 14),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-              elevation: 2,
-            ),
-            onPressed: _isFinishing ? null : (isLast ? _finishOnboarding : _nextStep),
-          ),
-        ],
-      ),
+  Widget _label(String text) {
+    return Text(
+      text,
+      style: GoogleFonts.poppins(fontSize: 13, fontWeight: FontWeight.w600, color: AppTheme.textPrimary),
     );
   }
 
-  // --------------------------------------------------------------------------
-  // Cute Celebration Success Overlay
-  // --------------------------------------------------------------------------
-  Widget _buildCelebrationOverlay() {
-    return Container(
-      color: Colors.black.withValues(alpha: 0.65),
-      child: Center(
-        child: ScaleTransition(
-          scale: _celebrationScale,
-          child: Container(
-            width: 440,
-            padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 36),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(24),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.3),
-                  blurRadius: 30,
-                  offset: const Offset(0, 10),
-                ),
-              ],
-            ),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                ScaleTransition(
-                  scale: _pulseAnimation,
-                  child: Container(
-                    width: 80,
-                    height: 80,
-                    decoration: const BoxDecoration(
-                      color: Color(0xFFDCFCE7),
-                      shape: BoxShape.circle,
-                    ),
-                    child: const Center(
-                      child: Icon(
-                        Icons.celebration_rounded,
-                        color: Color(0xFF16A34A),
-                        size: 44,
-                      ),
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 20),
-                Text(
-                  '🎉 All Set!',
-                  style: GoogleFonts.poppins(
-                    fontSize: 24,
-                    fontWeight: FontWeight.bold,
-                    color: AppTheme.textPrimary,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  'Welcome to ${_schoolNameController.text.trim()}',
-                  textAlign: TextAlign.center,
-                  style: GoogleFonts.poppins(
-                    fontSize: 15,
-                    fontWeight: FontWeight.w600,
-                    color: AppTheme.primaryPurple,
-                  ),
-                ),
-                const SizedBox(height: 6),
-                Text(
-                  'Your administrative portal is configured and ready to go. Launching your school dashboard...',
-                  textAlign: TextAlign.center,
-                  style: GoogleFonts.poppins(
-                    fontSize: 12.5,
-                    color: AppTheme.textSecondary,
-                  ),
-                ),
-                const SizedBox(height: 24),
-                const SizedBox(
-                  width: 28,
-                  height: 28,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 3,
-                    color: AppTheme.primaryPurple,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
+  InputDecoration _inputDeco({required String hint, required IconData icon, Widget? suffix}) {
+    return InputDecoration(
+      hintText: hint,
+      hintStyle: GoogleFonts.poppins(color: AppTheme.textHint, fontSize: 14),
+      prefixIcon: Icon(icon, size: 20, color: AppTheme.textSecondary),
+      suffixIcon: suffix,
+      filled: true,
+      fillColor: const Color(0xFFF9FAFB),
+      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      border: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(10),
+        borderSide: const BorderSide(color: Color(0xFFE5E7EB)),
+      ),
+      enabledBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(10),
+        borderSide: const BorderSide(color: Color(0xFFE5E7EB)),
+      ),
+      focusedBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(10),
+        borderSide: const BorderSide(color: AppTheme.primaryPurple, width: 1.5),
+      ),
+      errorBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(10),
+        borderSide: const BorderSide(color: AppTheme.error),
       ),
     );
   }
