@@ -1,6 +1,8 @@
+import 'dart:io';
 import 'dart:ui';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
@@ -13,6 +15,7 @@ import '../../../models/models.dart';
 import '../../../core/auth/permission_helper.dart';
 import '../../../providers/services_provider.dart';
 import '../attendance/teacher_attendance_history_dialog.dart';
+import '../../widgets/blobatar.dart';
 
 class StaffDetailView extends ConsumerStatefulWidget {
   final Staff staff;
@@ -166,214 +169,148 @@ class _StaffDetailViewState extends ConsumerState<StaffDetailView> with SingleTi
     final appraisalsAsync = ref.watch(staffAppraisalsProvider(widget.staff.id));
     final trainingsAsync = ref.watch(staffTrainingsProvider(widget.staff.id));
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        // Top Toolbar
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
-          child: Row(
-            children: [
-              IconButton(
-                icon: const Icon(Icons.arrow_back_rounded, color: AppTheme.textPrimary),
-                onPressed: widget.onBack,
-              ),
-              const SizedBox(width: 16),
-              Text(
-                'Staff Profile',
-                style: GoogleFonts.poppins(
-                    fontSize: 24,
-                    fontWeight: FontWeight.bold,
-                    color: AppTheme.textPrimary),
-              ),
-              const Spacer(),
-              ElevatedButton.icon(
-                onPressed: () => _showApplyLeaveDialog(context),
-                icon: const Icon(Icons.time_to_leave_rounded, size: 18),
-                label: Text('Apply Leave',
-                    style: GoogleFonts.poppins(fontWeight: FontWeight.w600)),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppTheme.primaryPurple.withValues(alpha: 0.1),
-                  foregroundColor: AppTheme.primaryPurple,
-                  elevation: 0,
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                ),
-              ),
-              const SizedBox(width: 12),
-              ElevatedButton.icon(
-                onPressed: () => _showMarkAttendanceDialog(context, widget.staff),
-                icon: const Icon(Icons.event_available_rounded, size: 18),
-                label: Text('Mark Attendance',
-                    style: GoogleFonts.poppins(fontWeight: FontWeight.w600)),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppTheme.primaryPurple.withValues(alpha: 0.1),
-                  foregroundColor: AppTheme.primaryPurple,
-                  elevation: 0,
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                ),
-              ),
-              const SizedBox(width: 12),
-              ElevatedButton.icon(
-                onPressed: () {
-                  showDialog(
-                    context: context,
-                    builder: (context) => TeacherAttendanceHistoryDialog(staff: widget.staff),
-                  );
-                },
-                icon: const Icon(Icons.history_rounded, size: 18),
-                label: Text('Attendance History',
-                    style: GoogleFonts.poppins(fontWeight: FontWeight.w600)),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppTheme.primaryPurple.withValues(alpha: 0.1),
-                  foregroundColor: AppTheme.primaryPurple,
-                  elevation: 0,
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                ),
-              ),
-              const SizedBox(width: 12),
-              ElevatedButton.icon(
-                onPressed: _exportIdCard,
-                icon: const Icon(Icons.badge_rounded, size: 18),
-                label: Text('Generate ID Card',
-                    style: GoogleFonts.poppins(fontWeight: FontWeight.w600)),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.white,
-                  foregroundColor: AppTheme.primaryPurple,
-                  elevation: 2,
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                ),
-              ),
-              const SizedBox(width: 12),
-              ElevatedButton.icon(
-                onPressed: widget.onEdit,
-                icon: const Icon(Icons.edit_rounded, size: 18),
-                label: Text('Edit Profile',
-                    style: GoogleFonts.poppins(fontWeight: FontWeight.w600)),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppTheme.primaryPurple,
-                  foregroundColor: Colors.white,
-                  elevation: 2,
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                ),
-              ),
-            ],
-          ),
-        ),
+    final departments = ref.watch(departmentListProvider).valueOrNull ?? [];
 
-        Expanded(
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final isStacked = constraints.maxWidth < 1050;
+
+        final leftColumn = Column(
+          children: [
+            _buildAcademicCard(departments),
+            const SizedBox(height: 20),
+            _buildContactCard(),
+            const SizedBox(height: 20),
+            _buildOfficialBankingCard(),
+            const SizedBox(height: 20),
+            _buildWorkloadSummaryCard(workloadAsync, subjectsAsync),
+          ],
+        );
+
+        final rightColumn = Column(
+          children: [
+            Container(
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: AppTheme.divider.withValues(alpha: 0.6)),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.02),
+                    blurRadius: 8,
+                    offset: const Offset(0, 2),
+                  ),
+                ],
+              ),
+              child: TabBar(
+                controller: _tabController,
+                labelColor: AppTheme.primaryPurple,
+                unselectedLabelColor: AppTheme.textSecondary,
+                indicatorColor: AppTheme.primaryPurple,
+                indicatorWeight: 3,
+                labelStyle: GoogleFonts.poppins(fontWeight: FontWeight.bold, fontSize: 11),
+                unselectedLabelStyle: GoogleFonts.poppins(fontWeight: FontWeight.w500, fontSize: 11),
+                tabs: [
+                  const Tab(icon: Icon(Icons.dashboard_rounded, size: 16), text: 'Overview'),
+                  if (isTeacher) const Tab(icon: Icon(Icons.calendar_month_rounded, size: 16), text: 'Timetable'),
+                  const Tab(icon: Icon(Icons.fact_check_rounded, size: 16), text: 'Attendance'),
+                  const Tab(icon: Icon(Icons.time_to_leave_rounded, size: 16), text: 'Leaves'),
+                  if (isTeacher) const Tab(icon: Icon(Icons.assignment_turned_in_rounded, size: 16), text: 'Exam Duties'),
+                  const Tab(icon: Icon(Icons.campaign_rounded, size: 16), text: 'Portal & Circulars'),
+                  const Tab(icon: Icon(Icons.trending_up_rounded, size: 16), text: 'Appraisal & Training'),
+                ],
+              ),
+            ),
+            const SizedBox(height: 16),
+
+            SizedBox(
+              height: 900,
+              child: TabBarView(
+                controller: _tabController,
+                children: [
+                  // Tab 1: Overview & Teaching
+                  SingleChildScrollView(
+                    child: Column(
+                      children: [
+                        _buildClassInChargeCard(classInChargeAsync),
+                        const SizedBox(height: 24),
+                        if (isTeacher) ...[
+                          _buildSubjectsCard(subjectsAsync),
+                          const SizedBox(height: 24),
+                        ],
+                        _buildSalaryCard(salaryAsync),
+                      ],
+                    ),
+                  ),
+
+                  // Tab 2: Phase 2 - My Timetable
+                  if (isTeacher)
+                    SingleChildScrollView(
+                      child: _buildTimetableSection(timetableAsync),
+                    ),
+
+                  // Tab 3: Phase 3 - Teacher Attendance
+                  SingleChildScrollView(
+                    child: _buildAttendanceSection(attSummaryAsync, attRecordsAsync),
+                  ),
+
+                  // Tab 4: Phase 4 - Leaves & Balance
+                  SingleChildScrollView(
+                    child: _buildLeavesSection(leaveBalanceAsync, leaveAppsAsync),
+                  ),
+
+                  // Tab 5: Phase 6 - Exam Duties
+                  if (isTeacher)
+                    SingleChildScrollView(
+                      child: _buildExamDutiesSection(examDutiesAsync),
+                    ),
+
+                  // Tab 6: Phase 7 (RBAC) & Phase 8 (Circulars)
+                  SingleChildScrollView(
+                    child: _buildRbacAndCircularsSection(userAsync, circularsAsync),
+                  ),
+
+                  // Tab 7: Phase 9 (Appraisals) & Phase 10 (Trainings)
+                  SingleChildScrollView(
+                    child: _buildAppraisalsAndTrainingsSection(appraisalsAsync, trainingsAsync),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        );
+
+        return Scaffold(
+          backgroundColor: AppTheme.bgMain,
+          body: SingleChildScrollView(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                // Left Column - Profile Summary & Workload (Phase 1)
-                Expanded(
-                  flex: 1,
-                  child: Column(
-                    children: [
-                      _buildProfileCard(),
-                      const SizedBox(height: 24),
-                      _buildContactCard(),
-                      const SizedBox(height: 24),
-                      // Phase 1: Workload Summary Widget
-                      _buildWorkloadSummaryCard(workloadAsync, subjectsAsync),
-                    ],
-                  ),
-                ),
-                const SizedBox(width: 24),
-
-                // Right Column - Tabbed View
-                Expanded(
-                  flex: 2,
-                  child: Column(
-                    children: [
-                      Container(
-                        decoration: BoxDecoration(
-                          color: Colors.white,
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(color: AppTheme.divider),
-                        ),
-                        child: TabBar(
-                          controller: _tabController,
-                          labelColor: AppTheme.primaryPurple,
-                          unselectedLabelColor: AppTheme.textSecondary,
-                          indicatorColor: AppTheme.primaryPurple,
-                          labelStyle: GoogleFonts.poppins(fontWeight: FontWeight.bold, fontSize: 10.5),
-                          tabs: [
-                            const Tab(text: 'Overview'),
-                            if (isTeacher) const Tab(text: 'My Timetable'),
-                            const Tab(text: 'Attendance'),
-                            const Tab(text: 'Leaves'),
-                            if (isTeacher) const Tab(text: 'Exam Duties'),
-                            const Tab(text: 'Portal & Circulars'),
-                            const Tab(text: 'Appraisal & Training'),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(height: 16),
-
-                      SizedBox(
-                        height: 850,
-                        child: TabBarView(
-                          controller: _tabController,
+                _buildHeroBanner(context, departments),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 24),
+                  child: isStacked
+                      ? Column(
                           children: [
-                            // Tab 1: Overview & Teaching
-                            SingleChildScrollView(
-                              child: Column(
-                                children: [
-                                  _buildClassInChargeCard(classInChargeAsync),
-                                  const SizedBox(height: 24),
-                                  if (isTeacher) ...[
-                                    _buildSubjectsCard(subjectsAsync),
-                                    const SizedBox(height: 24),
-                                  ],
-                                  _buildSalaryCard(salaryAsync),
-                                ],
-                              ),
-                            ),
-
-                            // Tab 2: Phase 2 - My Timetable
-                            if (isTeacher)
-                              SingleChildScrollView(
-                                child: _buildTimetableSection(timetableAsync),
-                              ),
-
-                            // Tab 3: Phase 3 - Teacher Attendance
-                            SingleChildScrollView(
-                              child: _buildAttendanceSection(attSummaryAsync, attRecordsAsync),
-                            ),
-
-                            // Tab 4: Phase 4 - Leaves & Balance
-                            SingleChildScrollView(
-                              child: _buildLeavesSection(leaveBalanceAsync, leaveAppsAsync),
-                            ),
-
-                            // Tab 5: Phase 6 - Exam Duties
-                            if (isTeacher)
-                              SingleChildScrollView(
-                                child: _buildExamDutiesSection(examDutiesAsync),
-                              ),
-
-                            // Tab 6: Phase 7 (RBAC) & Phase 8 (Circulars)
-                            SingleChildScrollView(
-                              child: _buildRbacAndCircularsSection(userAsync, circularsAsync),
-                            ),
-
-                            // Tab 7: Phase 9 (Appraisals) & Phase 10 (Trainings)
-                            SingleChildScrollView(
-                              child: _buildAppraisalsAndTrainingsSection(appraisalsAsync, trainingsAsync),
-                            ),
+                            leftColumn,
+                            const SizedBox(height: 24),
+                            rightColumn,
+                          ],
+                        )
+                      : Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Expanded(flex: 1, child: leftColumn),
+                            const SizedBox(width: 24),
+                            Expanded(flex: 2, child: rightColumn),
                           ],
                         ),
-                      ),
-                    ],
-                  ),
                 ),
               ],
             ),
           ),
-        ),
-      ],
+        );
+      },
     );
   }
 
@@ -2527,64 +2464,616 @@ class _StaffDetailViewState extends ConsumerState<StaffDetailView> with SingleTi
     );
   }
 
-  Widget _buildProfileCard() {
+  Widget _buildHeroBanner(BuildContext context, List<Department> departments) {
+    final deptName = _getDepartmentName(widget.staff.departmentId, departments, widget.staff.role);
+    final hasPhoto = widget.staff.photographPath != null &&
+        widget.staff.photographPath!.isNotEmpty &&
+        File(widget.staff.photographPath!).existsSync();
+
     return Container(
-      padding: const EdgeInsets.all(24),
+      margin: const EdgeInsets.fromLTRB(32, 16, 32, 0),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(24),
         boxShadow: [
           BoxShadow(
-              color: Colors.black.withValues(alpha: 0.05),
-              blurRadius: 10,
-              offset: const Offset(0, 4))
+            color: Colors.black.withValues(alpha: 0.04),
+            blurRadius: 16,
+            offset: const Offset(0, 4),
+          ),
         ],
       ),
       child: Column(
         children: [
-          CircleAvatar(
-            radius: 50,
-            backgroundColor: AppTheme.primaryPurple.withValues(alpha: 0.1),
-            child: Text(
-              widget.staff.firstName[0].toUpperCase(),
-              style: GoogleFonts.poppins(
-                  fontSize: 40,
-                  color: AppTheme.primaryPurple,
-                  fontWeight: FontWeight.bold),
+          // ── Aurora Cover Banner ──
+          Container(
+            height: 160,
+            width: double.infinity,
+            decoration: const BoxDecoration(
+              borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [
+                  Color(0xFF3730A3), // Indigo
+                  Color(0xFF4C3BCF), // Eduvia Purple
+                  Color(0xFF7C3AED), // Violet
+                  Color(0xFF6366F1), // Indigo Light
+                ],
+              ),
+            ),
+            child: Stack(
+              children: [
+                // Ambient floating glowing orbs for visual depth
+                Positioned(
+                  top: -30,
+                  right: 80,
+                  child: Container(
+                    width: 160,
+                    height: 160,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: Colors.white.withValues(alpha: 0.1),
+                    ),
+                  ),
+                ),
+                Positioned(
+                  bottom: -20,
+                  left: 140,
+                  child: Container(
+                    width: 120,
+                    height: 120,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: Colors.white.withValues(alpha: 0.08),
+                    ),
+                  ),
+                ),
+
+                // Top Controls Bar (Frosted glass buttons)
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+                  child: Row(
+                    children: [
+                      // Back button with label
+                      InkWell(
+                        onTap: widget.onBack,
+                        borderRadius: BorderRadius.circular(12),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                          decoration: BoxDecoration(
+                            color: Colors.white.withValues(alpha: 0.2),
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: Colors.white.withValues(alpha: 0.3)),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const Icon(Icons.arrow_back_rounded, color: Colors.white, size: 16),
+                              const SizedBox(width: 6),
+                              Text(
+                                'Directory',
+                                style: GoogleFonts.poppins(
+                                  color: Colors.white,
+                                  fontSize: 12.5,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                      const Spacer(),
+                      Wrap(
+                        spacing: 10,
+                        runSpacing: 8,
+                        children: [
+                          _buildFrostedButton(
+                            icon: Icons.time_to_leave_rounded,
+                            label: 'Apply Leave',
+                            onPressed: () => _showApplyLeaveDialog(context),
+                          ),
+                          _buildFrostedButton(
+                            icon: Icons.event_available_rounded,
+                            label: 'Mark Attendance',
+                            onPressed: () => _showMarkAttendanceDialog(context, widget.staff),
+                          ),
+                          _buildFrostedButton(
+                            icon: Icons.history_rounded,
+                            label: 'History',
+                            onPressed: () {
+                              showDialog(
+                                context: context,
+                                builder: (context) => TeacherAttendanceHistoryDialog(staff: widget.staff),
+                              );
+                            },
+                          ),
+                          _buildFrostedButton(
+                            icon: Icons.badge_rounded,
+                            label: 'ID Card',
+                            onPressed: _exportIdCard,
+                          ),
+                          // Edit Profile - Solid white button with purple text
+                          ElevatedButton.icon(
+                            onPressed: widget.onEdit,
+                            icon: const Icon(Icons.edit_rounded, size: 16, color: AppTheme.primaryPurple),
+                            label: Text(
+                              'Edit Profile',
+                              style: GoogleFonts.poppins(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 12.5,
+                                color: AppTheme.primaryPurple,
+                              ),
+                            ),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.white,
+                              foregroundColor: AppTheme.primaryPurple,
+                              elevation: 4,
+                              padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ],
             ),
           ),
-          const SizedBox(height: 16),
-          Text(
-            widget.staff.fullName,
-            style: GoogleFonts.poppins(
-                fontSize: 22,
-                fontWeight: FontWeight.bold,
-                color: AppTheme.textPrimary),
-            textAlign: TextAlign.center,
+
+          // ── Identity & Stats Section ──
+          Padding(
+            padding: const EdgeInsets.fromLTRB(28, 0, 28, 20),
+            child: Column(
+              children: [
+                // Avatar + Name Row
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    // PFP Avatar (Overlapping the banner)
+                    Transform.translate(
+                      offset: const Offset(0, -36),
+                      child: Stack(
+                        children: [
+                          Container(
+                            width: 104,
+                            height: 104,
+                            decoration: BoxDecoration(
+                              color: Colors.white,
+                              borderRadius: BorderRadius.circular(28),
+                              border: Border.all(color: Colors.white, width: 4),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.black.withValues(alpha: 0.15),
+                                  blurRadius: 16,
+                                  offset: const Offset(0, 6),
+                                ),
+                              ],
+                            ),
+                            child: ClipRRect(
+                              borderRadius: BorderRadius.circular(24),
+                              child: hasPhoto
+                                  ? Image.file(
+                                      File(widget.staff.photographPath!),
+                                      width: 104,
+                                      height: 104,
+                                      fit: BoxFit.cover,
+                                    )
+                                  : AppAvatar(
+                                      seed: widget.staff.staffCode?.isNotEmpty == true
+                                          ? widget.staff.staffCode!
+                                          : widget.staff.fullName,
+                                      name: widget.staff.fullName,
+                                      size: 104,
+                                      borderRadius: 24,
+                                    ),
+                            ),
+                          ),
+                          // Live Status Indicator Dot
+                          Positioned(
+                            right: 2,
+                            bottom: 2,
+                            child: Container(
+                              width: 22,
+                              height: 22,
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                color: widget.staff.isActive
+                                    ? const Color(0xFF16A34A)
+                                    : const Color(0xFF9CA3AF),
+                                border: Border.all(color: Colors.white, width: 3),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: (widget.staff.isActive
+                                            ? const Color(0xFF16A34A)
+                                            : Colors.grey)
+                                        .withValues(alpha: 0.4),
+                                    blurRadius: 6,
+                                    offset: const Offset(0, 2),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+
+                    const SizedBox(width: 20),
+
+                    // Name, Designation, Badges
+                    Expanded(
+                      child: Padding(
+                        padding: const EdgeInsets.only(bottom: 4.0),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                Flexible(
+                                  child: Text(
+                                    widget.staff.fullName,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: GoogleFonts.poppins(
+                                      fontSize: 24,
+                                      fontWeight: FontWeight.w800,
+                                      color: AppTheme.textPrimary,
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: 12),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
+                                  decoration: BoxDecoration(
+                                    color: widget.staff.isActive
+                                        ? const Color(0xFFDCFCE7)
+                                        : const Color(0xFFF3F4F6),
+                                    borderRadius: BorderRadius.circular(20),
+                                  ),
+                                  child: Text(
+                                    widget.staff.isActive ? 'Active' : 'Inactive',
+                                    style: GoogleFonts.poppins(
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.w600,
+                                      color: widget.staff.isActive
+                                          ? const Color(0xFF16A34A)
+                                          : const Color(0xFF6B7280),
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 4),
+                            Wrap(
+                              spacing: 8,
+                              runSpacing: 6,
+                              crossAxisAlignment: WrapCrossAlignment.center,
+                              children: [
+                                Text(
+                                  widget.staff.designation ?? _formatRole(widget.staff.role),
+                                  style: GoogleFonts.poppins(
+                                    fontSize: 13.5,
+                                    fontWeight: FontWeight.w500,
+                                    color: AppTheme.textSecondary,
+                                  ),
+                                ),
+                                const Text('•', style: TextStyle(color: AppTheme.textHint)),
+                                // Department Tag
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 3),
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFFFEF3C7),
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      const Icon(Icons.business_rounded, size: 13, color: Color(0xFFB45309)),
+                                      const SizedBox(width: 4),
+                                      Text(
+                                        deptName,
+                                        style: GoogleFonts.poppins(
+                                          fontSize: 11.5,
+                                          fontWeight: FontWeight.w600,
+                                          color: const Color(0xFFB45309),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                // Role Tag
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 3),
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFFEDE9FE),
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      const Icon(Icons.badge_rounded, size: 13, color: Color(0xFF6D28D9)),
+                                      const SizedBox(width: 4),
+                                      Text(
+                                        _formatRole(widget.staff.role),
+                                        style: GoogleFonts.poppins(
+                                          fontSize: 11.5,
+                                          fontWeight: FontWeight.w600,
+                                          color: const Color(0xFF6D28D9),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                // Staff Code Chip
+                                if (widget.staff.staffCode != null && widget.staff.staffCode!.isNotEmpty)
+                                  InkWell(
+                                    onTap: () => _copyToClipboard(context, widget.staff.staffCode!, 'Employee Code'),
+                                    borderRadius: BorderRadius.circular(8),
+                                    child: Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 3),
+                                      decoration: BoxDecoration(
+                                        color: const Color(0xFFF3F4F6),
+                                        borderRadius: BorderRadius.circular(8),
+                                      ),
+                                      child: Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          const Icon(Icons.tag_rounded, size: 13, color: Color(0xFF4B5563)),
+                                          const SizedBox(width: 3),
+                                          Text(
+                                            widget.staff.staffCode!,
+                                            style: GoogleFonts.poppins(
+                                              fontSize: 11.5,
+                                              fontWeight: FontWeight.w600,
+                                              color: const Color(0xFF4B5563),
+                                            ),
+                                          ),
+                                          const SizedBox(width: 4),
+                                          const Icon(Icons.copy_rounded, size: 11, color: Color(0xFF9CA3AF)),
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+                              ],
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+
+                const SizedBox(height: 12),
+
+                // Quick Metrics Row (4 highlight cards)
+                Row(
+                  children: [
+                    Expanded(
+                      child: _buildMetricCard(
+                        icon: Icons.workspace_premium_rounded,
+                        iconBg: const Color(0xFFFEF3C7),
+                        iconColor: const Color(0xFFD97706),
+                        label: 'Experience',
+                        value: widget.staff.experienceYears != null
+                            ? '${widget.staff.experienceYears} Years'
+                            : 'Not specified',
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: _buildMetricCard(
+                        icon: Icons.school_rounded,
+                        iconBg: const Color(0xFFEDE9FE),
+                        iconColor: const Color(0xFF7C3AED),
+                        label: 'Qualification',
+                        value: widget.staff.qualification?.isNotEmpty == true
+                            ? widget.staff.qualification!
+                            : 'Verified Faculty',
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: _buildMetricCard(
+                        icon: Icons.event_available_rounded,
+                        iconBg: const Color(0xFFE0E7FF),
+                        iconColor: const Color(0xFF4F46E5),
+                        label: 'Joined Date',
+                        value: _formatDate(widget.staff.joiningDate),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: _buildMetricCard(
+                        icon: Icons.bloodtype_rounded,
+                        iconBg: const Color(0xFFFFE4E6),
+                        iconColor: const Color(0xFFE11D48),
+                        label: 'Blood Group',
+                        value: widget.staff.bloodGroup?.isNotEmpty == true
+                            ? widget.staff.bloodGroup!
+                            : 'Not specified',
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
           ),
-          Text(
-            widget.staff.designation ?? widget.staff.role.toUpperCase(),
-            style: GoogleFonts.poppins(
-                fontSize: 14, color: AppTheme.textSecondary),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildFrostedButton({
+    required IconData icon,
+    required String label,
+    required VoidCallback onPressed,
+  }) {
+    return InkWell(
+      onTap: onPressed,
+      borderRadius: BorderRadius.circular(12),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+        decoration: BoxDecoration(
+          color: Colors.white.withValues(alpha: 0.18),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: Colors.white.withValues(alpha: 0.25)),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, color: Colors.white, size: 16),
+            const SizedBox(width: 6),
+            Text(
+              label,
+              style: GoogleFonts.poppins(
+                color: Colors.white,
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildMetricCard({
+    required IconData icon,
+    required Color iconBg,
+    required Color iconColor,
+    required String label,
+    required String value,
+  }) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      decoration: BoxDecoration(
+        color: AppTheme.bgMain,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: AppTheme.divider.withValues(alpha: 0.5)),
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 36,
+            height: 36,
+            decoration: BoxDecoration(
+              color: iconBg,
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Icon(icon, color: iconColor, size: 18),
           ),
-          const SizedBox(height: 24),
-          const Divider(),
-          const SizedBox(height: 16),
-          _buildInfoRow('Emp Code', widget.staff.staffCode ?? 'N/A'),
-          _buildInfoRow('Role', widget.staff.role.toUpperCase()),
-          _buildInfoRow('Department', widget.staff.departmentId ?? 'N/A'),
-          _buildInfoRow('Qualification', widget.staff.qualification ?? 'N/A'),
-          _buildInfoRow('Experience', widget.staff.experienceYears != null ? '${widget.staff.experienceYears} Years' : 'N/A'),
-          _buildInfoRow('Joining Date', widget.staff.joiningDate ?? 'N/A'),
-          _buildInfoRow('Date of Birth', widget.staff.dob ?? 'N/A'),
-          _buildInfoRow('Gender / Blood', '${widget.staff.gender ?? "N/A"} / ${widget.staff.bloodGroup ?? "N/A"}'),
-          _buildInfoRow('Aadhaar Number', widget.staff.aadhaarNumber ?? 'N/A'),
-          _buildInfoRow('PAN Number', widget.staff.panNumber ?? 'N/A'),
-          _buildInfoRow('Bank Account', widget.staff.bankAccountNumber != null ? '${widget.staff.bankAccountNumber} (${widget.staff.bankIfsc ?? ""})' : 'N/A'),
-          _buildInfoRow('Status', widget.staff.isActive ? 'Active' : 'Inactive',
-              color: widget.staff.isActive ? AppTheme.success : AppTheme.error),
-          if (!widget.staff.isActive)
-            _buildInfoRow('Exit Reason', widget.staff.exitReason ?? 'N/A'),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  label,
+                  style: GoogleFonts.poppins(
+                    fontSize: 10.5,
+                    fontWeight: FontWeight.w500,
+                    color: const Color(0xFF9CA3AF),
+                  ),
+                ),
+                Text(
+                  value,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: GoogleFonts.poppins(
+                    fontSize: 12.5,
+                    fontWeight: FontWeight.bold,
+                    color: AppTheme.textPrimary,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildAcademicCard(List<Department> departments) {
+    final deptName = _getDepartmentName(widget.staff.departmentId, departments, widget.staff.role);
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: AppTheme.divider.withValues(alpha: 0.6)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.03),
+            blurRadius: 10,
+            offset: const Offset(0, 3),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: AppTheme.primaryPurple.withValues(alpha: 0.08),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: const Icon(Icons.school_rounded, color: AppTheme.primaryPurple, size: 18),
+              ),
+              const SizedBox(width: 10),
+              Text(
+                'Academic & Identity',
+                style: GoogleFonts.poppins(
+                  fontSize: 15,
+                  fontWeight: FontWeight.bold,
+                  color: AppTheme.textPrimary,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+          _buildInfoTile(
+            icon: Icons.workspace_premium_rounded,
+            iconBg: const Color(0xFFEDE9FE),
+            iconColor: const Color(0xFF7C3AED),
+            label: 'Qualification',
+            value: widget.staff.qualification?.isNotEmpty == true
+                ? widget.staff.qualification!
+                : 'Not specified',
+          ),
+          _buildInfoTile(
+            icon: Icons.work_outline_rounded,
+            iconBg: const Color(0xFFE0E7FF),
+            iconColor: const Color(0xFF4F46E5),
+            label: 'Designation & Role',
+            value: '${widget.staff.designation ?? "Faculty"} • ${_formatRole(widget.staff.role)}',
+          ),
+          _buildInfoTile(
+            icon: Icons.business_rounded,
+            iconBg: const Color(0xFFFEF3C7),
+            iconColor: const Color(0xFFB45309),
+            label: 'Department',
+            value: deptName,
+          ),
+          _buildInfoTile(
+            icon: Icons.cake_rounded,
+            iconBg: const Color(0xFFFFEDD5),
+            iconColor: const Color(0xFFEA580C),
+            label: 'Date of Birth',
+            value: _formatDate(widget.staff.dob),
+          ),
+          _buildInfoTile(
+            icon: Icons.favorite_rounded,
+            iconBg: const Color(0xFFFFE4E6),
+            iconColor: const Color(0xFFE11D48),
+            label: 'Gender & Blood Group',
+            value: '${widget.staff.gender ?? "Not specified"} • ${widget.staff.bloodGroup ?? "N/A"}',
+          ),
         ],
       ),
     );
@@ -2592,33 +3081,298 @@ class _StaffDetailViewState extends ConsumerState<StaffDetailView> with SingleTi
 
   Widget _buildContactCard() {
     return Container(
-      padding: const EdgeInsets.all(24),
+      padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: AppTheme.divider.withValues(alpha: 0.6)),
         boxShadow: [
           BoxShadow(
-              color: Colors.black.withValues(alpha: 0.05),
-              blurRadius: 10,
-              offset: const Offset(0, 4))
+            color: Colors.black.withValues(alpha: 0.03),
+            blurRadius: 10,
+            offset: const Offset(0, 3),
+          ),
         ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('Contact & Address Details',
-              style: GoogleFonts.poppins(
-                  fontSize: 18,
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFF97316).withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: const Icon(Icons.contact_phone_rounded, color: Color(0xFFF97316), size: 18),
+              ),
+              const SizedBox(width: 10),
+              Text(
+                'Contact & Location',
+                style: GoogleFonts.poppins(
+                  fontSize: 15,
                   fontWeight: FontWeight.bold,
-                  color: AppTheme.textPrimary)),
-          const SizedBox(height: 16),
-          _buildInfoRow('Phone', widget.staff.phone ?? 'N/A'),
-          _buildInfoRow('Email', widget.staff.email ?? 'N/A'),
-          _buildInfoRow('Emergency Contact', widget.staff.emergencyContact ?? 'N/A'),
-          _buildInfoRow('Address', widget.staff.address ?? 'N/A'),
+                  color: AppTheme.textPrimary,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+          _buildInfoTile(
+            icon: Icons.mail_rounded,
+            iconBg: const Color(0xFFFFEDD5),
+            iconColor: const Color(0xFFEA580C),
+            label: 'Work Email',
+            value: widget.staff.email?.isNotEmpty == true ? widget.staff.email! : 'No email on file',
+            onCopy: widget.staff.email?.isNotEmpty == true
+                ? () => _copyToClipboard(context, widget.staff.email!, 'Email')
+                : null,
+          ),
+          _buildInfoTile(
+            icon: Icons.phone_rounded,
+            iconBg: const Color(0xFFFEF3C7),
+            iconColor: const Color(0xFFD97706),
+            label: 'Phone Number',
+            value: widget.staff.phone?.isNotEmpty == true ? widget.staff.phone! : 'No phone on file',
+            onCopy: widget.staff.phone?.isNotEmpty == true
+                ? () => _copyToClipboard(context, widget.staff.phone!, 'Phone Number')
+                : null,
+          ),
+          _buildInfoTile(
+            icon: Icons.shield_outlined,
+            iconBg: const Color(0xFFFEE2E2),
+            iconColor: const Color(0xFFDC2626),
+            label: 'Emergency Contact',
+            value: widget.staff.emergencyContact?.isNotEmpty == true
+                ? widget.staff.emergencyContact!
+                : 'Not specified',
+            onCopy: widget.staff.emergencyContact?.isNotEmpty == true
+                ? () => _copyToClipboard(context, widget.staff.emergencyContact!, 'Emergency Contact')
+                : null,
+          ),
+          _buildInfoTile(
+            icon: Icons.location_on_rounded,
+            iconBg: const Color(0xFFD1FAE5),
+            iconColor: const Color(0xFF059669),
+            label: 'Residential Address',
+            value: widget.staff.address?.isNotEmpty == true ? widget.staff.address! : 'Not specified',
+          ),
         ],
       ),
     );
+  }
+
+  Widget _buildOfficialBankingCard() {
+    String maskNumber(String? val) {
+      if (val == null || val.trim().isEmpty) return 'Not registered';
+      final trimmed = val.trim();
+      if (trimmed.length <= 4) return trimmed;
+      return '•••• •••• ${trimmed.substring(trimmed.length - 4)}';
+    }
+
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: AppTheme.divider.withValues(alpha: 0.6)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.03),
+            blurRadius: 10,
+            offset: const Offset(0, 3),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF0EA5E9).withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: const Icon(Icons.account_balance_rounded, color: Color(0xFF0EA5E9), size: 18),
+              ),
+              const SizedBox(width: 10),
+              Text(
+                'Official & Banking',
+                style: GoogleFonts.poppins(
+                  fontSize: 15,
+                  fontWeight: FontWeight.bold,
+                  color: AppTheme.textPrimary,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+          _buildInfoTile(
+            icon: Icons.account_balance_wallet_rounded,
+            iconBg: const Color(0xFFE0F2FE),
+            iconColor: const Color(0xFF0284C7),
+            label: 'Bank Account',
+            value: widget.staff.bankAccountNumber?.isNotEmpty == true
+                ? '${maskNumber(widget.staff.bankAccountNumber)} (${widget.staff.bankIfsc ?? "No IFSC"})'
+                : 'Not registered',
+          ),
+          _buildInfoTile(
+            icon: Icons.credit_card_rounded,
+            iconBg: const Color(0xFFEDE9FE),
+            iconColor: const Color(0xFF7C3AED),
+            label: 'PAN Number',
+            value: widget.staff.panNumber?.isNotEmpty == true ? widget.staff.panNumber! : 'Not registered',
+            onCopy: widget.staff.panNumber?.isNotEmpty == true
+                ? () => _copyToClipboard(context, widget.staff.panNumber!, 'PAN Number')
+                : null,
+          ),
+          _buildInfoTile(
+            icon: Icons.fingerprint_rounded,
+            iconBg: const Color(0xFFCCFBF1),
+            iconColor: const Color(0xFF0D9488),
+            label: 'Aadhaar Number',
+            value: maskNumber(widget.staff.aadhaarNumber),
+          ),
+          _buildInfoTile(
+            icon: Icons.verified_user_rounded,
+            iconBg: const Color(0xFFDCFCE7),
+            iconColor: const Color(0xFF16A34A),
+            label: 'Employment Status',
+            value: widget.staff.isActive ? 'Active in Service' : 'Inactive / On Leave',
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildInfoTile({
+    required IconData icon,
+    required Color iconBg,
+    required Color iconColor,
+    required String label,
+    required String value,
+    VoidCallback? onCopy,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 6.0),
+      child: Row(
+        children: [
+          Container(
+            width: 36,
+            height: 36,
+            decoration: BoxDecoration(
+              color: iconBg,
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Icon(icon, color: iconColor, size: 18),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  label,
+                  style: GoogleFonts.poppins(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w500,
+                    color: const Color(0xFF9CA3AF),
+                  ),
+                ),
+                const SizedBox(height: 1),
+                Text(
+                  value,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: GoogleFonts.poppins(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: AppTheme.textPrimary,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          if (onCopy != null) ...[
+            const SizedBox(width: 6),
+            IconButton(
+              icon: const Icon(Icons.copy_rounded, size: 15, color: AppTheme.textHint),
+              onPressed: onCopy,
+              splashRadius: 16,
+              tooltip: 'Copy $label',
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  void _copyToClipboard(BuildContext context, String text, String label) {
+    Clipboard.setData(ClipboardData(text: text));
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Row(
+          children: [
+            const Icon(Icons.check_circle_rounded, color: Colors.white, size: 18),
+            const SizedBox(width: 8),
+            Text('$label copied to clipboard'),
+          ],
+        ),
+        backgroundColor: AppTheme.primaryPurple,
+        duration: const Duration(seconds: 2),
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+      ),
+    );
+  }
+
+  String _getDepartmentName(String? departmentId, List<Department> departments, String role) {
+    if (departmentId == null || departmentId.trim().isEmpty) {
+      return _formatRole(role);
+    }
+    final match = departments
+        .where((d) =>
+            d.id.toLowerCase() == departmentId.toLowerCase() ||
+            d.name.toLowerCase() == departmentId.toLowerCase())
+        .firstOrNull;
+    if (match != null) return match.name;
+
+    if (departmentId.startsWith('dept-') ||
+        RegExp(r'^[0-9a-fA-F-]{8,}$').hasMatch(departmentId)) {
+      return _formatRole(role);
+    }
+
+    return departmentId[0].toUpperCase() + departmentId.substring(1);
+  }
+
+  String _formatDate(String? dateStr) {
+    if (dateStr == null || dateStr.trim().isEmpty) return 'Not specified';
+    try {
+      final dt = DateTime.parse(dateStr);
+      return DateFormat.yMMMMd().format(dt);
+    } catch (_) {
+      return dateStr;
+    }
+  }
+
+  String _formatRole(String role) {
+    switch (role.toLowerCase()) {
+      case 'teacher':
+        return 'Teacher';
+      case 'admin':
+        return 'Admin';
+      case 'support_staff':
+        return 'Support Staff';
+      case 'driver':
+        return 'Driver';
+      default:
+        if (role.isEmpty) return 'Staff';
+        return role[0].toUpperCase() +
+            role.substring(1).replaceAll('_', ' ');
+    }
   }
 
   Widget _buildSubjectsCard(AsyncValue<List<StaffSubjectAssignment>> subjectsAsync) {

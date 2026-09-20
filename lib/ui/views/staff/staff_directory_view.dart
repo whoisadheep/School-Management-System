@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:file_picker/file_picker.dart';
+import 'package:intl/intl.dart';
 
 import 'package:uuid/uuid.dart';
 import '../../../core/theme/app_theme.dart';
@@ -16,6 +17,7 @@ import '../../../core/auth/permission_helper.dart';
 import '../../../services/app_logger.dart';
 import 'staff_detail_view.dart';
 import '../../widgets/blobatar.dart';
+import '../../widgets/thinking_orb_widget.dart';
 
 class StaffFilter {
   final String? role;
@@ -45,12 +47,13 @@ final staffSearchQueryProvider = StateProvider<String>((ref) => '');
 final staffFilterProvider =
     StateProvider<StaffFilter>((ref) => const StaffFilter(isActive: true));
 final staffPageProvider = StateProvider<int>((ref) => 0);
-const int itemsPerPage = 10;
+const int itemsPerPage = 12;
 
 final filteredStaffProvider = Provider<AsyncValue<List<Staff>>>((ref) {
-  final query = ref.watch(staffSearchQueryProvider).toLowerCase();
+  final query = ref.watch(staffSearchQueryProvider).toLowerCase().trim();
   final filter = ref.watch(staffFilterProvider);
   final staffAsync = ref.watch(staffListProvider);
+  final departments = ref.watch(departmentListProvider).valueOrNull ?? [];
 
   return staffAsync.whenData((staffList) {
     return staffList.where((staff) {
@@ -62,20 +65,31 @@ final filteredStaffProvider = Provider<AsyncValue<List<Staff>>>((ref) {
           staff.role != filter.role) {
         return false;
       }
-      if (filter.departmentId != null &&
-          filter.departmentId!.isNotEmpty &&
-          staff.departmentId != filter.departmentId) {
-        return false;
+      if (filter.departmentId != null && filter.departmentId!.isNotEmpty) {
+        final target = filter.departmentId!.toLowerCase();
+        final matchedDept = departments.where((d) => d.id.toLowerCase() == target || d.name.toLowerCase() == target).firstOrNull;
+        final staffDept = staff.departmentId?.toLowerCase() ?? '';
+        final matches = staffDept == target ||
+            (matchedDept != null && (staffDept == matchedDept.id.toLowerCase() || staffDept == matchedDept.name.toLowerCase()));
+        if (!matches) {
+          return false;
+        }
       }
 
       if (query.isEmpty) return true;
       final name = staff.fullName.toLowerCase();
       final phone = staff.phone?.toLowerCase() ?? '';
       final role = staff.role.toLowerCase();
+      final designation = staff.designation?.toLowerCase() ?? '';
+      final email = staff.email?.toLowerCase() ?? '';
+      final code = staff.staffCode?.toLowerCase() ?? '';
 
       return name.contains(query) ||
           phone.contains(query) ||
-          role.contains(query);
+          role.contains(query) ||
+          designation.contains(query) ||
+          email.contains(query) ||
+          code.contains(query);
     }).toList();
   });
 });
@@ -98,10 +112,7 @@ class StaffDirectoryView extends ConsumerStatefulWidget {
   ConsumerState<StaffDirectoryView> createState() => _StaffDirectoryViewState();
 }
 
-class _StaffDirectoryViewState extends ConsumerState<StaffDirectoryView>
-    with SingleTickerProviderStateMixin {
-  late AnimationController _glowController;
-  late Animation<double> _glowAnimation;
+class _StaffDirectoryViewState extends ConsumerState<StaffDirectoryView> {
   final TextEditingController _searchController = TextEditingController();
   Timer? _debounceTimer;
   bool _isEditing = false;
@@ -134,18 +145,7 @@ class _StaffDirectoryViewState extends ConsumerState<StaffDirectoryView>
   String _selectedBloodGroup = 'A+';
 
   @override
-  void initState() {
-    super.initState();
-    _glowController =
-        AnimationController(vsync: this, duration: const Duration(seconds: 4))
-          ..repeat(reverse: true);
-    _glowAnimation = Tween<double>(begin: 0.8, end: 1.2).animate(
-        CurvedAnimation(parent: _glowController, curve: Curves.easeInOut));
-  }
-
-  @override
   void dispose() {
-    _glowController.dispose();
     _searchController.dispose();
     _debounceTimer?.cancel();
     _staffCodeController.dispose();
@@ -462,149 +462,30 @@ class _StaffDirectoryViewState extends ConsumerState<StaffDirectoryView>
     final searchQuery = ref.watch(staffSearchQueryProvider);
     final filter = ref.watch(staffFilterProvider);
     final currentPage = ref.watch(staffPageProvider);
+    final departments = ref.watch(departmentListProvider).valueOrNull ?? [];
+
+    if (_isViewingDetail && _selectedStaff != null) {
+      return StaffDetailView(
+        staff: _selectedStaff!,
+        onEdit: () => _openStaffForm(staff: _selectedStaff),
+        onBack: _closeAll,
+      );
+    }
+
+    if (_isEditing) {
+      return _buildStaffForm();
+    }
 
     return Scaffold(
       backgroundColor: AppTheme.bgMain,
-      body: Stack(
-        children: [
-          Positioned(
-            top: -100,
-            left: -100,
-            child: AnimatedBuilder(
-              animation: _glowAnimation,
-              builder: (context, child) {
-                return Transform.scale(
-                  scale: _glowAnimation.value,
-                  child: Container(
-                    width: 500,
-                    height: 500,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      gradient: RadialGradient(
-                        colors: [
-                          AppTheme.primaryPurple.withValues(alpha: 0.08),
-                          Colors.transparent
-                        ],
-                      ),
-                    ),
-                  ),
-                );
-              },
-            ),
-          ),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              if (!_isViewingDetail && !_isEditing)
-                Padding(
-                  padding: const EdgeInsets.all(32.0),
-                  child: Container(
-                    padding: const EdgeInsets.all(24),
-                    decoration: BoxDecoration(
-                      gradient: const LinearGradient(
-                        colors: [Color(0xFF5B4BC4), Color(0xFF7B68EE)],
-                        begin: Alignment.topLeft,
-                        end: Alignment.bottomRight,
-                      ),
-                      borderRadius: BorderRadius.circular(16),
-                      boxShadow: [
-                        BoxShadow(
-                            color:
-                                AppTheme.primaryPurple.withValues(alpha: 0.2),
-                            blurRadius: 10,
-                            offset: const Offset(0, 4)),
-                      ],
-                    ),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text('Staff & Teachers Directory',
-                                style: GoogleFonts.poppins(
-                                    fontSize: 28,
-                                    fontWeight: FontWeight.w600,
-                                    color: Colors.white)),
-                            const SizedBox(height: 4),
-                            Text('MANAGE TEACHERS, ADMINS, AND SUPPORT STAFF',
-                                style: GoogleFonts.poppins(
-                                    fontSize: 11,
-                                    fontWeight: FontWeight.w600,
-                                    letterSpacing: 1.2,
-                                    color:
-                                        Colors.white.withValues(alpha: 0.8))),
-                          ],
-                        ),
-                        Row(
-                          children: [
-                            ElevatedButton.icon(
-                              onPressed: () => _showLeaveApprovalsQueueDialog(context),
-                              icon: const Icon(Icons.approval_rounded, size: 18),
-                              label: Text('Leave Approvals',
-                                  style: GoogleFonts.poppins(
-                                      fontWeight: FontWeight.w600)),
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor:
-                                    Colors.white.withValues(alpha: 0.2),
-                                foregroundColor: Colors.white,
-                                elevation: 0,
-                                padding: const EdgeInsets.symmetric(
-                                    horizontal: 16, vertical: 16),
-                              ),
-                            ),
-                            const SizedBox(width: 12),
-                            ElevatedButton.icon(
-                              onPressed: _bulkImportCsv,
-                              icon: const Icon(Icons.upload_file_rounded,
-                                  size: 18),
-                              label: Text('Bulk Import',
-                                  style: GoogleFonts.poppins(
-                                      fontWeight: FontWeight.w600)),
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor:
-                                    Colors.white.withValues(alpha: 0.2),
-                                foregroundColor: Colors.white,
-                                elevation: 0,
-                                padding: const EdgeInsets.symmetric(
-                                    horizontal: 20, vertical: 16),
-                              ),
-                            ),
-                            const SizedBox(width: 12),
-                            ElevatedButton.icon(
-                              onPressed: () => _openStaffForm(),
-                              icon: const Icon(Icons.add_rounded, size: 18),
-                              label: Text('Add New Staff',
-                                  style: GoogleFonts.poppins(
-                                      fontWeight: FontWeight.w600)),
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: Colors.white,
-                                foregroundColor: AppTheme.primaryPurple,
-                                padding: const EdgeInsets.symmetric(
-                                    horizontal: 24, vertical: 16),
-                                elevation: 0,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              Expanded(
-                child: _isViewingDetail
-                    ? StaffDetailView(
-                        staff: _selectedStaff!,
-                        onEdit: () => _openStaffForm(staff: _selectedStaff),
-                        onBack: _closeAll)
-                    : _isEditing
-                        ? _buildStaffForm()
-                        : _buildStaffList(paginatedAsync, filteredAsync,
-                            searchQuery, filter, currentPage),
-              ),
-            ],
-          ),
-        ],
+      body: _buildDirectoryView(
+        context,
+        paginatedAsync,
+        filteredAsync,
+        searchQuery,
+        filter,
+        currentPage,
+        departments,
       ),
     );
   }
@@ -981,26 +862,136 @@ class _StaffDirectoryViewState extends ConsumerState<StaffDirectoryView>
     );
   }
 
-  Widget _buildStaffList(
-      AsyncValue<List<Staff>> paginatedAsync,
-      AsyncValue<List<Staff>> filteredAsync,
-      String searchQuery,
-      StaffFilter filter,
-      int currentPage) {
-    return Column(
-      children: [
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 32.0),
-          child: Row(
+  Widget _buildDirectoryView(
+    BuildContext context,
+    AsyncValue<List<Staff>> paginatedAsync,
+    AsyncValue<List<Staff>> filteredAsync,
+    String searchQuery,
+    StaffFilter filter,
+    int currentPage,
+    List<Department> departments,
+  ) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final showRightPanel = constraints.maxWidth >= 900;
+
+        return Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 24),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Expanded(
-                flex: 2,
+              // ── Top Header ──
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Directory',
+                        style: GoogleFonts.poppins(
+                          fontSize: 26,
+                          fontWeight: FontWeight.bold,
+                          color: AppTheme.textPrimary,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        'Who are you looking for today?',
+                        style: GoogleFonts.poppins(
+                          fontSize: 13.5,
+                          color: AppTheme.textSecondary,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const Spacer(),
+                  Wrap(
+                    spacing: 12,
+                    runSpacing: 8,
+                    children: [
+                      ElevatedButton.icon(
+                        onPressed: () => _openStaffForm(),
+                        icon: const Icon(Icons.add_rounded, size: 18),
+                        label: Text('Add New Staff',
+                            style: GoogleFonts.poppins(
+                                fontWeight: FontWeight.w600, fontSize: 13)),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppTheme.primaryPurple,
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 18, vertical: 12),
+                          shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(10)),
+                          elevation: 0,
+                        ),
+                      ),
+                      OutlinedButton.icon(
+                        onPressed: _bulkImportCsv,
+                        icon: const Icon(Icons.file_upload_outlined, size: 18),
+                        label: Text('Bulk Import',
+                            style: GoogleFonts.poppins(
+                                fontWeight: FontWeight.w600, fontSize: 13)),
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: AppTheme.textPrimary,
+                          backgroundColor: Colors.white,
+                          side: const BorderSide(color: AppTheme.divider),
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 16, vertical: 12),
+                          shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(10)),
+                        ),
+                      ),
+                      OutlinedButton.icon(
+                        onPressed: () => _showLeaveApprovalsQueueDialog(context),
+                        icon: const Icon(Icons.event_available_rounded,
+                            size: 18, color: AppTheme.primaryPurple),
+                        label: Text('Leave Approvals',
+                            style: GoogleFonts.poppins(
+                                fontWeight: FontWeight.w600, fontSize: 13)),
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: AppTheme.primaryPurple,
+                          backgroundColor:
+                              AppTheme.primaryPurple.withValues(alpha: 0.05),
+                          side: BorderSide(
+                              color: AppTheme.primaryPurple
+                                  .withValues(alpha: 0.25)),
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 16, vertical: 12),
+                          shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(10)),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+
+              const SizedBox(height: 20),
+
+              // ── Search Bar ──
+              Container(
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(14),
+                  border:
+                      Border.all(color: AppTheme.divider.withValues(alpha: 0.6)),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.02),
+                      blurRadius: 6,
+                      offset: const Offset(0, 2),
+                    ),
+                  ],
+                ),
                 child: TextField(
                   controller: _searchController,
-                  style: GoogleFonts.poppins(color: AppTheme.textPrimary),
+                  style: GoogleFonts.poppins(
+                      color: AppTheme.textPrimary, fontSize: 14),
                   onChanged: (val) {
-                    if (_debounceTimer?.isActive ?? false)
+                    if (_debounceTimer?.isActive ?? false) {
                       _debounceTimer!.cancel();
+                    }
                     _debounceTimer =
                         Timer(const Duration(milliseconds: 300), () {
                       ref.read(staffSearchQueryProvider.notifier).state = val;
@@ -1008,187 +999,1133 @@ class _StaffDirectoryViewState extends ConsumerState<StaffDirectoryView>
                     });
                   },
                   decoration: InputDecoration(
-                    hintText: 'Search staff...',
+                    hintText: 'Search by name, role, or designation...',
+                    hintStyle: GoogleFonts.poppins(
+                        color: AppTheme.textHint, fontSize: 13.5),
                     prefixIcon: const Icon(Icons.search_rounded,
-                        color: AppTheme.textSecondary),
-                    filled: true,
-                    fillColor: Colors.white,
-                    border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
-                        borderSide: BorderSide.none),
+                        color: AppTheme.textSecondary, size: 20),
+                    suffixIcon: _searchController.text.isNotEmpty
+                        ? IconButton(
+                            icon: const Icon(Icons.close_rounded,
+                                size: 18, color: AppTheme.textSecondary),
+                            onPressed: () {
+                              _searchController.clear();
+                              ref
+                                  .read(staffSearchQueryProvider.notifier)
+                                  .state = '';
+                              ref.read(staffPageProvider.notifier).state = 0;
+                              setState(() {});
+                            },
+                          )
+                        : null,
+                    border: InputBorder.none,
+                    contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 16, vertical: 14),
                   ),
                 ),
               ),
-              const SizedBox(width: 16),
-              Expanded(
-                flex: 1,
-                child: _buildFilterDropdown<String?>(
-                  value: filter.role,
-                  items: const [
-                    DropdownMenuItem(value: null, child: Text('All Roles')),
-                    DropdownMenuItem(value: 'teacher', child: Text('Teacher')),
-                    DropdownMenuItem(value: 'admin', child: Text('Admin')),
-                    DropdownMenuItem(
-                        value: 'support_staff', child: Text('Support Staff')),
-                    DropdownMenuItem(value: 'driver', child: Text('Driver')),
-                  ],
-                  onChanged: (val) {
-                    ref.read(staffFilterProvider.notifier).state =
-                        filter.copyWith(role: val, clearRole: val == null);
-                    ref.read(staffPageProvider.notifier).state = 0;
-                  },
-                ),
+
+              const SizedBox(height: 20),
+
+              // ── Filter Bar ──
+              Row(
+                children: [
+                  Text(
+                    'Staff',
+                    style: GoogleFonts.poppins(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      color: AppTheme.textPrimary,
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: AppTheme.primaryPurple.withValues(alpha: 0.08),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Text(
+                      '${filteredAsync.valueOrNull?.length ?? 0} Members',
+                      style: GoogleFonts.poppins(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: AppTheme.primaryPurple,
+                      ),
+                    ),
+                  ),
+                  const Spacer(),
+                  _buildPillDropdown<String?>(
+                    label: 'Department',
+                    value: filter.departmentId,
+                    items: [
+                      const DropdownMenuItem(
+                          value: null, child: Text('Department: All')),
+                      ...departments.map((d) => DropdownMenuItem(
+                            value: d.name,
+                            child: Text('Dept: ${d.name}'),
+                          )),
+                    ],
+                    onChanged: (val) {
+                      ref.read(staffFilterProvider.notifier).state =
+                          filter.copyWith(
+                              departmentId: val, clearDepartmentId: val == null);
+                      ref.read(staffPageProvider.notifier).state = 0;
+                    },
+                  ),
+                  const SizedBox(width: 12),
+                  _buildPillDropdown<String?>(
+                    label: 'Role',
+                    value: filter.role,
+                    items: const [
+                      DropdownMenuItem(
+                          value: null, child: Text('Role: All')),
+                      DropdownMenuItem(
+                          value: 'teacher', child: Text('Teacher')),
+                      DropdownMenuItem(
+                          value: 'admin', child: Text('Admin')),
+                      DropdownMenuItem(
+                          value: 'support_staff', child: Text('Support Staff')),
+                      DropdownMenuItem(
+                          value: 'driver', child: Text('Driver')),
+                    ],
+                    onChanged: (val) {
+                      ref.read(staffFilterProvider.notifier).state =
+                          filter.copyWith(role: val, clearRole: val == null);
+                      ref.read(staffPageProvider.notifier).state = 0;
+                    },
+                  ),
+                  const SizedBox(width: 12),
+                  _buildPillDropdown<bool?>(
+                    label: 'Status',
+                    value: filter.isActive,
+                    items: const [
+                      DropdownMenuItem(
+                          value: null, child: Text('Status: All')),
+                      DropdownMenuItem(
+                          value: true, child: Text('Active')),
+                      DropdownMenuItem(
+                          value: false, child: Text('Inactive')),
+                    ],
+                    onChanged: (val) {
+                      ref.read(staffFilterProvider.notifier).state =
+                          filter.copyWith(
+                              isActive: val, clearIsActive: val == null);
+                      ref.read(staffPageProvider.notifier).state = 0;
+                    },
+                  ),
+                ],
               ),
-              const SizedBox(width: 16),
+
+              const SizedBox(height: 18),
+
+              // ── Main Content Area (Cards Grid + Right Detail Panel) ──
               Expanded(
-                flex: 1,
-                child: _buildFilterDropdown<bool?>(
-                  value: filter.isActive,
-                  items: const [
-                    DropdownMenuItem(value: null, child: Text('All Status')),
-                    DropdownMenuItem(value: true, child: Text('Active')),
-                    DropdownMenuItem(value: false, child: Text('Inactive')),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Cards Grid & Pagination
+                    Expanded(
+                      flex: 3,
+                      child: paginatedAsync.when(
+                        data: (staffList) {
+                          if (staffList.isEmpty) {
+                            return Center(
+                              child: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  const Icon(Icons.people_outline_rounded,
+                                      size: 56, color: AppTheme.textHint),
+                                  const SizedBox(height: 12),
+                                  Text(
+                                    'No staff found matching criteria',
+                                    style: GoogleFonts.poppins(
+                                      fontSize: 15,
+                                      fontWeight: FontWeight.w600,
+                                      color: AppTheme.textSecondary,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            );
+                          }
+
+                          final activeStaff =
+                              _selectedStaff ?? staffList.first;
+
+                          return Column(
+                            children: [
+                              Expanded(
+                                child: LayoutBuilder(
+                                  builder: (context, gridConstraints) {
+                                    final crossAxisCount =
+                                        gridConstraints.maxWidth > 580 ? 2 : 1;
+                                    return GridView.builder(
+                                      padding:
+                                          const EdgeInsets.only(bottom: 12),
+                                      gridDelegate:
+                                          SliverGridDelegateWithFixedCrossAxisCount(
+                                        crossAxisCount: crossAxisCount,
+                                        crossAxisSpacing: 16,
+                                        mainAxisSpacing: 16,
+                                        mainAxisExtent: 180,
+                                      ),
+                                      itemCount: staffList.length,
+                                      itemBuilder: (context, index) {
+                                        final staff = staffList[index];
+                                        final isSelected =
+                                            activeStaff.id == staff.id;
+                                        return _buildStaffCard(
+                                            staff, isSelected, departments);
+                                      },
+                                    );
+                                  },
+                                ),
+                              ),
+                              const SizedBox(height: 8),
+                              _buildPagination(filteredAsync, currentPage),
+                            ],
+                          );
+                        },
+                        loading: () => const Center(
+                          child: EduviaThinkingOrb(size: 64),
+                        ),
+                        error: (err, stack) => Center(
+                          child: Text('Error: $err',
+                              style: GoogleFonts.poppins(
+                                  color: AppTheme.error)),
+                        ),
+                      ),
+                    ),
+
+                    if (showRightPanel) ...[
+                      const SizedBox(width: 24),
+                      SizedBox(
+                        width: constraints.maxWidth > 1200 ? 380 : 350,
+                        child: paginatedAsync.when(
+                          data: (staffList) {
+                            final activeStaff = _selectedStaff ??
+                                (staffList.isNotEmpty
+                                    ? staffList.first
+                                    : null);
+                            if (activeStaff == null) {
+                              return Container(
+                                padding: const EdgeInsets.all(24),
+                                decoration: BoxDecoration(
+                                  color: Colors.white,
+                                  borderRadius: BorderRadius.circular(20),
+                                  border: Border.all(
+                                      color: AppTheme.divider
+                                          .withValues(alpha: 0.6)),
+                                ),
+                                child: Center(
+                                  child: Text(
+                                    'Select a staff member to view details',
+                                    style: GoogleFonts.poppins(
+                                        color: AppTheme.textSecondary),
+                                  ),
+                                ),
+                              );
+                            }
+                            return _buildRightDetailPanel(
+                                activeStaff, departments);
+                          },
+                          loading: () => const SizedBox.shrink(),
+                          error: (_, __) => const SizedBox.shrink(),
+                        ),
+                      ),
+                    ],
                   ],
-                  onChanged: (val) {
-                    ref.read(staffFilterProvider.notifier).state = filter
-                        .copyWith(isActive: val, clearIsActive: val == null);
-                    ref.read(staffPageProvider.notifier).state = 0;
-                  },
                 ),
               ),
             ],
           ),
-        ),
-        const SizedBox(height: 16),
-        Expanded(
-          child: paginatedAsync.when(
-            data: (staffList) {
-              if (staffList.isEmpty)
-                return Center(
-                    child: Text('No staff found.',
-                        style: GoogleFonts.poppins(
-                            color: AppTheme.textSecondary)));
-              return ListView.builder(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 32.0, vertical: 8.0),
-                itemCount: staffList.length,
-                itemBuilder: (context, index) {
-                  final staff = staffList[index];
-                  return InkWell(
-                    onTap: () => _openStaffDetail(staff),
-                    borderRadius: BorderRadius.circular(12),
-                    child: Container(
-                      margin: const EdgeInsets.only(bottom: 12),
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(12),
-                        boxShadow: [
-                          BoxShadow(
-                              color: Colors.black.withValues(alpha: 0.03),
-                              blurRadius: 8,
-                              offset: const Offset(0, 2))
-                        ],
-                      ),
-                      child: ListTile(
-                        contentPadding: const EdgeInsets.symmetric(
-                            horizontal: 24, vertical: 8),
-                        leading: AppAvatar(
-                          seed: (staff.staffCode != null && staff.staffCode!.isNotEmpty) ? staff.staffCode! : staff.fullName,
-                          name: staff.fullName,
-                          size: 40,
-                          fallbackColor: staff.isActive
-                              ? AppTheme.primaryPurple.withValues(alpha: 0.1)
-                              : Colors.grey.withValues(alpha: 0.2),
-                        ),
-                        title: Text(staff.fullName,
-                            style: GoogleFonts.poppins(
-                                fontWeight: FontWeight.w600,
-                                color: staff.isActive
-                                    ? AppTheme.textPrimary
-                                    : Colors.grey)),
-                        subtitle: Text(
-                            '${staff.role.toUpperCase()} • ${staff.departmentId ?? "No Dept"}',
-                            style: GoogleFonts.poppins(
-                                color: AppTheme.textSecondary, fontSize: 13)),
-                        trailing: const Icon(Icons.chevron_right_rounded,
-                            color: AppTheme.textHint),
-                      ),
-                    ),
-                  );
-                },
-              );
-            },
-            loading: () => const Center(child: CircularProgressIndicator()),
-            error: (err, stack) => Center(child: Text('Error: $err')),
-          ),
-        ),
-
-        // Pagination Controls
-        filteredAsync.whenData((fullList) {
-              final totalPages = (fullList.length / itemsPerPage).ceil();
-              if (totalPages <= 1) return const SizedBox.shrink();
-
-              return Container(
-                padding:
-                    const EdgeInsets.symmetric(vertical: 16, horizontal: 32),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  border: Border(
-                      top: BorderSide(
-                          color: Colors.grey.withValues(alpha: 0.2))),
-                ),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.end,
-                  children: [
-                    Text('Page ${currentPage + 1} of $totalPages',
-                        style: GoogleFonts.poppins(
-                            color: AppTheme.textSecondary, fontSize: 13)),
-                    const SizedBox(width: 16),
-                    IconButton(
-                      icon: const Icon(Icons.chevron_left_rounded),
-                      onPressed: currentPage > 0
-                          ? () => ref.read(staffPageProvider.notifier).state--
-                          : null,
-                    ),
-                    IconButton(
-                      icon: const Icon(Icons.chevron_right_rounded),
-                      onPressed: currentPage < totalPages - 1
-                          ? () => ref.read(staffPageProvider.notifier).state++
-                          : null,
-                    ),
-                  ],
-                ),
-              );
-            }).valueOrNull ??
-            const SizedBox.shrink(),
-      ],
+        );
+      },
     );
   }
 
-  Widget _buildFilterDropdown<T>(
-      {required T value,
-      required List<DropdownMenuItem<T>> items,
-      required void Function(T?) onChanged}) {
+  Widget _buildStaffCard(
+      Staff staff, bool isSelected, List<Department> departments) {
+    final deptName =
+        _getDepartmentName(staff.departmentId, departments, staff.role);
+
     return Container(
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: DropdownButtonFormField<T>(
-        value: value,
-        decoration: InputDecoration(
-          contentPadding:
-              const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-          border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(12),
-              borderSide: BorderSide.none),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: isSelected
+              ? AppTheme.primaryPurple
+              : AppTheme.divider.withValues(alpha: 0.6),
+          width: isSelected ? 2 : 1,
         ),
-        items: items,
-        onChanged: onChanged,
-        icon: const Icon(Icons.keyboard_arrow_down_rounded,
-            color: AppTheme.textSecondary),
+        boxShadow: [
+          BoxShadow(
+            color: isSelected
+                ? AppTheme.primaryPurple.withValues(alpha: 0.12)
+                : Colors.black.withValues(alpha: 0.03),
+            blurRadius: isSelected ? 12 : 8,
+            offset: const Offset(0, 3),
+          ),
+        ],
+      ),
+      child: InkWell(
+        onTap: () {
+          setState(() {
+            _selectedStaff = staff;
+          });
+        },
+        onDoubleTap: () => _openStaffDetail(staff),
+        borderRadius: BorderRadius.circular(16),
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(12),
+                    child: Container(
+                      width: 48,
+                      height: 48,
+                      color: _getAvatarBg(staff.role),
+                      child: (staff.photographPath != null &&
+                              staff.photographPath!.isNotEmpty &&
+                              File(staff.photographPath!).existsSync())
+                          ? Image.file(File(staff.photographPath!),
+                              fit: BoxFit.cover)
+                          : Center(
+                              child: AppAvatar(
+                                seed: (staff.staffCode != null &&
+                                        staff.staffCode!.isNotEmpty)
+                                    ? staff.staffCode!
+                                    : staff.fullName,
+                                name: staff.fullName,
+                                size: 48,
+                                borderRadius: 12,
+                                fallbackColor: _getAvatarBg(staff.role),
+                              ),
+                            ),
+                    ),
+                  ),
+                  const Spacer(),
+                  Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: staff.isActive
+                          ? const Color(0xFFE8F7EE)
+                          : const Color(0xFFF3F4F6),
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Container(
+                          width: 6,
+                          height: 6,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            color: staff.isActive
+                                ? const Color(0xFF16A34A)
+                                : const Color(0xFF6B7280),
+                          ),
+                        ),
+                        const SizedBox(width: 5),
+                        Text(
+                          staff.isActive ? 'Active' : 'Inactive',
+                          style: GoogleFonts.poppins(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w600,
+                            color: staff.isActive
+                                ? const Color(0xFF16A34A)
+                                : const Color(0xFF6B7280),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              Text(
+                staff.fullName,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: GoogleFonts.poppins(
+                  fontWeight: FontWeight.w600,
+                  fontSize: 15,
+                  color: AppTheme.textPrimary,
+                ),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                staff.designation ?? _formatRole(staff.role),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: GoogleFonts.poppins(
+                  fontSize: 12.5,
+                  color: AppTheme.textSecondary,
+                ),
+              ),
+              const Spacer(),
+              Row(
+                children: [
+                  Flexible(
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 9, vertical: 3.5),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFFEF3C7),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: Text(
+                        deptName,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: GoogleFonts.poppins(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w500,
+                          color: const Color(0xFFB45309),
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 6),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 9, vertical: 3.5),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFF3F4F6),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Text(
+                      _formatRole(staff.role),
+                      style: GoogleFonts.poppins(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w500,
+                        color: const Color(0xFF4B5563),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
       ),
     );
+  }
+
+  Widget _buildRightDetailPanel(Staff staff, List<Department> departments) {
+    final deptName =
+        _getDepartmentName(staff.departmentId, departments, staff.role);
+    final hasPhoto = staff.photographPath != null &&
+        staff.photographPath!.isNotEmpty &&
+        File(staff.photographPath!).existsSync();
+
+    return SingleChildScrollView(
+      padding: const EdgeInsets.only(bottom: 24),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // ── 1. Hero Photo Card with Floating Name & Designation Card ──
+          Container(
+            height: 270,
+            width: double.infinity,
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(24),
+              color: _getAvatarBg(staff.role),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.06),
+                  blurRadius: 14,
+                  offset: const Offset(0, 4),
+                ),
+              ],
+            ),
+            child: Stack(
+              children: [
+                // Photo / Studio Background
+                Positioned.fill(
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(24),
+                    child: hasPhoto
+                        ? Image.file(File(staff.photographPath!),
+                            fit: BoxFit.cover)
+                        : Container(
+                            decoration: const BoxDecoration(
+                              gradient: LinearGradient(
+                                begin: Alignment.topLeft,
+                                end: Alignment.bottomRight,
+                                colors: [
+                                  Color(0xFF6366F1),
+                                  AppTheme.primaryPurple,
+                                  AppTheme.primaryDark,
+                                ],
+                              ),
+                            ),
+                            child: Stack(
+                              alignment: Alignment.center,
+                              children: [
+                                Container(
+                                  width: 140,
+                                  height: 140,
+                                  decoration: BoxDecoration(
+                                    shape: BoxShape.circle,
+                                    color: Colors.white.withValues(alpha: 0.1),
+                                  ),
+                                ),
+                                AppAvatar(
+                                  seed: (staff.staffCode != null &&
+                                          staff.staffCode!.isNotEmpty)
+                                      ? staff.staffCode!
+                                      : staff.fullName,
+                                  name: staff.fullName,
+                                  size: 92,
+                                  borderRadius: 24,
+                                ),
+                              ],
+                            ),
+                          ),
+                  ),
+                ),
+
+                // Floating White Card overlapping bottom of photo
+                Positioned(
+                  left: 14,
+                  right: 14,
+                  bottom: 14,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 18, vertical: 14),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(18),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withValues(alpha: 0.12),
+                          blurRadius: 16,
+                          offset: const Offset(0, 4),
+                        ),
+                      ],
+                    ),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Text(
+                                staff.fullName,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: GoogleFonts.poppins(
+                                  fontSize: 17,
+                                  fontWeight: FontWeight.bold,
+                                  color: AppTheme.textPrimary,
+                                ),
+                              ),
+                              const SizedBox(height: 2),
+                              Text(
+                                staff.designation ?? _formatRole(staff.role),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: GoogleFonts.poppins(
+                                  fontSize: 13,
+                                  color: AppTheme.textSecondary,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        if (staff.staffCode != null &&
+                            staff.staffCode!.isNotEmpty) ...[
+                          const SizedBox(width: 8),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 9, vertical: 4),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFF3F4F6),
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: Text(
+                              staff.staffCode!,
+                              style: GoogleFonts.poppins(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w600,
+                                color: const Color(0xFF4B5563),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+
+          const SizedBox(height: 24),
+
+          // ── 2. Contact Details Section (Clean rows matching reference design) ──
+          Text(
+            'Contact Details',
+            style: GoogleFonts.poppins(
+              fontSize: 15,
+              fontWeight: FontWeight.bold,
+              color: AppTheme.textPrimary,
+            ),
+          ),
+          const SizedBox(height: 14),
+
+          // Work Email Row
+          Row(
+            children: [
+              Container(
+                width: 38,
+                height: 38,
+                decoration: BoxDecoration(
+                  color: const Color(0xFFF97316),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: const Icon(Icons.mail_rounded,
+                    color: Colors.white, size: 19),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Work Email',
+                      style: GoogleFonts.poppins(
+                        fontSize: 11.5,
+                        fontWeight: FontWeight.w500,
+                        color: const Color(0xFF9CA3AF),
+                      ),
+                    ),
+                    const SizedBox(height: 1),
+                    SelectableText(
+                      staff.email?.isNotEmpty == true
+                          ? staff.email!
+                          : 'No email on file',
+                      style: GoogleFonts.poppins(
+                        fontSize: 13.5,
+                        fontWeight: FontWeight.w600,
+                        color: AppTheme.textPrimary,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+
+          const SizedBox(height: 14),
+
+          // Phone Row
+          Row(
+            children: [
+              Container(
+                width: 38,
+                height: 38,
+                decoration: BoxDecoration(
+                  color: const Color(0xFFF59E0B),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: const Icon(Icons.phone_rounded,
+                    color: Colors.white, size: 19),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Phone',
+                      style: GoogleFonts.poppins(
+                        fontSize: 11.5,
+                        fontWeight: FontWeight.w500,
+                        color: const Color(0xFF9CA3AF),
+                      ),
+                    ),
+                    const SizedBox(height: 1),
+                    SelectableText(
+                      staff.phone?.isNotEmpty == true
+                          ? staff.phone!
+                          : 'No phone on file',
+                      style: GoogleFonts.poppins(
+                        fontSize: 13.5,
+                        fontWeight: FontWeight.w600,
+                        color: AppTheme.textPrimary,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+
+          const SizedBox(height: 22),
+
+          // ── 3. Info Cards Row (DEPARTMENT & JOINED) ──
+          Row(
+            children: [
+              // Department Card
+              Expanded(
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 16, vertical: 14),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(
+                        color: AppTheme.divider.withValues(alpha: 0.4)),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.03),
+                        blurRadius: 8,
+                        offset: const Offset(0, 2),
+                      ),
+                    ],
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'DEPARTMENT',
+                        style: GoogleFonts.poppins(
+                          fontSize: 10,
+                          fontWeight: FontWeight.w600,
+                          color: const Color(0xFF9CA3AF),
+                          letterSpacing: 0.8,
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      Text(
+                        deptName,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: GoogleFonts.poppins(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                          color: AppTheme.textPrimary,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(width: 14),
+              // Joined Card
+              Expanded(
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 16, vertical: 14),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(
+                        color: AppTheme.divider.withValues(alpha: 0.4)),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.03),
+                        blurRadius: 8,
+                        offset: const Offset(0, 2),
+                      ),
+                    ],
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'JOINED',
+                        style: GoogleFonts.poppins(
+                          fontSize: 10,
+                          fontWeight: FontWeight.w600,
+                          color: const Color(0xFF9CA3AF),
+                          letterSpacing: 0.8,
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      Text(
+                        _formatDate(staff.joiningDate),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: GoogleFonts.poppins(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                          color: AppTheme.textPrimary,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+
+          const SizedBox(height: 22),
+
+          // ── 4. Profile Highlights (matching "Current Projects" style) ──
+          Text(
+            'Profile Highlights',
+            style: GoogleFonts.poppins(
+              fontSize: 15,
+              fontWeight: FontWeight.bold,
+              color: AppTheme.textPrimary,
+            ),
+          ),
+          const SizedBox(height: 12),
+
+          // Card 1: Academic & Experience or Role
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(16),
+              border:
+                  Border.all(color: AppTheme.divider.withValues(alpha: 0.4)),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.03),
+                  blurRadius: 8,
+                  offset: const Offset(0, 2),
+                ),
+              ],
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  staff.qualification?.isNotEmpty == true
+                      ? staff.qualification!
+                      : '${_formatRole(staff.role)} Faculty',
+                  style: GoogleFonts.poppins(
+                    fontSize: 13.5,
+                    fontWeight: FontWeight.bold,
+                    color: AppTheme.textPrimary,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  staff.experienceYears != null
+                      ? '${staff.experienceYears} Years Experience • ${_formatRole(staff.role)}'
+                      : '$deptName Department • Eduvia School Management',
+                  style: GoogleFonts.poppins(
+                    fontSize: 12,
+                    color: AppTheme.textSecondary,
+                  ),
+                ),
+              ],
+            ),
+          ),
+
+          // Card 2: Emergency & Medical (if present) or Status & Role
+          const SizedBox(height: 10),
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(16),
+              border:
+                  Border.all(color: AppTheme.divider.withValues(alpha: 0.4)),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.03),
+                  blurRadius: 8,
+                  offset: const Offset(0, 2),
+                ),
+              ],
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  staff.emergencyContact?.isNotEmpty == true
+                      ? 'Emergency: ${staff.emergencyContact!}'
+                      : 'Status: ${staff.isActive ? "Active in Service" : "Inactive / On Leave"}',
+                  style: GoogleFonts.poppins(
+                    fontSize: 13.5,
+                    fontWeight: FontWeight.bold,
+                    color: AppTheme.textPrimary,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  staff.bloodGroup?.isNotEmpty == true
+                      ? 'Blood Group: ${staff.bloodGroup!} • Verified Record'
+                      : 'School Staff Record • Offline Storage',
+                  style: GoogleFonts.poppins(
+                    fontSize: 12,
+                    color: AppTheme.textSecondary,
+                  ),
+                ),
+              ],
+            ),
+          ),
+
+          if (staff.address?.isNotEmpty == true) ...[
+            const SizedBox(height: 10),
+            Container(
+              width: double.infinity,
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(
+                    color: AppTheme.divider.withValues(alpha: 0.4)),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.03),
+                    blurRadius: 8,
+                    offset: const Offset(0, 2),
+                  ),
+                ],
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Residential Address',
+                    style: GoogleFonts.poppins(
+                      fontSize: 13.5,
+                      fontWeight: FontWeight.bold,
+                      color: AppTheme.textPrimary,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    staff.address!,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: GoogleFonts.poppins(
+                      fontSize: 12,
+                      color: AppTheme.textSecondary,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+
+          const SizedBox(height: 24),
+
+          // ── 5. Action Buttons: Edit Profile & Full Record ──
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: () => _openStaffForm(staff: staff),
+                  icon: const Icon(Icons.edit_outlined, size: 16),
+                  label: Text('Edit Profile',
+                      style: GoogleFonts.poppins(
+                          fontWeight: FontWeight.w600, fontSize: 13)),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: AppTheme.primaryPurple,
+                    side: const BorderSide(color: AppTheme.primaryPurple),
+                    backgroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(14)),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: ElevatedButton.icon(
+                  onPressed: () => _openStaffDetail(staff),
+                  icon: const Icon(Icons.visibility_outlined, size: 16),
+                  label: Text('Full Record',
+                      style: GoogleFonts.poppins(
+                          fontWeight: FontWeight.w600, fontSize: 13)),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppTheme.primaryPurple,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(14)),
+                    elevation: 0,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPillDropdown<T>({
+    required String label,
+    required T value,
+    required List<DropdownMenuItem<T>> items,
+    required void Function(T?) onChanged,
+  }) {
+    return Container(
+      height: 38,
+      padding: const EdgeInsets.symmetric(horizontal: 14),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: AppTheme.divider.withValues(alpha: 0.6)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.02),
+            blurRadius: 4,
+            offset: const Offset(0, 1),
+          ),
+        ],
+      ),
+      child: DropdownButtonHideUnderline(
+        child: DropdownButton<T>(
+          value: value,
+          items: items,
+          onChanged: onChanged,
+          style: GoogleFonts.poppins(
+            fontSize: 12.5,
+            fontWeight: FontWeight.w500,
+            color: AppTheme.textPrimary,
+          ),
+          icon: const Icon(
+            Icons.keyboard_arrow_down_rounded,
+            size: 18,
+            color: AppTheme.textSecondary,
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildPagination(
+      AsyncValue<List<Staff>> filteredAsync, int currentPage) {
+    return filteredAsync.whenData((fullList) {
+          final totalPages = (fullList.length / itemsPerPage).ceil();
+          if (totalPages <= 1) return const SizedBox.shrink();
+
+          return Container(
+            padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(12),
+              border:
+                  Border.all(color: AppTheme.divider.withValues(alpha: 0.6)),
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  'Showing ${currentPage * itemsPerPage + 1} - ${((currentPage + 1) * itemsPerPage).clamp(0, fullList.length)} of ${fullList.length} staff',
+                  style: GoogleFonts.poppins(
+                    color: AppTheme.textSecondary,
+                    fontSize: 12.5,
+                  ),
+                ),
+                Row(
+                  children: [
+                    Text(
+                      'Page ${currentPage + 1} of $totalPages',
+                      style: GoogleFonts.poppins(
+                        color: AppTheme.textSecondary,
+                        fontSize: 12.5,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    IconButton(
+                      icon: const Icon(Icons.chevron_left_rounded, size: 20),
+                      onPressed: currentPage > 0
+                          ? () => ref
+                              .read(staffPageProvider.notifier)
+                              .state--
+                          : null,
+                      tooltip: 'Previous page',
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.chevron_right_rounded, size: 20),
+                      onPressed: currentPage < totalPages - 1
+                          ? () => ref
+                              .read(staffPageProvider.notifier)
+                              .state++
+                          : null,
+                      tooltip: 'Next page',
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          );
+        }).valueOrNull ??
+        const SizedBox.shrink();
+  }
+
+  String _getDepartmentName(
+      String? departmentId, List<Department> departments, String role) {
+    if (departmentId == null || departmentId.trim().isEmpty) {
+      return _formatRole(role);
+    }
+    final match = departments
+        .where((d) =>
+            d.id.toLowerCase() == departmentId.toLowerCase() ||
+            d.name.toLowerCase() == departmentId.toLowerCase())
+        .firstOrNull;
+    if (match != null) return match.name;
+
+    if (departmentId.startsWith('dept-') ||
+        RegExp(r'^[0-9a-fA-F-]{8,}$').hasMatch(departmentId)) {
+      return _formatRole(role);
+    }
+
+    return departmentId[0].toUpperCase() + departmentId.substring(1);
+  }
+
+  String _formatDate(String? dateStr) {
+    if (dateStr == null || dateStr.trim().isEmpty) return 'Not specified';
+    try {
+      final dt = DateTime.parse(dateStr);
+      return DateFormat.yMMMMd().format(dt);
+    } catch (_) {
+      return dateStr;
+    }
+  }
+
+  String _formatRole(String role) {
+    switch (role.toLowerCase()) {
+      case 'teacher':
+        return 'Teacher';
+      case 'admin':
+        return 'Admin';
+      case 'support_staff':
+        return 'Support Staff';
+      case 'driver':
+        return 'Driver';
+      default:
+        if (role.isEmpty) return 'Staff';
+        return role[0].toUpperCase() +
+            role.substring(1).replaceAll('_', ' ');
+    }
+  }
+
+  Color _getAvatarBg(String role) {
+    switch (role.toLowerCase()) {
+      case 'teacher':
+        return const Color(0xFFEDE9FE);
+      case 'admin':
+        return const Color(0xFFE0E7FF);
+      case 'driver':
+        return const Color(0xFFFEF3C7);
+      default:
+        return const Color(0xFFF3F4F6);
+    }
   }
 
   void _showLeaveApprovalsQueueDialog(BuildContext context) {
@@ -1403,7 +2340,7 @@ class _StaffDirectoryViewState extends ConsumerState<StaffDirectoryView>
                                     items: freeTeachers
                                         .map((t) => DropdownMenuItem(
                                               value: t.id,
-                                              child: Text('${t.fullName} (${t.departmentId ?? "Teacher"})'),
+                                              child: Text('${t.fullName} (${t.designation ?? _formatRole(t.role)})'),
                                             ))
                                         .toList(),
                                     onChanged: (val) => setDialogState(() => selectedSubstituteId = val),

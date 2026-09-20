@@ -167,15 +167,15 @@ class _AssistantViewState extends ConsumerState<AssistantView> {
           mainAxisSize: MainAxisSize.min,
           children: [
             Container(
-              padding: const EdgeInsets.all(4),
+              padding: const EdgeInsets.all(8),
               decoration: BoxDecoration(
                 color: AppTheme.primarySoft,
                 borderRadius: BorderRadius.circular(12),
               ),
-              child: EduviaThinkingOrb(
-                size: 24,
-                state: _isProcessing ? _currentOrbState : OrbState.breathing,
-                showGlow: true,
+              child: const Icon(
+                Icons.smart_toy_rounded,
+                color: AppTheme.primaryPurple,
+                size: 20,
               ),
             ),
             const SizedBox(width: 12),
@@ -287,10 +287,22 @@ class _AssistantViewState extends ConsumerState<AssistantView> {
               padding: const EdgeInsets.only(top: 4, bottom: 24),
               child: Column(
                 children: [
-                  const EduviaThinkingOrb(
-                    size: 64,
-                    state: OrbState.breathing,
-                    showGlow: true,
+                  Container(
+                    width: 64,
+                    height: 64,
+                    decoration: BoxDecoration(
+                      color: AppTheme.primarySoft,
+                      shape: BoxShape.circle,
+                      border: Border.all(
+                        color: AppTheme.primaryPurple.withValues(alpha: 0.2),
+                        width: 2,
+                      ),
+                    ),
+                    child: const Icon(
+                      Icons.auto_awesome_rounded,
+                      size: 32,
+                      color: AppTheme.primaryPurple,
+                    ),
                   ),
                   const SizedBox(height: 12),
                   Text(
@@ -462,17 +474,13 @@ class _AssistantViewState extends ConsumerState<AssistantView> {
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
           Container(
-            margin: const EdgeInsets.only(right: 10),
-            padding: const EdgeInsets.all(4),
+            margin: const EdgeInsets.only(right: 10, top: 2),
+            padding: const EdgeInsets.all(8),
             decoration: const BoxDecoration(
-              color: AppTheme.primarySoft,
+              color: AppTheme.primaryPurple,
               shape: BoxShape.circle,
             ),
-            child: EduviaThinkingOrb(
-              state: _currentOrbState,
-              size: 28,
-              showGlow: false,
-            ),
+            child: const Icon(Icons.smart_toy_rounded, color: Colors.white, size: 16),
           ),
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
