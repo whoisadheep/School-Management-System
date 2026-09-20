@@ -150,9 +150,13 @@ class StudentDirectoryView extends ConsumerStatefulWidget {
 }
 
 class _StudentDirectoryViewState extends ConsumerState<StudentDirectoryView>
-    with SingleTickerProviderStateMixin {
+    with TickerProviderStateMixin {
   late final AnimationController _animController;
   late final Animation<double> _glowAnimation;
+
+  late final AnimationController _collapseController;
+  late final Animation<double> _collapseAnimation;
+  bool _isHeaderCollapsed = false;
 
   final _searchController = TextEditingController();
   Timer? _debounceTimer;
@@ -209,6 +213,50 @@ class _StudentDirectoryViewState extends ConsumerState<StudentDirectoryView>
     return cleanGrade.isEmpty ? grade : cleanGrade;
   }
 
+  void _collapseHeader() {
+    if (!_isHeaderCollapsed) {
+      setState(() => _isHeaderCollapsed = true);
+      _collapseController.forward();
+    }
+  }
+
+  void _expandHeader() {
+    if (_isHeaderCollapsed) {
+      setState(() => _isHeaderCollapsed = false);
+      _collapseController.reverse();
+    }
+  }
+
+  Future<void> _exportCsv(BuildContext context) async {
+    try {
+      final students = await ref.read(studentDirectoryProvider.future);
+      final exporter = CsvExportService();
+      final file = await exporter.exportStudentsToCsv(students);
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Directory exported to CSV: ${file.path}',
+              style: GoogleFonts.poppins(
+                  color: Colors.white, fontWeight: FontWeight.w600),
+            ),
+            backgroundColor: AppTheme.primaryPurple,
+          ),
+        );
+      }
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error exporting CSV: $e',
+                style: GoogleFonts.poppins()),
+            backgroundColor: AppTheme.error,
+          ),
+        );
+      }
+    }
+  }
+
   @override
   void initState() {
     super.initState();
@@ -219,6 +267,16 @@ class _StudentDirectoryViewState extends ConsumerState<StudentDirectoryView>
 
     _glowAnimation = Tween<double>(begin: 0.8, end: 1.2).animate(
       CurvedAnimation(parent: _animController, curve: Curves.easeInOutSine),
+    );
+
+    _collapseController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 350),
+    );
+
+    _collapseAnimation = CurvedAnimation(
+      parent: _collapseController,
+      curve: Curves.easeInOutCubic,
     );
 
     _startAutoRefreshTimer();
@@ -258,6 +316,7 @@ class _StudentDirectoryViewState extends ConsumerState<StudentDirectoryView>
     _autoRefreshTimer?.cancel();
     _debounceTimer?.cancel();
     _animController.dispose();
+    _collapseController.dispose();
     _searchController.dispose();
     super.dispose();
   }
@@ -334,293 +393,412 @@ class _StudentDirectoryViewState extends ConsumerState<StudentDirectoryView>
             },
           ),
         ),
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 20),
+        AnimatedContainer(
+          duration: const Duration(milliseconds: 300),
+          curve: Curves.easeInOutCubic,
+          padding: EdgeInsets.symmetric(
+            horizontal: _isHeaderCollapsed ? 20 : 28,
+            vertical: _isHeaderCollapsed ? 10 : 20,
+          ),
           child: Column(
             children: [
-              // ── Top Header ──
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'Students Directory',
-                          style: GoogleFonts.poppins(
-                            fontSize: 24,
-                            fontWeight: FontWeight.w700,
-                            color: const Color(0xFF0F172A),
-                          ),
-                        ),
-                        const SizedBox(height: 2),
-                        ref.watch(studentDirectoryStatsProvider).maybeWhen(
-                          data: (stats) {
-                            final total = stats['total'] ?? 0;
-                            final newThisMonth = stats['newThisMonth'] ?? 0;
-                            final uniqueGrades = stats['uniqueGrades'] ?? 12;
-                            final numberFormat = NumberFormat('#,###');
-                            return Text(
-                              '${numberFormat.format(total)} enrolled • $newThisMonth new admissions this month • $uniqueGrades grades',
-                              style: GoogleFonts.poppins(
-                                fontSize: 12,
-                                color: const Color(0xFF64748B),
-                                fontWeight: FontWeight.w500,
-                              ),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            );
-                          },
-                          orElse: () => Text(
-                            'Search, filter, and manage all registered student records',
-                            style: GoogleFonts.poppins(
-                              fontSize: 12,
-                              color: const Color(0xFF64748B),
-                            ),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(width: 16),
-                  Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      OutlinedButton.icon(
-                        onPressed: () async {
-                          try {
-                            final students =
-                                await ref.read(studentDirectoryProvider.future);
-                            final exporter = CsvExportService();
-                            final file =
-                                await exporter.exportStudentsToCsv(students);
-                            if (context.mounted) {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(
-                                  content: Text(
-                                    'Directory exported to CSV: ${file.path}',
-                                    style: GoogleFonts.poppins(
-                                        color: Colors.white,
-                                        fontWeight: FontWeight.w600),
-                                  ),
-                                  backgroundColor: AppTheme.primaryPurple,
-                                ),
-                              );
-                            }
-                          } catch (e) {
-                            if (context.mounted) {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(
-                                  content: Text('Error exporting CSV: $e',
-                                      style: GoogleFonts.poppins()),
-                                  backgroundColor: AppTheme.error,
-                                ),
-                              );
-                            }
-                          }
-                        },
-                        icon: const Icon(Icons.file_download_outlined, size: 16),
-                        label: Text(
-                          'Export CSV',
-                          style: GoogleFonts.poppins(
-                            fontWeight: FontWeight.w600,
-                            fontSize: 12,
-                            color: const Color(0xFF0F172A),
-                          ),
-                        ),
-                        style: OutlinedButton.styleFrom(
-                          foregroundColor: const Color(0xFF0F172A),
-                          side: const BorderSide(color: Color(0xFFCBD5E1)),
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 16, vertical: 12),
-                          shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(8)),
-                          backgroundColor: Colors.white,
-                        ),
-                      ),
-                      const SizedBox(width: 10),
-                      ElevatedButton.icon(
-                        onPressed: () {
-                          ref.read(selectedTabProvider.notifier).state =
-                              NavigationTab.admission;
-                        },
-                        icon: const Icon(Icons.add_rounded, size: 16),
-                        label: Text(
-                          'Enroll student',
-                          style: GoogleFonts.poppins(
-                            fontWeight: FontWeight.w600,
-                            fontSize: 12,
-                          ),
-                        ),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: AppTheme.primaryPurple,
-                          foregroundColor: Colors.white,
-                          elevation: 0,
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 18, vertical: 12),
-                          shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(8)),
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-
-              const SizedBox(height: 18),
-
-              // ── 4 Top Stat Cards ──
-              ref.watch(studentDirectoryStatsProvider).when(
-                data: (stats) => _buildTopStatCards(context, stats),
-                loading: () => const SizedBox(height: 100),
-                error: (_, __) => const SizedBox.shrink(),
-              ),
-
-              const SizedBox(height: 18),
-
-              // ── Roster Container ──
-              Expanded(
-                child: Container(
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(16),
-                    border: Border.all(color: const Color(0xFFE2E8F0)),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withValues(alpha: 0.02),
-                        blurRadius: 10,
-                        offset: const Offset(0, 2),
-                      ),
-                    ],
-                  ),
-                  padding: const EdgeInsets.all(20),
+              // ── Collapsible Top Section (Header + Stat Cards) ──
+              SizeTransition(
+                sizeFactor: Tween<double>(begin: 1.0, end: 0.0).animate(_collapseAnimation),
+                alignment: Alignment.topCenter,
+                child: FadeTransition(
+                  opacity: Tween<double>(begin: 1.0, end: 0.0).animate(_collapseAnimation),
                   child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      // Roster Header & Toggle
+                      // ── Top Header ──
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'Students Directory',
+                                  style: GoogleFonts.poppins(
+                                    fontSize: 24,
+                                    fontWeight: FontWeight.w700,
+                                    color: const Color(0xFF0F172A),
+                                  ),
+                                ),
+                                const SizedBox(height: 2),
+                                ref.watch(studentDirectoryStatsProvider).maybeWhen(
+                                  data: (stats) {
+                                    final total = stats['total'] ?? 0;
+                                    final newThisMonth = stats['newThisMonth'] ?? 0;
+                                    final uniqueGrades = stats['uniqueGrades'] ?? 12;
+                                    final numberFormat = NumberFormat('#,###');
+                                    return Text(
+                                      '${numberFormat.format(total)} enrolled • $newThisMonth new admissions this month • $uniqueGrades grades',
+                                      style: GoogleFonts.poppins(
+                                        fontSize: 12,
+                                        color: const Color(0xFF64748B),
+                                        fontWeight: FontWeight.w500,
+                                      ),
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                    );
+                                  },
+                                  orElse: () => Text(
+                                    'Search, filter, and manage all registered student records',
+                                    style: GoogleFonts.poppins(
+                                      fontSize: 12,
+                                      color: const Color(0xFF64748B),
+                                    ),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(width: 16),
+                          Row(
+                            mainAxisSize: MainAxisSize.min,
                             children: [
-                              Text(
-                                'Roster',
-                                style: GoogleFonts.poppins(
-                                  fontSize: 18,
-                                  fontWeight: FontWeight.w700,
-                                  color: const Color(0xFF0F172A),
+                              OutlinedButton.icon(
+                                onPressed: () => _exportCsv(context),
+                                icon: const Icon(Icons.file_download_outlined, size: 16),
+                                label: Text(
+                                  'Export CSV',
+                                  style: GoogleFonts.poppins(
+                                    fontWeight: FontWeight.w600,
+                                    fontSize: 12,
+                                    color: const Color(0xFF0F172A),
+                                  ),
+                                ),
+                                style: OutlinedButton.styleFrom(
+                                  foregroundColor: const Color(0xFF0F172A),
+                                  side: const BorderSide(color: Color(0xFFCBD5E1)),
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 16, vertical: 12),
+                                  shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(8)),
+                                  backgroundColor: Colors.white,
                                 ),
                               ),
-                              const SizedBox(height: 2),
-                              Text(
-                                'Browse, filter, and manage student records',
-                                style: GoogleFonts.poppins(
-                                  fontSize: 12,
-                                  color: const Color(0xFF64748B),
+                              const SizedBox(width: 10),
+                              ElevatedButton.icon(
+                                onPressed: () {
+                                  ref.read(selectedTabProvider.notifier).state =
+                                      NavigationTab.admission;
+                                },
+                                icon: const Icon(Icons.add_rounded, size: 16),
+                                label: Text(
+                                  'Enroll student',
+                                  style: GoogleFonts.poppins(
+                                    fontWeight: FontWeight.w600,
+                                    fontSize: 12,
+                                  ),
+                                ),
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: AppTheme.primaryPurple,
+                                  foregroundColor: Colors.white,
+                                  elevation: 0,
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 18, vertical: 12),
+                                  shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(8)),
                                 ),
                               ),
                             ],
                           ),
-                          // View Toggle [ Grid | List ]
-                          Container(
-                            decoration: BoxDecoration(
-                              color: const Color(0xFFF1F5F9),
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                            padding: const EdgeInsets.all(3),
-                            child: Row(
+                        ],
+                      ),
+
+                      const SizedBox(height: 18),
+
+                      // ── 4 Top Stat Cards ──
+                      ref.watch(studentDirectoryStatsProvider).when(
+                        data: (stats) => _buildTopStatCards(context, stats),
+                        loading: () => const SizedBox(height: 100),
+                        error: (_, __) => const SizedBox.shrink(),
+                      ),
+
+                      const SizedBox(height: 18),
+                    ],
+                  ),
+                ),
+              ),
+
+              // ── Roster Container ──
+              Expanded(
+                child: NotificationListener<ScrollNotification>(
+                  onNotification: (notification) {
+                    if (notification is ScrollUpdateNotification) {
+                      final delta = notification.scrollDelta ?? 0;
+                      if (delta > 12 && notification.metrics.pixels > 20 && !_isHeaderCollapsed) {
+                        _collapseHeader();
+                      } else if (delta < -12 && _isHeaderCollapsed) {
+                        _expandHeader();
+                      }
+                    } else if (notification is ScrollEndNotification) {
+                      if (notification.metrics.pixels <= 10 && _isHeaderCollapsed) {
+                        _expandHeader();
+                      }
+                    }
+                    return false;
+                  },
+                  child: Container(
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(color: const Color(0xFFE2E8F0)),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withValues(alpha: 0.02),
+                          blurRadius: 10,
+                          offset: const Offset(0, 2),
+                        ),
+                      ],
+                    ),
+                    padding: const EdgeInsets.all(20),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        // Roster Header & Toggle
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                InkWell(
-                                  onTap: () {
-                                    if (_viewMode != 'grid') {
-                                      setState(() => _viewMode = 'grid');
-                                    }
-                                  },
-                                  borderRadius: BorderRadius.circular(6),
-                                  child: Container(
-                                    padding: const EdgeInsets.symmetric(
-                                        horizontal: 14, vertical: 6),
-                                    decoration: BoxDecoration(
-                                      color: _viewMode == 'grid'
-                                          ? Colors.white
-                                          : Colors.transparent,
-                                      borderRadius: BorderRadius.circular(6),
-                                      boxShadow: _viewMode == 'grid'
-                                          ? [
-                                              BoxShadow(
-                                                color: Colors.black
-                                                    .withValues(alpha: 0.05),
-                                                blurRadius: 4,
-                                                offset: const Offset(0, 1),
-                                              )
-                                            ]
-                                          : null,
-                                    ),
-                                    child: Text(
-                                      'Grid',
+                                Row(
+                                  children: [
+                                    Text(
+                                      'Roster',
                                       style: GoogleFonts.poppins(
-                                        fontSize: 12,
-                                        fontWeight: _viewMode == 'grid'
-                                            ? FontWeight.w600
-                                            : FontWeight.w500,
-                                        color: _viewMode == 'grid'
-                                            ? const Color(0xFF0F172A)
-                                            : const Color(0xFF64748B),
+                                        fontSize: 18,
+                                        fontWeight: FontWeight.w700,
+                                        color: const Color(0xFF0F172A),
                                       ),
                                     ),
+                                    if (_isHeaderCollapsed) ...[
+                                      const SizedBox(width: 8),
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                        decoration: BoxDecoration(
+                                          color: AppTheme.primarySoft,
+                                          borderRadius: BorderRadius.circular(6),
+                                        ),
+                                        child: Text(
+                                          'Full Screen',
+                                          style: GoogleFonts.poppins(
+                                            fontSize: 11,
+                                            fontWeight: FontWeight.w600,
+                                            color: AppTheme.primaryPurple,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ],
+                                ),
+                                const SizedBox(height: 2),
+                                Text(
+                                  'Browse, filter, and manage student records',
+                                  style: GoogleFonts.poppins(
+                                    fontSize: 12,
+                                    color: const Color(0xFF64748B),
                                   ),
                                 ),
-                                InkWell(
-                                  onTap: () {
-                                    if (_viewMode != 'table') {
-                                      setState(() => _viewMode = 'table');
-                                    }
-                                  },
-                                  borderRadius: BorderRadius.circular(6),
-                                  child: Container(
-                                    padding: const EdgeInsets.symmetric(
-                                        horizontal: 14, vertical: 6),
-                                    decoration: BoxDecoration(
-                                      color: _viewMode == 'table'
-                                          ? Colors.white
-                                          : Colors.transparent,
-                                      borderRadius: BorderRadius.circular(6),
-                                      boxShadow: _viewMode == 'table'
-                                          ? [
-                                              BoxShadow(
-                                                color: Colors.black
-                                                    .withValues(alpha: 0.05),
-                                                blurRadius: 4,
-                                                offset: const Offset(0, 1),
-                                              )
-                                            ]
-                                          : null,
+                              ],
+                            ),
+                            // Actions + View Toggle [ Grid | List ] + Fullscreen Button
+                            Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                if (_isHeaderCollapsed) ...[
+                                  IconButton(
+                                    onPressed: () => _exportCsv(context),
+                                    icon: const Icon(Icons.file_download_outlined, size: 18),
+                                    tooltip: 'Export CSV',
+                                    style: IconButton.styleFrom(
+                                      foregroundColor: const Color(0xFF0F172A),
+                                      backgroundColor: const Color(0xFFF1F5F9),
+                                      padding: const EdgeInsets.all(8),
+                                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                                     ),
-                                    child: Text(
-                                      'List',
-                                      style: GoogleFonts.poppins(
-                                        fontSize: 12,
-                                        fontWeight: _viewMode == 'table'
-                                            ? FontWeight.w600
-                                            : FontWeight.w500,
-                                        color: _viewMode == 'table'
-                                            ? const Color(0xFF0F172A)
-                                            : const Color(0xFF64748B),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  ElevatedButton.icon(
+                                    onPressed: () {
+                                      ref.read(selectedTabProvider.notifier).state = NavigationTab.admission;
+                                    },
+                                    icon: const Icon(Icons.add_rounded, size: 16),
+                                    label: Text(
+                                      'Enroll',
+                                      style: GoogleFonts.poppins(fontWeight: FontWeight.w600, fontSize: 12),
+                                    ),
+                                    style: ElevatedButton.styleFrom(
+                                      backgroundColor: AppTheme.primaryPurple,
+                                      foregroundColor: Colors.white,
+                                      elevation: 0,
+                                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 12),
+                                ],
+                                // View Toggle [ Grid | List ]
+                                Container(
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFFF1F5F9),
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
+                                  padding: const EdgeInsets.all(3),
+                                  child: Row(
+                                    children: [
+                                      InkWell(
+                                        onTap: () {
+                                          if (_viewMode != 'grid') {
+                                            setState(() => _viewMode = 'grid');
+                                          }
+                                        },
+                                        borderRadius: BorderRadius.circular(6),
+                                        child: Container(
+                                          padding: const EdgeInsets.symmetric(
+                                              horizontal: 14, vertical: 6),
+                                          decoration: BoxDecoration(
+                                            color: _viewMode == 'grid'
+                                                ? Colors.white
+                                                : Colors.transparent,
+                                            borderRadius: BorderRadius.circular(6),
+                                            boxShadow: _viewMode == 'grid'
+                                                ? [
+                                                    BoxShadow(
+                                                      color: Colors.black
+                                                          .withValues(alpha: 0.05),
+                                                      blurRadius: 4,
+                                                      offset: const Offset(0, 1),
+                                                    )
+                                                  ]
+                                                : null,
+                                          ),
+                                          child: Text(
+                                            'Grid',
+                                            style: GoogleFonts.poppins(
+                                              fontSize: 12,
+                                              fontWeight: _viewMode == 'grid'
+                                                  ? FontWeight.w600
+                                                  : FontWeight.w500,
+                                              color: _viewMode == 'grid'
+                                                  ? const Color(0xFF0F172A)
+                                                  : const Color(0xFF64748B),
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                      InkWell(
+                                        onTap: () {
+                                          if (_viewMode != 'table') {
+                                            setState(() => _viewMode = 'table');
+                                          }
+                                        },
+                                        borderRadius: BorderRadius.circular(6),
+                                        child: Container(
+                                          padding: const EdgeInsets.symmetric(
+                                              horizontal: 14, vertical: 6),
+                                          decoration: BoxDecoration(
+                                            color: _viewMode == 'table'
+                                                ? Colors.white
+                                                : Colors.transparent,
+                                            borderRadius: BorderRadius.circular(6),
+                                            boxShadow: _viewMode == 'table'
+                                                ? [
+                                                    BoxShadow(
+                                                      color: Colors.black
+                                                          .withValues(alpha: 0.05),
+                                                      blurRadius: 4,
+                                                      offset: const Offset(0, 1),
+                                                    )
+                                                  ]
+                                                : null,
+                                          ),
+                                          child: Text(
+                                            'List',
+                                            style: GoogleFonts.poppins(
+                                              fontSize: 12,
+                                              fontWeight: _viewMode == 'table'
+                                                  ? FontWeight.w600
+                                                  : FontWeight.w500,
+                                              color: _viewMode == 'table'
+                                                  ? const Color(0xFF0F172A)
+                                                  : const Color(0xFF64748B),
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                // Fullscreen / Restore Toggle Button
+                                Tooltip(
+                                  message: _isHeaderCollapsed
+                                      ? 'Restore normal size (or scroll up)'
+                                      : 'Cover whole screen (or scroll down)',
+                                  child: InkWell(
+                                    onTap: () {
+                                      if (_isHeaderCollapsed) {
+                                        _expandHeader();
+                                      } else {
+                                        _collapseHeader();
+                                      }
+                                    },
+                                    borderRadius: BorderRadius.circular(8),
+                                    child: Container(
+                                      padding: const EdgeInsets.all(7),
+                                      decoration: BoxDecoration(
+                                        color: _isHeaderCollapsed
+                                            ? AppTheme.primarySoft
+                                            : const Color(0xFFF1F5F9),
+                                        borderRadius: BorderRadius.circular(8),
+                                        border: Border.all(
+                                          color: _isHeaderCollapsed
+                                              ? AppTheme.primaryPurple
+                                                  .withValues(alpha: 0.3)
+                                              : const Color(0xFFE2E8F0),
+                                        ),
+                                      ),
+                                      child: Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          Icon(
+                                            _isHeaderCollapsed
+                                                ? Icons.fullscreen_exit_rounded
+                                                : Icons.fullscreen_rounded,
+                                            size: 18,
+                                            color: _isHeaderCollapsed
+                                                ? AppTheme.primaryPurple
+                                                : const Color(0xFF64748B),
+                                          ),
+                                          if (_isHeaderCollapsed) ...[
+                                            const SizedBox(width: 4),
+                                            Text(
+                                              'Restore',
+                                              style: GoogleFonts.poppins(
+                                                fontSize: 11,
+                                                fontWeight: FontWeight.w600,
+                                                color: AppTheme.primaryPurple,
+                                              ),
+                                            ),
+                                          ],
+                                        ],
                                       ),
                                     ),
                                   ),
                                 ),
                               ],
                             ),
-                          ),
-                        ],
-                      ),
+                          ],
+                        ),
 
-                      const SizedBox(height: 16),
+                        const SizedBox(height: 16),
 
                       // Filter Row: Search Field + Grade Chips + More Filters
                       Row(
@@ -949,11 +1127,12 @@ class _StudentDirectoryViewState extends ConsumerState<StudentDirectoryView>
                   ),
                 ),
               ),
-            ],
-          ),
+            ),
+          ],
         ),
-      ],
-    );
+      ),
+    ],
+  );
   }
 
   Widget _buildTopStatCards(BuildContext context, Map<String, dynamic> stats) {

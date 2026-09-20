@@ -42,13 +42,14 @@ class ImportService {
     }
 
     if (extension == 'csv') {
-      final input = utf8.decode(bytes);
+      final input = utf8.decode(bytes, allowMalformed: true);
       final fields = Csv().decode(input);
       if (fields.isEmpty) return [];
 
       final headers = fields.first.map((e) => e.toString().trim()).toList();
       for (var i = 1; i < fields.length; i++) {
         final row = fields[i];
+        if (row.isEmpty || row.every((cell) => cell.toString().trim().isEmpty)) continue;
         final map = <String, dynamic>{};
         for (var j = 0; j < headers.length; j++) {
           if (j < row.length) {
@@ -99,46 +100,274 @@ class ImportService {
     return rows.first.values.map((v) => v?.toString() ?? '').toList();
   }
 
+  // ============================================================================
+  // EDGE CASE NORMALIZATION HELPERS
+  // ============================================================================
+
+  /// Normalizes arbitrary date formats (ISO, DD/MM/YYYY, DD-MM-YYYY, Excel serial)
+  /// into standard ISO `YYYY-MM-DD`. Returns null if empty or unparseable.
+  static String? normalizeDate(dynamic raw) {
+    if (raw == null) return null;
+    var str = raw.toString().trim();
+    if (str.isEmpty) return null;
+
+    // Check for Excel serial date (e.g. 44287 = 2021-04-01)
+    final numVal = int.tryParse(str);
+    if (numVal != null && numVal >= 10000 && numVal <= 70000) {
+      try {
+        final date = DateTime(1899, 12, 30).add(Duration(days: numVal));
+        return '${date.year.toString().padLeft(4, '0')}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
+      } catch (_) {}
+    }
+
+    // Remove time portion if present (e.g. "1990-08-15 00:00:00" or "15/08/1990 12:00:00 PM")
+    if (str.contains(' ')) {
+      str = str.split(' ').first;
+    }
+
+    // Try parsing ISO format directly (YYYY-MM-DD or YYYY/MM/DD)
+    final isoMatch = RegExp(r'^(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})$').firstMatch(str);
+    if (isoMatch != null) {
+      final y = int.parse(isoMatch.group(1)!);
+      final m = int.parse(isoMatch.group(2)!);
+      final d = int.parse(isoMatch.group(3)!);
+      if (m >= 1 && m <= 12 && d >= 1 && d <= 31) {
+        return '${y.toString().padLeft(4, '0')}-${m.toString().padLeft(2, '0')}-${d.toString().padLeft(2, '0')}';
+      }
+    }
+
+    // Try parsing DD/MM/YYYY or DD-MM-YYYY or MM/DD/YYYY
+    final dmyMatch = RegExp(r'^(\d{1,2})[-/.](\d{1,2})[-/.](\d{2,4})$').firstMatch(str);
+    if (dmyMatch != null) {
+      var d = int.parse(dmyMatch.group(1)!);
+      var m = int.parse(dmyMatch.group(2)!);
+      var y = int.parse(dmyMatch.group(3)!);
+      if (y < 100) y += (y < 50 ? 2000 : 1900); // 2-digit year support
+      
+      // If month > 12 and day <= 12, it might be MM/DD/YYYY
+      if (m > 12 && d <= 12) {
+        final temp = d;
+        d = m;
+        m = temp;
+      }
+      if (m >= 1 && m <= 12 && d >= 1 && d <= 31) {
+        return '${y.toString().padLeft(4, '0')}-${m.toString().padLeft(2, '0')}-${d.toString().padLeft(2, '0')}';
+      }
+    }
+
+    // Fallback to standard DateTime.tryParse
+    final dt = DateTime.tryParse(str);
+    if (dt != null) {
+      return '${dt.year.toString().padLeft(4, '0')}-${dt.month.toString().padLeft(2, '0')}-${dt.day.toString().padLeft(2, '0')}';
+    }
+
+    return null;
+  }
+
+  /// Cleans and validates phone numbers.
+  /// Discards non-digits (preserves leading +), rejects junk/placeholders,
+  /// and ensures reasonable length (7-15 digits). Returns null if invalid.
+  static String? cleanPhone(dynamic raw) {
+    if (raw == null) return null;
+    var str = raw.toString().trim();
+    if (str.isEmpty) return null;
+    final lower = str.toLowerCase();
+    if (['n/a', 'na', 'none', 'nil', '-', '--', 'null', 'unknown', 'not available'].contains(lower)) {
+      return null;
+    }
+    final cleaned = str.replaceAll(RegExp(r'[\s\-\(\)\.]'), '');
+    if (RegExp(r'[^\d+]').hasMatch(cleaned)) {
+      return null; // Contains letters or invalid characters like "98765abc"
+    }
+    final digitsOnly = cleaned.replaceAll(RegExp(r'\D'), '');
+    if (digitsOnly.length < 7 || digitsOnly.length > 15) {
+      return null;
+    }
+    if (RegExp(r'^0+$').hasMatch(digitsOnly)) {
+      return null; // All zeros
+    }
+    return cleaned;
+  }
+
+  /// Cleans and validates email addresses.
+  /// Trims, lowercases, checks RFC pattern, and discards placeholders.
+  static String? cleanEmail(dynamic raw) {
+    if (raw == null) return null;
+    final str = raw.toString().trim().toLowerCase();
+    if (str.isEmpty) return null;
+    if (['n/a', 'na', 'none', 'nil', '-', '--', 'null', 'unknown', 'no email', 'not available'].contains(str)) {
+      return null;
+    }
+    final emailRegex = RegExp(r'^[a-zA-Z0-9.!#$%&’*+/=?^_`{|}~-]+@[a-zA-Z0-9-]+(?:\.[a-zA-Z0-9-]+)+$');
+    if (!emailRegex.hasMatch(str)) {
+      return null;
+    }
+    return str;
+  }
+
+  /// Formats names with Title Casing, preserving Unicode / non-ASCII characters (e.g. Hindi/Devanagari).
+  static String toTitleCase(String text) {
+    final trimmed = text.trim();
+    if (trimmed.isEmpty) return '';
+    // If it contains non-ASCII characters (like Hindi, Devanagari, etc.), return as is
+    if (RegExp(r'[^\x00-\x7F]').hasMatch(trimmed)) {
+      return trimmed;
+    }
+    return trimmed.split(RegExp(r'\s+')).map((word) {
+      if (word.isEmpty) return '';
+      return word[0].toUpperCase() + word.substring(1).toLowerCase();
+    }).join(' ');
+  }
+
+  /// Builds a combined full address string from street, city, state, and pincode.
+  static String buildFullAddress({
+    String? street,
+    String? city,
+    String? state,
+    String? pincode,
+  }) {
+    final parts = <String>[];
+    if (street != null && street.trim().isNotEmpty) {
+      parts.add(street.trim());
+    }
+    if (city != null && city.trim().isNotEmpty) {
+      parts.add(city.trim());
+    }
+    if (state != null && state.trim().isNotEmpty) {
+      if (pincode != null && pincode.trim().isNotEmpty) {
+        parts.add('${state.trim()} - ${pincode.trim()}');
+      } else {
+        parts.add(state.trim());
+      }
+    } else if (pincode != null && pincode.trim().isNotEmpty) {
+      parts.add(pincode.trim());
+    }
+    return parts.join(', ');
+  }
+
   Future<ImportResult> importStudents(PlatformFile file) async {
     final rows = await parseFile(file);
     int success = 0;
     int failure = 0;
     List<String> errors = [];
 
+    // Pre-load existing admission numbers to prevent collisions
+    final Set<String> existingAdmissionNos = {};
+    try {
+      final db = await dbService.rawDb;
+      final existingRows = await db.query('students', columns: ['admission_number']);
+      for (final r in existingRows) {
+        final adm = r['admission_number']?.toString().trim();
+        if (adm != null && adm.isNotEmpty) {
+          existingAdmissionNos.add(adm.toLowerCase());
+        }
+      }
+    } catch (_) {}
+    final Set<String> seenAdmissionNos = {};
+
+    int admissionSeq = 0;
+    try {
+      final nextAdm = await dbService.getNextAdmissionNumber();
+      admissionSeq = int.tryParse(nextAdm) ?? 1;
+      admissionSeq--;
+    } catch (_) {}
+
     for (var i = 0; i < rows.length; i++) {
       final row = rows[i];
       try {
-        final admissionNumber = row['Admission Number']?.toString() ?? '';
-        final firstName = row['First Name']?.toString() ?? '';
-        final lastName = row['Last Name']?.toString() ?? '';
-        final currentClass = row['Class']?.toString() ?? '';
+        var admissionNumber = row['Admission Number']?.toString().trim() ?? '';
+        var firstName = row['First Name']?.toString().trim() ?? '';
+        var lastName = row['Last Name']?.toString().trim() ?? '';
+        final currentClass = row['Class']?.toString().trim() ?? '';
         
-        if (admissionNumber.isEmpty || firstName.isEmpty || currentClass.isEmpty) {
-          errors.add("Row ${i + 2}: Missing required fields (Admission Number, First Name, Class)");
+        // Handle name fallback
+        if (firstName.isEmpty && lastName.isNotEmpty) {
+          firstName = lastName;
+          lastName = '';
+        }
+        firstName = toTitleCase(firstName);
+        lastName = toTitleCase(lastName);
+
+        if (firstName.isEmpty || currentClass.isEmpty) {
+          errors.add("Row ${i + 2}: Missing required fields (First Name, Class)");
           failure++;
           continue;
         }
 
+        // Admission number deduplication/auto-generation
+        if (admissionNumber.isEmpty) {
+          admissionSeq++;
+          admissionNumber = admissionSeq.toString().padLeft(4, '0');
+          while (existingAdmissionNos.contains(admissionNumber.toLowerCase()) ||
+              seenAdmissionNos.contains(admissionNumber.toLowerCase())) {
+            admissionSeq++;
+            admissionNumber = admissionSeq.toString().padLeft(4, '0');
+          }
+        } else if (existingAdmissionNos.contains(admissionNumber.toLowerCase()) ||
+            seenAdmissionNos.contains(admissionNumber.toLowerCase())) {
+          final oldNumber = admissionNumber;
+          admissionSeq++;
+          admissionNumber = admissionSeq.toString().padLeft(4, '0');
+          while (existingAdmissionNos.contains(admissionNumber.toLowerCase()) ||
+              seenAdmissionNos.contains(admissionNumber.toLowerCase())) {
+            admissionSeq++;
+            admissionNumber = admissionSeq.toString().padLeft(4, '0');
+          }
+          errors.add("Row ${i + 2}: Duplicate admission number '$oldNumber' auto-reassigned to $admissionNumber");
+        }
+        seenAdmissionNos.add(admissionNumber.toLowerCase());
+
+        final dob = normalizeDate(row['Date of Birth']);
+        final admissionDate = normalizeDate(row['Admission Date']) ??
+            DateTime.now().toIso8601String().substring(0, 10);
+
+        final rawGender = row['Gender']?.toString().toLowerCase().trim() ?? '';
+        final gender = rawGender.startsWith('m')
+            ? 'male'
+            : (rawGender.startsWith('f') ? 'female' : 'other');
+
+        final fatherPhone = cleanPhone(row['Contact Number 1'] ?? row['Father Phone']);
+        final motherPhone = cleanPhone(row['Contact Number 2'] ?? row['Mother Phone']);
+        final guardianPhone = cleanPhone(row['Guardian Phone']) ?? fatherPhone ?? motherPhone ?? '';
+
+        final residentialAddress = buildFullAddress(
+          street: row['Current Address']?.toString() ?? row['Address']?.toString(),
+          city: row['City']?.toString(),
+          state: row['State']?.toString(),
+          pincode: row['Pincode']?.toString() ?? row['Pin Code']?.toString(),
+        );
+
+        final permanentAddress = row['Permanent Address'] != null && row['Permanent Address'].toString().trim().isNotEmpty
+            ? buildFullAddress(
+                street: row['Permanent Address'].toString(),
+                city: row['City']?.toString(),
+                state: row['State']?.toString(),
+                pincode: row['Pincode']?.toString() ?? row['Pin Code']?.toString(),
+              )
+            : residentialAddress;
+
         final student = Student.create(
           name: '$firstName $lastName'.trim(),
           admissionNumber: admissionNumber,
-          rollNumber: row['Roll Number']?.toString(),
+          rollNumber: row['Roll Number']?.toString().trim().isNotEmpty == true ? row['Roll Number']?.toString().trim() : null,
           firstName: firstName,
           lastName: lastName,
-          dob: row['Date of Birth']?.toString(),
-          gender: row['Gender']?.toString().toLowerCase() ?? 'other',
-          bloodGroup: row['Blood Group']?.toString(),
-          religion: row['Religion']?.toString(),
-          caste: row['Category']?.toString(),
-          aadhaarNumber: row['Aadhar Number']?.toString(),
+          dob: dob,
+          gender: gender,
+          bloodGroup: row['Blood Group']?.toString().trim().isNotEmpty == true ? row['Blood Group']?.toString().trim() : null,
+          religion: row['Religion']?.toString().trim().isNotEmpty == true ? row['Religion']?.toString().trim() : null,
+          caste: row['Category']?.toString().trim().isNotEmpty == true ? row['Category']?.toString().trim() : null,
+          aadhaarNumber: row['Aadhar Number']?.toString().trim().isNotEmpty == true ? row['Aadhar Number']?.toString().trim() : null,
           gradeLevel: currentClass,
-          section: row['Section']?.toString() ?? 'A',
-          admissionDate: row['Admission Date']?.toString() ?? DateTime.now().toIso8601String(),
-          fatherName: row['Father Name']?.toString() ?? '',
-          motherName: row['Mother Name']?.toString() ?? '',
-          guardianPhone: row['Contact Number 1']?.toString() ?? '',
-          residentialAddress: row['Current Address']?.toString() ?? '',
-          permanentAddress: row['Permanent Address']?.toString() ?? '',
+          section: row['Section']?.toString().trim().isNotEmpty == true ? row['Section']?.toString().trim() : 'A',
+          admissionDate: admissionDate,
+          fatherName: toTitleCase(row['Father Name']?.toString() ?? ''),
+          fatherPhone: fatherPhone,
+          motherName: toTitleCase(row['Mother Name']?.toString() ?? ''),
+          motherPhone: motherPhone,
+          guardianPhone: guardianPhone,
+          residentialAddress: residentialAddress,
+          permanentAddress: permanentAddress,
         );
 
         await dbService.insertStudent(student);
@@ -163,6 +392,20 @@ class ImportService {
     int success = 0;
     int failure = 0;
     List<String> errors = [];
+
+    // Pre-load existing admission numbers
+    final Set<String> existingAdmissionNos = {};
+    try {
+      final db = await dbService.rawDb;
+      final existingRows = await db.query('students', columns: ['admission_number']);
+      for (final r in existingRows) {
+        final adm = r['admission_number']?.toString().trim();
+        if (adm != null && adm.isNotEmpty) {
+          existingAdmissionNos.add(adm.toLowerCase());
+        }
+      }
+    } catch (_) {}
+    final Set<String> seenAdmissionNos = {};
 
     // Get current student count for auto-generating admission numbers
     int admissionSeq = 0;
@@ -192,6 +435,13 @@ class ImportService {
           if (parts.isNotEmpty) firstName = parts.first;
           if (parts.length > 1) lastName = parts.sublist(1).join(' ');
         }
+        if (firstName.isEmpty && lastName.isNotEmpty) {
+          firstName = lastName;
+          lastName = '';
+        }
+
+        firstName = toTitleCase(firstName);
+        lastName = toTitleCase(lastName);
 
         final currentClass = getValue('class');
 
@@ -206,18 +456,68 @@ class ImportService {
           continue;
         }
 
-        // Admission number: use mapped value or auto-generate
+        // Admission number: use mapped value or auto-generate with duplicate protection
         String admissionNumber;
         if (autoAdmission) {
           admissionSeq++;
           admissionNumber = admissionSeq.toString().padLeft(4, '0');
+          while (existingAdmissionNos.contains(admissionNumber.toLowerCase()) ||
+              seenAdmissionNos.contains(admissionNumber.toLowerCase())) {
+            admissionSeq++;
+            admissionNumber = admissionSeq.toString().padLeft(4, '0');
+          }
         } else {
           admissionNumber = getValue('admission_number');
           if (admissionNumber.isEmpty) {
             admissionSeq++;
             admissionNumber = admissionSeq.toString().padLeft(4, '0');
+            while (existingAdmissionNos.contains(admissionNumber.toLowerCase()) ||
+                seenAdmissionNos.contains(admissionNumber.toLowerCase())) {
+              admissionSeq++;
+              admissionNumber = admissionSeq.toString().padLeft(4, '0');
+            }
+          } else if (existingAdmissionNos.contains(admissionNumber.toLowerCase()) ||
+              seenAdmissionNos.contains(admissionNumber.toLowerCase())) {
+            final oldNumber = admissionNumber;
+            admissionSeq++;
+            admissionNumber = admissionSeq.toString().padLeft(4, '0');
+            while (existingAdmissionNos.contains(admissionNumber.toLowerCase()) ||
+                seenAdmissionNos.contains(admissionNumber.toLowerCase())) {
+              admissionSeq++;
+              admissionNumber = admissionSeq.toString().padLeft(4, '0');
+            }
+            errors.add("Row ${i + 2}: Duplicate admission number '$oldNumber' auto-reassigned to $admissionNumber");
           }
         }
+        seenAdmissionNos.add(admissionNumber.toLowerCase());
+
+        final dob = normalizeDate(getValue('dob'));
+        final admissionDate = normalizeDate(getValue('admission_date')) ??
+            DateTime.now().toIso8601String().substring(0, 10);
+
+        final rawGender = getValue('gender').toLowerCase().trim();
+        final gender = rawGender.startsWith('m')
+            ? 'male'
+            : (rawGender.startsWith('f') ? 'female' : 'other');
+
+        final fatherPhone = cleanPhone(getValue('father_phone'));
+        final motherPhone = cleanPhone(getValue('mother_phone'));
+        final guardianPhone = cleanPhone(getValue('guardian_phone')) ?? fatherPhone ?? motherPhone ?? '';
+
+        final residentialAddress = buildFullAddress(
+          street: getValue('residential_address'),
+          city: getValue('city'),
+          state: getValue('state'),
+          pincode: getValue('pincode'),
+        );
+        final permanentAddress = getValue('permanent_address').isNotEmpty
+            ? buildFullAddress(
+                street: getValue('permanent_address'),
+                city: getValue('city'),
+                state: getValue('state'),
+                pincode: getValue('pincode'),
+              )
+            : residentialAddress;
 
         final student = Student.create(
           name: '$firstName $lastName'.trim(),
@@ -225,26 +525,22 @@ class ImportService {
           rollNumber: getValue('roll_number').isNotEmpty ? getValue('roll_number') : null,
           firstName: firstName,
           lastName: lastName,
-          dob: getValue('dob').isNotEmpty ? getValue('dob') : null,
-          gender: getValue('gender').isNotEmpty ? getValue('gender').toLowerCase() : 'other',
+          dob: dob,
+          gender: gender,
           bloodGroup: getValue('blood_group').isNotEmpty ? getValue('blood_group') : null,
           religion: getValue('religion').isNotEmpty ? getValue('religion') : null,
           caste: getValue('caste').isNotEmpty ? getValue('caste') : null,
           aadhaarNumber: getValue('aadhaar').isNotEmpty ? getValue('aadhaar') : null,
           gradeLevel: currentClass,
           section: getValue('section').isNotEmpty ? getValue('section') : 'A',
-          admissionDate: getValue('admission_date').isNotEmpty
-              ? getValue('admission_date')
-              : DateTime.now().toIso8601String().substring(0, 10),
-          fatherName: getValue('father_name'),
-          fatherPhone: getValue('father_phone'),
-          motherName: getValue('mother_name'),
-          motherPhone: getValue('mother_phone'),
-          guardianPhone: getValue('guardian_phone').isNotEmpty ? getValue('guardian_phone') : getValue('father_phone'),
-          residentialAddress: getValue('residential_address'),
-          permanentAddress: getValue('permanent_address').isNotEmpty
-              ? getValue('permanent_address')
-              : getValue('residential_address'),
+          admissionDate: admissionDate,
+          fatherName: toTitleCase(getValue('father_name')),
+          fatherPhone: fatherPhone,
+          motherName: toTitleCase(getValue('mother_name')),
+          motherPhone: motherPhone,
+          guardianPhone: guardianPhone,
+          residentialAddress: residentialAddress,
+          permanentAddress: permanentAddress,
         );
 
         await dbService.insertStudent(student);
@@ -264,35 +560,164 @@ class ImportService {
     int failure = 0;
     List<String> errors = [];
 
+    // Pre-load existing staff codes, emails, phones to prevent collisions
+    final Set<String> existingStaffCodes = {};
+    final Set<String> existingEmails = {};
+    final Set<String> existingPhones = {};
+    try {
+      final db = await dbService.rawDb;
+      final staffRows = await db.query('staff', columns: ['staff_code', 'email', 'phone']);
+      for (final r in staffRows) {
+        final code = r['staff_code']?.toString().trim();
+        if (code != null && code.isNotEmpty) existingStaffCodes.add(code.toLowerCase());
+        final mail = r['email']?.toString().trim();
+        if (mail != null && mail.isNotEmpty) existingEmails.add(mail.toLowerCase());
+        final ph = r['phone']?.toString().trim();
+        if (ph != null && ph.isNotEmpty) existingPhones.add(ph);
+      }
+    } catch (_) {}
+
+    final Set<String> seenStaffCodes = {};
+    final Set<String> seenEmails = {};
+    final Set<String> seenPhones = {};
+    String? currentStaffCode;
+
     for (var i = 0; i < rows.length; i++) {
       final row = rows[i];
       try {
-        final employeeId = row['Employee ID']?.toString() ?? '';
-        final firstName = row['First Name']?.toString() ?? '';
-        final role = row['Role']?.toString().toLowerCase() ?? 'teacher';
+        var employeeId = row['Employee ID']?.toString().trim() ?? '';
+        var firstName = row['First Name']?.toString().trim() ?? '';
+        var lastName = row['Last Name']?.toString().trim() ?? '';
 
-        if (employeeId.isEmpty || firstName.isEmpty) {
-          errors.add("Row ${i + 2}: Missing required fields (Employee ID, First Name)");
+        if (firstName.isEmpty && lastName.isNotEmpty) {
+          firstName = lastName;
+          lastName = '';
+        }
+        firstName = toTitleCase(firstName);
+        lastName = toTitleCase(lastName);
+
+        if (firstName.isEmpty) {
+          errors.add("Row ${i + 2}: Missing required field: First Name");
           failure++;
           continue;
+        }
+
+        // Staff code handling
+        if (employeeId.isEmpty) {
+          currentStaffCode = await dbService.generateNextStaffCode(afterCode: currentStaffCode);
+          employeeId = currentStaffCode;
+          while (existingStaffCodes.contains(employeeId.toLowerCase()) ||
+              seenStaffCodes.contains(employeeId.toLowerCase())) {
+            currentStaffCode = await dbService.generateNextStaffCode(afterCode: currentStaffCode);
+            employeeId = currentStaffCode;
+          }
+        } else if (existingStaffCodes.contains(employeeId.toLowerCase()) ||
+            seenStaffCodes.contains(employeeId.toLowerCase())) {
+          final oldId = employeeId;
+          currentStaffCode = await dbService.generateNextStaffCode(afterCode: currentStaffCode);
+          employeeId = currentStaffCode;
+          while (existingStaffCodes.contains(employeeId.toLowerCase()) ||
+              seenStaffCodes.contains(employeeId.toLowerCase())) {
+            currentStaffCode = await dbService.generateNextStaffCode(afterCode: currentStaffCode);
+            employeeId = currentStaffCode;
+          }
+          errors.add("Row ${i + 2}: Duplicate employee ID '$oldId' auto-reassigned to '$employeeId'");
+        }
+        seenStaffCodes.add(employeeId.toLowerCase());
+
+        // Role & designation
+        var roleInput = row['Role']?.toString().toLowerCase().trim() ?? '';
+        if (roleInput.isEmpty) {
+          roleInput = row['Designation']?.toString().toLowerCase().trim() ?? '';
+        }
+        String role = 'teacher';
+        if (roleInput.contains('admin') ||
+            roleInput.contains('princ') ||
+            roleInput.contains('head') ||
+            roleInput.contains('director') ||
+            roleInput.contains('account') ||
+            roleInput.contains('clerk') ||
+            roleInput.contains('manager') ||
+            roleInput.contains('coord') ||
+            roleInput.contains('dean') ||
+            roleInput.contains('office')) {
+          role = 'admin';
+        } else if (roleInput.contains('drive') || roleInput.contains('transport')) {
+          role = 'driver';
+        } else if (roleInput.contains('support') ||
+            roleInput.contains('peon') ||
+            roleInput.contains('staff') ||
+            roleInput.contains('clean') ||
+            roleInput.contains('guard') ||
+            roleInput.contains('security') ||
+            roleInput.contains('attendant') ||
+            roleInput.contains('helper') ||
+            roleInput.contains('maid') ||
+            roleInput.contains('worker') ||
+            roleInput.contains('sweeper')) {
+          role = 'support_staff';
+        }
+
+        // Email & Phone with duplicate avoidance
+        String? email = cleanEmail(row['Email']);
+        if (email != null) {
+          if (existingEmails.contains(email) || seenEmails.contains(email)) {
+            errors.add("Row ${i + 2}: Duplicate email '$email' omitted to avoid database collision");
+            email = null;
+          } else {
+            seenEmails.add(email);
+          }
+        }
+
+        String? phone = cleanPhone(row['Contact Number'] ?? row['Phone']);
+        if (phone != null) {
+          if (existingPhones.contains(phone) || seenPhones.contains(phone)) {
+            errors.add("Row ${i + 2}: Duplicate phone '$phone' omitted to avoid database collision");
+            phone = null;
+          } else {
+            seenPhones.add(phone);
+          }
+        }
+
+        final dob = normalizeDate(row['Date of Birth']);
+        final joiningDate = normalizeDate(row['Joining Date']) ??
+            DateTime.now().toIso8601String().substring(0, 10);
+
+        final rawGender = row['Gender']?.toString().toLowerCase().trim() ?? '';
+        final gender = rawGender.startsWith('m')
+            ? 'male'
+            : (rawGender.startsWith('f') ? 'female' : 'other');
+
+        final address = buildFullAddress(
+          street: row['Address']?.toString(),
+          city: row['City']?.toString(),
+          state: row['State']?.toString(),
+          pincode: row['Pincode']?.toString(),
+        );
+
+        double? basicSalary;
+        final rawSalary = row['Basic Salary']?.toString().replaceAll(RegExp(r'[^0-9.]'), '') ?? '';
+        if (rawSalary.isNotEmpty) {
+          basicSalary = double.tryParse(rawSalary);
         }
 
         final staff = Staff(
           id: const Uuid().v4(),
           firstName: firstName,
-          lastName: row['Last Name']?.toString() ?? '',
+          lastName: lastName,
           staffCode: employeeId,
           role: role,
           departmentId: row['Department ID']?.toString(),
-          dob: row['Date of Birth']?.toString(),
-          gender: row['Gender']?.toString().toLowerCase() ?? 'other',
-          joiningDate: row['Joining Date']?.toString() ?? DateTime.now().toIso8601String(),
+          designation: row['Designation']?.toString(),
+          dob: dob,
+          gender: gender,
+          joiningDate: joiningDate,
           qualification: row['Qualification']?.toString() ?? '',
-          experienceYears: int.tryParse(row['Experience Years']?.toString() ?? '0') ?? 0,
-          phone: row['Contact Number']?.toString() ?? '',
-          email: row['Email']?.toString() ?? '',
-          address: row['Address']?.toString() ?? '',
-          basicSalary: double.tryParse(row['Basic Salary']?.toString() ?? '0') ?? 0,
+          experienceYears: int.tryParse(row['Experience Years']?.toString().replaceAll(RegExp(r'[^0-9]'), '') ?? '0') ?? 0,
+          phone: phone,
+          email: email,
+          address: address.isNotEmpty ? address : null,
+          basicSalary: basicSalary ?? 0,
           isActive: true,
           createdAt: DateTime.now(),
           updatedAt: DateTime.now(),
@@ -325,6 +750,27 @@ class ImportService {
     String? currentStaffCode;
     final bool autoStaffCode = !mapping.containsKey('staff_code');
 
+    // Pre-load existing staff codes, emails, phones to prevent collisions
+    final Set<String> existingStaffCodes = {};
+    final Set<String> existingEmails = {};
+    final Set<String> existingPhones = {};
+    try {
+      final db = await dbService.rawDb;
+      final staffRows = await db.query('staff', columns: ['staff_code', 'email', 'phone']);
+      for (final r in staffRows) {
+        final code = r['staff_code']?.toString().trim();
+        if (code != null && code.isNotEmpty) existingStaffCodes.add(code.toLowerCase());
+        final mail = r['email']?.toString().trim();
+        if (mail != null && mail.isNotEmpty) existingEmails.add(mail.toLowerCase());
+        final ph = r['phone']?.toString().trim();
+        if (ph != null && ph.isNotEmpty) existingPhones.add(ph);
+      }
+    } catch (_) {}
+
+    final Set<String> seenStaffCodes = {};
+    final Set<String> seenEmails = {};
+    final Set<String> seenPhones = {};
+
     // Pre-load all departments to resolve names to IDs and satisfy foreign key constraints
     final Map<String, String> deptMap = {}; // lowercase name or id -> department id
     try {
@@ -353,6 +799,10 @@ class ImportService {
           if (parts.isNotEmpty) firstName = parts.first;
           if (parts.length > 1) lastName = parts.sublist(1).join(' ');
         }
+        if (firstName.isEmpty && lastName.isNotEmpty) {
+          firstName = lastName;
+          lastName = '';
+        }
 
         if (firstName.isEmpty) {
           errors.add("Row ${i + 2}: Missing required field: First Name (or Full Name)");
@@ -360,21 +810,49 @@ class ImportService {
           continue;
         }
 
+        firstName = toTitleCase(firstName);
+        lastName = toTitleCase(lastName);
+
         // Staff Code / Employee ID
         String staffCode;
         if (autoStaffCode) {
           currentStaffCode = await dbService.generateNextStaffCode(afterCode: currentStaffCode);
           staffCode = currentStaffCode;
+          while (existingStaffCodes.contains(staffCode.toLowerCase()) ||
+              seenStaffCodes.contains(staffCode.toLowerCase())) {
+            currentStaffCode = await dbService.generateNextStaffCode(afterCode: currentStaffCode);
+            staffCode = currentStaffCode;
+          }
         } else {
           staffCode = getValue('staff_code');
           if (staffCode.isEmpty) {
             currentStaffCode = await dbService.generateNextStaffCode(afterCode: currentStaffCode);
             staffCode = currentStaffCode;
+            while (existingStaffCodes.contains(staffCode.toLowerCase()) ||
+                seenStaffCodes.contains(staffCode.toLowerCase())) {
+              currentStaffCode = await dbService.generateNextStaffCode(afterCode: currentStaffCode);
+              staffCode = currentStaffCode;
+            }
+          } else if (existingStaffCodes.contains(staffCode.toLowerCase()) ||
+              seenStaffCodes.contains(staffCode.toLowerCase())) {
+            final oldCode = staffCode;
+            currentStaffCode = await dbService.generateNextStaffCode(afterCode: currentStaffCode);
+            staffCode = currentStaffCode;
+            while (existingStaffCodes.contains(staffCode.toLowerCase()) ||
+                seenStaffCodes.contains(staffCode.toLowerCase())) {
+              currentStaffCode = await dbService.generateNextStaffCode(afterCode: currentStaffCode);
+              staffCode = currentStaffCode;
+            }
+            errors.add("Row ${i + 2}: Duplicate employee ID '$oldCode' auto-reassigned to '$staffCode'");
           }
         }
+        seenStaffCodes.add(staffCode.toLowerCase());
 
         // Role normalization (must be one of: 'teacher', 'admin', 'support_staff', 'driver')
         String roleInput = getValue('role').toLowerCase().trim();
+        if (roleInput.isEmpty) {
+          roleInput = getValue('designation').toLowerCase().trim();
+        }
         String role = 'teacher';
         if (roleInput.contains('admin') ||
             roleInput.contains('princ') ||
@@ -387,7 +865,7 @@ class ImportService {
             roleInput.contains('dean') ||
             roleInput.contains('office')) {
           role = 'admin';
-        } else if (roleInput.contains('drive')) {
+        } else if (roleInput.contains('drive') || roleInput.contains('transport')) {
           role = 'driver';
         } else if (roleInput.contains('support') ||
             roleInput.contains('peon') ||
@@ -398,7 +876,8 @@ class ImportService {
             roleInput.contains('attendant') ||
             roleInput.contains('helper') ||
             roleInput.contains('maid') ||
-            roleInput.contains('worker')) {
+            roleInput.contains('worker') ||
+            roleInput.contains('sweeper')) {
           role = 'support_staff';
         } else {
           role = 'teacher';
@@ -472,18 +951,46 @@ class ImportService {
           gender = 'other';
         }
 
-        // Joining Date
-        String joiningDate = getValue('joining_date');
-        if (joiningDate.isEmpty) {
-          joiningDate = DateTime.now().toIso8601String().substring(0, 10);
+        // Dates
+        final dob = normalizeDate(getValue('dob'));
+        final joiningDate = normalizeDate(getValue('joining_date')) ??
+            DateTime.now().toIso8601String().substring(0, 10);
+
+        // Email & Phone with duplicate avoidance
+        String? email = cleanEmail(getValue('email'));
+        if (email != null) {
+          if (existingEmails.contains(email) || seenEmails.contains(email)) {
+            errors.add("Row ${i + 2}: Duplicate email '$email' omitted to avoid database constraint error");
+            email = null;
+          } else {
+            seenEmails.add(email);
+          }
         }
+
+        String? phone = cleanPhone(getValue('phone'));
+        if (phone != null) {
+          if (existingPhones.contains(phone) || seenPhones.contains(phone)) {
+            errors.add("Row ${i + 2}: Duplicate phone '$phone' omitted to avoid database constraint error");
+            phone = null;
+          } else {
+            seenPhones.add(phone);
+          }
+        }
+
+        // Address construction
+        final address = buildFullAddress(
+          street: getValue('address'),
+          city: getValue('city'),
+          state: getValue('state'),
+          pincode: getValue('pincode'),
+        );
 
         final staff = Staff(
           id: const Uuid().v4(),
           staffCode: staffCode,
           firstName: firstName,
           lastName: lastName,
-          dob: getValue('dob').isNotEmpty ? getValue('dob') : null,
+          dob: dob,
           gender: gender,
           bloodGroup: getValue('blood_group').isNotEmpty ? getValue('blood_group') : null,
           role: role,
@@ -492,10 +999,10 @@ class ImportService {
           joiningDate: joiningDate,
           qualification: getValue('qualification').isNotEmpty ? getValue('qualification') : null,
           experienceYears: experienceYears ?? 0,
-          phone: getValue('phone').isNotEmpty ? getValue('phone') : null,
-          email: getValue('email').isNotEmpty ? getValue('email') : null,
-          address: getValue('address').isNotEmpty ? getValue('address') : null,
-          emergencyContact: getValue('emergency_contact').isNotEmpty ? getValue('emergency_contact') : null,
+          phone: phone,
+          email: email,
+          address: address.isNotEmpty ? address : null,
+          emergencyContact: cleanPhone(getValue('emergency_contact')),
           basicSalary: basicSalary,
           bankAccountNumber: getValue('bank_account_number').isNotEmpty ? getValue('bank_account_number') : null,
           bankIfsc: getValue('bank_ifsc').isNotEmpty ? getValue('bank_ifsc') : null,

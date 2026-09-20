@@ -35,6 +35,9 @@ class EduviaField {
     EduviaField(key: 'guardian_phone', label: 'Primary Contact / Guardian Phone'),
     EduviaField(key: 'residential_address', label: 'Current / Residential Address'),
     EduviaField(key: 'permanent_address', label: 'Permanent Address'),
+    EduviaField(key: 'city', label: 'City'),
+    EduviaField(key: 'state', label: 'State / Province'),
+    EduviaField(key: 'pincode', label: 'Pincode / Postal Code / Zip'),
   ];
 
   static const List<EduviaField> staffFields = [
@@ -55,6 +58,10 @@ class EduviaField {
     EduviaField(key: 'phone', label: 'Phone / Mobile Number'),
     EduviaField(key: 'email', label: 'Email Address'),
     EduviaField(key: 'address', label: 'Residential Address'),
+    EduviaField(key: 'city', label: 'City'),
+    EduviaField(key: 'state', label: 'State / Province'),
+    EduviaField(key: 'pincode', label: 'Pincode / Postal Code / Zip'),
+    EduviaField(key: 'employment_type', label: 'Employment Type (Permanent, Contract, etc.)'),
     EduviaField(key: 'emergency_contact', label: 'Emergency Contact Phone'),
     EduviaField(key: 'basic_salary', label: 'Basic Salary / Monthly Pay'),
     EduviaField(key: 'bank_account_number', label: 'Bank Account Number'),
@@ -286,6 +293,12 @@ IMPORTANT: Respond with ONLY a valid JSON array, no commentary, no markdown. Exa
         key = 'residential_address'; confidence = 0.8;
       } else if (_matches(lower, ['permanent address', 'perm address'])) {
         key = 'permanent_address'; confidence = 0.85;
+      } else if (_matches(lower, ['city', 'town', 'district'])) {
+        key = 'city'; confidence = 0.9;
+      } else if (_matches(lower, ['state', 'province'])) {
+        key = 'state'; confidence = 0.9;
+      } else if (_matches(lower, ['pincode', 'pin code', 'pin', 'postal code', 'zip', 'zipcode', 'postal'])) {
+        key = 'pincode'; confidence = 0.95;
       }
 
       mappings.add(ColumnMapping(sourceHeader: header, eduviaFieldKey: key, confidence: confidence));
@@ -334,6 +347,14 @@ IMPORTANT: Respond with ONLY a valid JSON array, no commentary, no markdown. Exa
         key = 'email'; confidence = 0.95;
       } else if (_matches(lower, ['address', 'residential address', 'permanent address', 'home address', 'residence'])) {
         key = 'address'; confidence = 0.85;
+      } else if (_matches(lower, ['city', 'town', 'district'])) {
+        key = 'city'; confidence = 0.9;
+      } else if (_matches(lower, ['state', 'province'])) {
+        key = 'state'; confidence = 0.9;
+      } else if (_matches(lower, ['pincode', 'pin code', 'pin', 'postal code', 'zip', 'zipcode', 'postal'])) {
+        key = 'pincode'; confidence = 0.95;
+      } else if (_matches(lower, ['employment type', 'employment status', 'job type', 'contract type', 'work type'])) {
+        key = 'employment_type'; confidence = 0.85;
       } else if (_matches(lower, ['emergency contact', 'emergency phone', 'alt phone', 'alternate contact', 'emergency no', 'secondary phone'])) {
         key = 'emergency_contact'; confidence = 0.85;
       } else if (_matches(lower, ['basic salary', 'salary', 'basic pay', 'gross salary', 'monthly salary', 'pay', 'ctc', 'stipend', 'basic'])) {
