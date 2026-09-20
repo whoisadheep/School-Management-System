@@ -204,10 +204,6 @@ class _StudentDirectoryViewState extends ConsumerState<StudentDirectoryView>
     return cleanGrade.isEmpty ? grade : cleanGrade;
   }
 
-  int _getStudentAttRate(Student student) {
-    return ((student.id.hashCode.abs() % 16) + 84);
-  }
-
   @override
   void initState() {
     super.initState();
@@ -924,6 +920,7 @@ class _StudentDirectoryViewState extends ConsumerState<StudentDirectoryView>
     final newThisMonth = stats['newThisMonth'] ?? 0;
     final boys = stats['boys'] ?? 0;
     final girls = stats['girls'] ?? 0;
+    final uniqueGrades = stats['uniqueGrades'] ?? 12;
 
     final activePct =
         total == 0 ? '100' : ((active / total) * 100).toStringAsFixed(1);
@@ -942,8 +939,8 @@ class _StudentDirectoryViewState extends ConsumerState<StudentDirectoryView>
             iconColor: const Color(0xFF8B5CF6),
             label: 'Total enrolled',
             value: numberFormat.format(total),
-            trend: '+$activePct%',
-            trendColor: const Color(0xFF16A34A),
+            trend: '$uniqueGrades grades',
+            trendColor: const Color(0xFF8B5CF6),
           ),
         ),
         const SizedBox(width: 14),
@@ -952,12 +949,12 @@ class _StudentDirectoryViewState extends ConsumerState<StudentDirectoryView>
         Expanded(
           child: _buildMetricCard(
             icon: Icons.auto_awesome_outlined,
-            iconBg: const Color(0xFFDCFCE7),
-            iconColor: const Color(0xFF10B981),
+            iconBg: const Color(0xFFFEF3C7),
+            iconColor: const Color(0xFFD97706),
             label: 'New this month',
             value: numberFormat.format(newThisMonth),
-            trend: '+22%',
-            trendColor: const Color(0xFF16A34A),
+            trend: 'Recent admissions',
+            trendColor: const Color(0xFFD97706),
           ),
         ),
         const SizedBox(width: 14),
@@ -976,15 +973,15 @@ class _StudentDirectoryViewState extends ConsumerState<StudentDirectoryView>
         ),
         const SizedBox(width: 14),
 
-        // 4. Avg attendance
+        // 4. Active students
         Expanded(
           child: _buildMetricCard(
-            icon: Icons.fact_check_outlined,
-            iconBg: const Color(0xFFF3E8FF),
-            iconColor: const Color(0xFFA855F7),
-            label: 'Avg attendance',
-            value: '94%',
-            trend: '+1.6%',
+            icon: Icons.check_circle_outline_rounded,
+            iconBg: const Color(0xFFDCFCE7),
+            iconColor: const Color(0xFF16A34A),
+            label: 'Active students',
+            value: numberFormat.format(active),
+            trend: '$activePct% active',
             trendColor: const Color(0xFF16A34A),
           ),
         ),
@@ -1122,12 +1119,25 @@ class _StudentDirectoryViewState extends ConsumerState<StudentDirectoryView>
         '—';
     final guardianName =
         student.fatherName ?? student.motherName ?? 'Guardian';
-    final isPaid = student.currentBalance == 0;
-    final isOverdue = student.currentBalance > 5000;
-    final attRate = _getStudentAttRate(student);
     final hasPhoto = student.photographPath != null &&
         student.photographPath!.isNotEmpty &&
         File(student.photographPath!).existsSync();
+
+    final statusText = student.isAlumni
+        ? 'Alumni'
+        : student.isActive
+            ? 'Active'
+            : 'Inactive';
+    final statusBg = student.isAlumni
+        ? const Color(0xFFFEF3C7)
+        : student.isActive
+            ? const Color(0xFFDCFCE7)
+            : const Color(0xFFF1F5F9);
+    final statusColor = student.isAlumni
+        ? const Color(0xFFD97706)
+        : student.isActive
+            ? const Color(0xFF16A34A)
+            : const Color(0xFF64748B);
 
     return Material(
       color: Colors.transparent,
@@ -1229,54 +1239,64 @@ class _StudentDirectoryViewState extends ConsumerState<StudentDirectoryView>
 
                 const SizedBox(height: 10),
 
-                // Row 2: Payment badge + Attendance badge
+                // Row 2: Status badge + Roll Number / Gender badge
                 Row(
                   children: [
                     Container(
                       padding:
                           const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                       decoration: BoxDecoration(
-                        color: isPaid
-                            ? const Color(0xFFDCFCE7)
-                            : isOverdue
-                                ? const Color(0xFFFEE2E2)
-                                : const Color(0xFFFEF3C7),
+                        color: statusBg,
                         borderRadius: BorderRadius.circular(6),
                       ),
                       child: Text(
-                        isPaid
-                            ? 'paid'
-                            : isOverdue
-                                ? 'overdue'
-                                : 'pending',
+                        statusText,
                         style: GoogleFonts.poppins(
-                          color: isPaid
-                              ? const Color(0xFF16A34A)
-                              : isOverdue
-                                  ? const Color(0xFFDC2626)
-                                  : const Color(0xFFD97706),
+                          color: statusColor,
                           fontSize: 11,
                           fontWeight: FontWeight.w600,
                         ),
                       ),
                     ),
-                    const SizedBox(width: 8),
-                    Container(
-                      padding:
-                          const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFDBEAFE),
-                        borderRadius: BorderRadius.circular(6),
-                      ),
-                      child: Text(
-                        '$attRate% att.',
-                        style: GoogleFonts.poppins(
-                          color: const Color(0xFF2563EB),
-                          fontSize: 11,
-                          fontWeight: FontWeight.w600,
+                    if (student.rollNumber != null &&
+                        student.rollNumber!.trim().isNotEmpty) ...[
+                      const SizedBox(width: 8),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 8, vertical: 3),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFF1F5F9),
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: Text(
+                          'Roll: ${student.rollNumber}',
+                          style: GoogleFonts.poppins(
+                            color: const Color(0xFF475569),
+                            fontSize: 11,
+                            fontWeight: FontWeight.w500,
+                          ),
                         ),
                       ),
-                    ),
+                    ] else if (student.gender != null &&
+                        student.gender!.trim().isNotEmpty) ...[
+                      const SizedBox(width: 8),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 8, vertical: 3),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFF1F5F9),
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: Text(
+                          student.gender!,
+                          style: GoogleFonts.poppins(
+                            color: const Color(0xFF64748B),
+                            fontSize: 11,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ),
+                    ],
                   ],
                 ),
 
@@ -1353,9 +1373,9 @@ class _StudentDirectoryViewState extends ConsumerState<StudentDirectoryView>
                   columns: const [
                     DataColumn(label: Text('STUDENT')),
                     DataColumn(label: Text('ID')),
+                    DataColumn(label: Text('ROLL NO')),
                     DataColumn(label: Text('GRADE')),
-                    DataColumn(label: Text('PAYMENT')),
-                    DataColumn(label: Text('ATTENDANCE')),
+                    DataColumn(label: Text('STATUS')),
                     DataColumn(label: Text('PARENT / PHONE')),
                     DataColumn(label: Text('ACTIONS')),
                   ],
@@ -1372,12 +1392,25 @@ class _StudentDirectoryViewState extends ConsumerState<StudentDirectoryView>
                     final guardianName = student.fatherName ??
                         student.motherName ??
                         'Guardian';
-                    final isPaid = student.currentBalance == 0;
-                    final isOverdue = student.currentBalance > 5000;
-                    final attRate = _getStudentAttRate(student);
                     final hasPhoto = student.photographPath != null &&
                         student.photographPath!.isNotEmpty &&
                         File(student.photographPath!).existsSync();
+
+                    final statusText = student.isAlumni
+                        ? 'Alumni'
+                        : student.isActive
+                            ? 'Active'
+                            : 'Inactive';
+                    final statusBg = student.isAlumni
+                        ? const Color(0xFFFEF3C7)
+                        : student.isActive
+                            ? const Color(0xFFDCFCE7)
+                            : const Color(0xFFF1F5F9);
+                    final statusColor = student.isAlumni
+                        ? const Color(0xFFD97706)
+                        : student.isActive
+                            ? const Color(0xFF16A34A)
+                            : const Color(0xFF64748B);
 
                     return DataRow(
                       color: WidgetStateProperty.resolveWith<Color?>(
@@ -1431,6 +1464,19 @@ class _StudentDirectoryViewState extends ConsumerState<StudentDirectoryView>
                           ),
                         ),
                         DataCell(
+                          Text(
+                            (student.rollNumber != null &&
+                                    student.rollNumber!.trim().isNotEmpty)
+                                ? student.rollNumber!
+                                : '—',
+                            style: GoogleFonts.poppins(
+                              color: const Color(0xFF64748B),
+                              fontSize: 12,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ),
+                        DataCell(
                           Container(
                             padding: const EdgeInsets.symmetric(
                                 horizontal: 8, vertical: 3),
@@ -1453,43 +1499,13 @@ class _StudentDirectoryViewState extends ConsumerState<StudentDirectoryView>
                             padding: const EdgeInsets.symmetric(
                                 horizontal: 8, vertical: 3),
                             decoration: BoxDecoration(
-                              color: isPaid
-                                  ? const Color(0xFFDCFCE7)
-                                  : isOverdue
-                                      ? const Color(0xFFFEE2E2)
-                                      : const Color(0xFFFEF3C7),
+                              color: statusBg,
                               borderRadius: BorderRadius.circular(6),
                             ),
                             child: Text(
-                              isPaid
-                                  ? 'paid'
-                                  : isOverdue
-                                      ? 'overdue'
-                                      : 'pending',
+                              statusText,
                               style: GoogleFonts.poppins(
-                                color: isPaid
-                                    ? const Color(0xFF16A34A)
-                                    : isOverdue
-                                        ? const Color(0xFFDC2626)
-                                        : const Color(0xFFD97706),
-                                fontSize: 11,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                          ),
-                        ),
-                        DataCell(
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 8, vertical: 3),
-                            decoration: BoxDecoration(
-                              color: const Color(0xFFDBEAFE),
-                              borderRadius: BorderRadius.circular(6),
-                            ),
-                            child: Text(
-                              '$attRate% att.',
-                              style: GoogleFonts.poppins(
-                                color: const Color(0xFF2563EB),
+                                color: statusColor,
                                 fontSize: 11,
                                 fontWeight: FontWeight.w600,
                               ),
