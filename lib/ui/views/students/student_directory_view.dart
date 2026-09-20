@@ -108,52 +108,6 @@ bool _matchesGrade(String studentGrade, String targetGrade) {
   return false;
 }
 
-final availableGradesProvider = FutureProvider<List<String>>((ref) async {
-  final dbService = ref.watch(databaseServiceProvider);
-  final classes = await dbService.getAllClasses();
-  final allStudents = await dbService.getAllStudents(activeOnly: false);
-
-  final gradeSet = <String>{};
-  for (final c in classes) {
-    if (c.name.trim().isNotEmpty) gradeSet.add(c.name.trim());
-  }
-  for (final s in allStudents) {
-    if (s.gradeLevel.trim().isNotEmpty) gradeSet.add(s.gradeLevel.trim());
-  }
-
-  if (gradeSet.isEmpty) {
-    return [
-      'All',
-      'Grade 1', 'Grade 2', 'Grade 3', 'Grade 4', 'Grade 5',
-      'Grade 6', 'Grade 7', 'Grade 8', 'Grade 9', 'Grade 10',
-      'Grade 11', 'Grade 12',
-      'Nursery', 'LKG', 'UKG',
-    ];
-  }
-
-  int gradeRank(String g) {
-    final lower = g.toLowerCase().trim();
-    if (lower.contains('nursery') || lower.contains('play')) return 1;
-    if (lower.contains('lkg') || lower.contains('jr') || lower.contains('kg 1') || lower.contains('kg-1')) return 2;
-    if (lower.contains('ukg') || lower.contains('sr') || lower.contains('kg 2') || lower.contains('kg-2')) return 3;
-    final numMatch = RegExp(r'(\d+)').firstMatch(lower);
-    if (numMatch != null) {
-      return 10 + (int.tryParse(numMatch.group(1)!) ?? 99);
-    }
-    return 100;
-  }
-
-  final list = gradeSet.toList();
-  list.sort((a, b) {
-    final rA = gradeRank(a);
-    final rB = gradeRank(b);
-    if (rA != rB) return rA.compareTo(rB);
-    return a.compareTo(b);
-  });
-
-  return ['All', ...list];
-});
-
 final studentDirectoryProvider =
     FutureProvider<List<Student>>((ref) async {
   final query = ref.watch(studentSearchQueryProvider);
@@ -697,111 +651,57 @@ class _StudentDirectoryViewState extends ConsumerState<StudentDirectoryView>
                           Expanded(
                             child: SingleChildScrollView(
                               scrollDirection: Axis.horizontal,
-                              child: ref.watch(availableGradesProvider).maybeWhen(
-                                data: (gradesList) => Row(
-                                  children: gradesList.map((grade) {
-                                    final isSelected = grade == 'All'
-                                        ? selectedGrade == 'All'
-                                        : (selectedGrade != 'All' &&
-                                            _matchesGrade(selectedGrade, grade));
-                                    return Padding(
-                                      padding: const EdgeInsets.only(right: 8),
-                                      child: InkWell(
-                                        onTap: () {
-                                          ref
-                                              .read(studentGradeFilterProvider
-                                                  .notifier)
-                                              .state = grade;
-                                          if (_currentPage != 0) {
-                                            setState(() => _currentPage = 0);
-                                          }
-                                        },
-                                        borderRadius: BorderRadius.circular(8),
-                                        child: Container(
-                                          padding: const EdgeInsets.symmetric(
-                                              horizontal: 12, vertical: 8),
-                                          decoration: BoxDecoration(
+                              child: Row(
+                                children: _grades.map((grade) {
+                                  final isSelected = grade == 'All'
+                                      ? selectedGrade == 'All'
+                                      : (selectedGrade != 'All' &&
+                                          _matchesGrade(selectedGrade, grade));
+                                  return Padding(
+                                    padding: const EdgeInsets.only(right: 8),
+                                    child: InkWell(
+                                      onTap: () {
+                                        ref
+                                            .read(studentGradeFilterProvider
+                                                .notifier)
+                                            .state = grade;
+                                        if (_currentPage != 0) {
+                                          setState(() => _currentPage = 0);
+                                        }
+                                      },
+                                      borderRadius: BorderRadius.circular(8),
+                                      child: Container(
+                                        padding: const EdgeInsets.symmetric(
+                                            horizontal: 12, vertical: 8),
+                                        decoration: BoxDecoration(
+                                          color: isSelected
+                                              ? Colors.white
+                                              : Colors.transparent,
+                                          borderRadius:
+                                              BorderRadius.circular(8),
+                                          border: Border.all(
                                             color: isSelected
-                                                ? Colors.white
-                                                : Colors.transparent,
-                                            borderRadius:
-                                                BorderRadius.circular(8),
-                                            border: Border.all(
-                                              color: isSelected
-                                                  ? AppTheme.primaryPurple
-                                                  : const Color(0xFFE2E8F0),
-                                              width: isSelected ? 1.5 : 1,
-                                            ),
+                                                ? AppTheme.primaryPurple
+                                                : const Color(0xFFE2E8F0),
+                                            width: isSelected ? 1.5 : 1,
                                           ),
-                                          child: Text(
-                                            grade == 'All' ? 'All Grades' : grade,
-                                            style: GoogleFonts.poppins(
-                                              fontSize: 12,
-                                              fontWeight: isSelected
-                                                  ? FontWeight.w600
-                                                  : FontWeight.w500,
-                                              color: isSelected
-                                                  ? AppTheme.primaryPurple
-                                                  : const Color(0xFF64748B),
-                                            ),
+                                        ),
+                                        child: Text(
+                                          grade == 'All' ? 'All Grades' : grade,
+                                          style: GoogleFonts.poppins(
+                                            fontSize: 12,
+                                            fontWeight: isSelected
+                                                ? FontWeight.w600
+                                                : FontWeight.w500,
+                                            color: isSelected
+                                                ? AppTheme.primaryPurple
+                                                : const Color(0xFF64748B),
                                           ),
                                         ),
                                       ),
-                                    );
-                                  }).toList(),
-                                ),
-                                orElse: () => Row(
-                                  children: _grades.map((grade) {
-                                    final isSelected = grade == 'All'
-                                        ? selectedGrade == 'All'
-                                        : (selectedGrade != 'All' &&
-                                            _matchesGrade(selectedGrade, grade));
-                                    return Padding(
-                                      padding: const EdgeInsets.only(right: 8),
-                                      child: InkWell(
-                                        onTap: () {
-                                          ref
-                                              .read(studentGradeFilterProvider
-                                                  .notifier)
-                                              .state = grade;
-                                          if (_currentPage != 0) {
-                                            setState(() => _currentPage = 0);
-                                          }
-                                        },
-                                        borderRadius: BorderRadius.circular(8),
-                                        child: Container(
-                                          padding: const EdgeInsets.symmetric(
-                                              horizontal: 12, vertical: 8),
-                                          decoration: BoxDecoration(
-                                            color: isSelected
-                                                ? Colors.white
-                                                : Colors.transparent,
-                                            borderRadius:
-                                                BorderRadius.circular(8),
-                                            border: Border.all(
-                                              color: isSelected
-                                                  ? AppTheme.primaryPurple
-                                                  : const Color(0xFFE2E8F0),
-                                              width: isSelected ? 1.5 : 1,
-                                            ),
-                                          ),
-                                          child: Text(
-                                            grade == 'All' ? 'All Grades' : grade,
-                                            style: GoogleFonts.poppins(
-                                              fontSize: 12,
-                                              fontWeight: isSelected
-                                                  ? FontWeight.w600
-                                                  : FontWeight.w500,
-                                              color: isSelected
-                                                  ? AppTheme.primaryPurple
-                                                  : const Color(0xFF64748B),
-                                            ),
-                                          ),
-                                        ),
-                                      ),
-                                    );
-                                  }).toList(),
-                                ),
+                                    ),
+                                  );
+                                }).toList(),
                               ),
                             ),
                           ),
@@ -1193,7 +1093,7 @@ class _StudentDirectoryViewState extends ConsumerState<StudentDirectoryView>
             padding: const EdgeInsets.only(bottom: 8),
             gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
               maxCrossAxisExtent: 320,
-              mainAxisExtent: 200,
+              mainAxisExtent: 215,
               crossAxisSpacing: 14,
               mainAxisSpacing: 14,
             ),
@@ -1249,159 +1149,162 @@ class _StudentDirectoryViewState extends ConsumerState<StudentDirectoryView>
             ],
           ),
           padding: const EdgeInsets.all(14),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              // Row 1: Avatar + Name/ID + Grade pill
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  hasPhoto
-                      ? CircleAvatar(
-                          radius: 19,
-                          backgroundColor: AppTheme.primarySoft,
-                          backgroundImage:
-                              FileImage(File(student.photographPath!)),
-                        )
-                      : AppAvatar(
-                          seed: student.admissionNumber ?? student.name,
-                          name: student.name,
-                          size: 38,
-                          borderRadius: 19,
-                          fallbackColor: _initialsColor(student.name),
-                        ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          name,
-                          style: GoogleFonts.poppins(
-                            fontSize: 14,
-                            fontWeight: FontWeight.w700,
-                            color: const Color(0xFF0F172A),
+          child: SingleChildScrollView(
+            physics: const NeverScrollableScrollPhysics(),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // Row 1: Avatar + Name/ID + Grade pill
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    hasPhoto
+                        ? CircleAvatar(
+                            radius: 19,
+                            backgroundColor: AppTheme.primarySoft,
+                            backgroundImage:
+                                FileImage(File(student.photographPath!)),
+                          )
+                        : AppAvatar(
+                            seed: student.admissionNumber ?? student.name,
+                            name: student.name,
+                            size: 38,
+                            borderRadius: 19,
+                            fallbackColor: _initialsColor(student.name),
                           ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            name,
+                            style: GoogleFonts.poppins(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w700,
+                              color: const Color(0xFF0F172A),
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          const SizedBox(height: 1),
+                          Text(
+                            student.admissionNumber ??
+                                'STU-${student.id.length >= 4 ? student.id.substring(0, 4) : student.id}',
+                            style: GoogleFonts.poppins(
+                              fontSize: 11,
+                              color: const Color(0xFF64748B),
+                              fontWeight: FontWeight.w500,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+                    Flexible(
+                      child: Container(
+                        padding:
+                            const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFF1F5F9),
+                          borderRadius: BorderRadius.circular(12),
                         ),
-                        const SizedBox(height: 1),
-                        Text(
-                          student.admissionNumber ??
-                              'STU-${student.id.length >= 4 ? student.id.substring(0, 4) : student.id}',
+                        child: Text(
+                          gradePill,
                           style: GoogleFonts.poppins(
                             fontSize: 11,
-                            color: const Color(0xFF64748B),
-                            fontWeight: FontWeight.w500,
+                            fontWeight: FontWeight.w600,
+                            color: const Color(0xFF475569),
                           ),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                         ),
-                      ],
+                      ),
                     ),
-                  ),
-                  const SizedBox(width: 6),
-                  Flexible(
-                    child: Container(
+                  ],
+                ),
+
+                const SizedBox(height: 10),
+
+                // Row 2: Payment badge + Attendance badge
+                Row(
+                  children: [
+                    Container(
                       padding:
                           const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                       decoration: BoxDecoration(
-                        color: const Color(0xFFF1F5F9),
-                        borderRadius: BorderRadius.circular(12),
+                        color: isPaid
+                            ? const Color(0xFFDCFCE7)
+                            : isOverdue
+                                ? const Color(0xFFFEE2E2)
+                                : const Color(0xFFFEF3C7),
+                        borderRadius: BorderRadius.circular(6),
                       ),
                       child: Text(
-                        gradePill,
+                        isPaid
+                            ? 'paid'
+                            : isOverdue
+                                ? 'overdue'
+                                : 'pending',
                         style: GoogleFonts.poppins(
+                          color: isPaid
+                              ? const Color(0xFF16A34A)
+                              : isOverdue
+                                  ? const Color(0xFFDC2626)
+                                  : const Color(0xFFD97706),
                           fontSize: 11,
                           fontWeight: FontWeight.w600,
-                          color: const Color(0xFF475569),
                         ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
                       ),
                     ),
-                  ),
-                ],
-              ),
-
-              const SizedBox(height: 10),
-
-              // Row 2: Payment badge + Attendance badge
-              Row(
-                children: [
-                  Container(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                    decoration: BoxDecoration(
-                      color: isPaid
-                          ? const Color(0xFFDCFCE7)
-                          : isOverdue
-                              ? const Color(0xFFFEE2E2)
-                              : const Color(0xFFFEF3C7),
-                      borderRadius: BorderRadius.circular(6),
-                    ),
-                    child: Text(
-                      isPaid
-                          ? 'paid'
-                          : isOverdue
-                              ? 'overdue'
-                              : 'pending',
-                      style: GoogleFonts.poppins(
-                        color: isPaid
-                            ? const Color(0xFF16A34A)
-                            : isOverdue
-                                ? const Color(0xFFDC2626)
-                                : const Color(0xFFD97706),
-                        fontSize: 11,
-                        fontWeight: FontWeight.w600,
+                    const SizedBox(width: 8),
+                    Container(
+                      padding:
+                          const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFDBEAFE),
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: Text(
+                        '$attRate% att.',
+                        style: GoogleFonts.poppins(
+                          color: const Color(0xFF2563EB),
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                        ),
                       ),
                     ),
-                  ),
-                  const SizedBox(width: 8),
-                  Container(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFDBEAFE),
-                      borderRadius: BorderRadius.circular(6),
-                    ),
-                    child: Text(
-                      '$attRate% att.',
-                      style: GoogleFonts.poppins(
-                        color: const Color(0xFF2563EB),
-                        fontSize: 11,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-
-              const SizedBox(height: 10),
-
-              // Row 3: Guardian Name & Phone
-              Text(
-                guardianName,
-                style: GoogleFonts.poppins(
-                  fontSize: 12,
-                  color: const Color(0xFF475569),
-                  fontWeight: FontWeight.w500,
+                  ],
                 ),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
-              const SizedBox(height: 2),
-              Text(
-                phone,
-                style: GoogleFonts.poppins(
-                  fontSize: 11,
-                  color: const Color(0xFF94A3B8),
+
+                const SizedBox(height: 10),
+
+                // Row 3: Guardian Name & Phone
+                Text(
+                  guardianName,
+                  style: GoogleFonts.poppins(
+                    fontSize: 12,
+                    color: const Color(0xFF475569),
+                    fontWeight: FontWeight.w500,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                 ),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
-            ],
+                const SizedBox(height: 2),
+                Text(
+                  phone,
+                  style: GoogleFonts.poppins(
+                    fontSize: 11,
+                    color: const Color(0xFF94A3B8),
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ],
+            ),
           ),
         ),
       ),
@@ -1437,8 +1340,8 @@ class _StudentDirectoryViewState extends ConsumerState<StudentDirectoryView>
                 child: DataTable(
                   headingRowColor:
                       WidgetStateProperty.all(const Color(0xFFF8FAFC)),
-                  dataRowMinHeight: 70,
-                  dataRowMaxHeight: 70,
+                  dataRowMinHeight: 75,
+                  dataRowMaxHeight: 75,
                   headingTextStyle: GoogleFonts.poppins(
                     fontWeight: FontWeight.w600,
                     fontSize: 11,
@@ -1597,6 +1500,7 @@ class _StudentDirectoryViewState extends ConsumerState<StudentDirectoryView>
                           Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             mainAxisAlignment: MainAxisAlignment.center,
+                            mainAxisSize: MainAxisSize.min,
                             children: [
                               Text(
                                 guardianName,
