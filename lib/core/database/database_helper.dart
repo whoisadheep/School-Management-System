@@ -140,6 +140,10 @@ class DatabaseHelper {
       try {
         await db.execute('PRAGMA journal_mode = WAL');
         await db.execute('PRAGMA busy_timeout = 5000');
+        await db.execute('PRAGMA synchronous = NORMAL');
+        await db.execute('PRAGMA cache_size = -64000');
+        await db.execute('PRAGMA temp_store = MEMORY');
+        await db.execute('PRAGMA mmap_size = 268435456');
       } catch (_) {}
     }
   }
@@ -2929,6 +2933,85 @@ class DatabaseHelper {
         INSERT OR IGNORE INTO app_settings (key, value)
         VALUES ('school_motto', 'Inspiring Excellence, Building Futures')
       ''');
+
+      // Performance Indexes (guaranteed on every startup)
+      try {
+        final batch = db.batch();
+        // Students
+        batch.execute('CREATE INDEX IF NOT EXISTS idx_students_grade ON students (grade_level)');
+        batch.execute('CREATE INDEX IF NOT EXISTS idx_students_active ON students (is_active)');
+        batch.execute('CREATE INDEX IF NOT EXISTS idx_students_grade_section ON students (grade_level, section)');
+        batch.execute('CREATE INDEX IF NOT EXISTS idx_students_adm ON students (admission_number)');
+        
+        // Invoices & Transactions
+        batch.execute('CREATE INDEX IF NOT EXISTS idx_invoices_student ON invoices (student_id)');
+        batch.execute('CREATE INDEX IF NOT EXISTS idx_invoices_status ON invoices (status)');
+        batch.execute('CREATE INDEX IF NOT EXISTS idx_invoices_due_date ON invoices (due_date)');
+        batch.execute('CREATE INDEX IF NOT EXISTS idx_invoices_year ON invoices (academic_year_id)');
+        batch.execute('CREATE INDEX IF NOT EXISTS idx_invoices_student_status ON invoices (student_id, status)');
+        batch.execute('CREATE INDEX IF NOT EXISTS idx_transactions_invoice ON transactions (invoice_id)');
+        batch.execute('CREATE INDEX IF NOT EXISTS idx_transactions_ts ON transactions (timestamp)');
+        batch.execute('CREATE INDEX IF NOT EXISTS idx_transactions_invoice_ts ON transactions (invoice_id, timestamp)');
+
+        // Ledger
+        batch.execute('CREATE INDEX IF NOT EXISTS idx_ledger_date ON ledger_entries (date)');
+        batch.execute('CREATE INDEX IF NOT EXISTS idx_ledger_type ON ledger_entries (type)');
+        batch.execute('CREATE INDEX IF NOT EXISTS idx_ledger_category ON ledger_entries (category)');
+        batch.execute('CREATE INDEX IF NOT EXISTS idx_sfl_student ON student_fee_ledger (student_id)');
+        batch.execute('CREATE INDEX IF NOT EXISTS idx_sfl_year ON student_fee_ledger (academic_year)');
+        batch.execute('CREATE INDEX IF NOT EXISTS idx_sfl_status ON student_fee_ledger (status)');
+        batch.execute('CREATE INDEX IF NOT EXISTS idx_sfl_due ON student_fee_ledger (due_date)');
+        batch.execute('CREATE INDEX IF NOT EXISTS idx_sfl_student_status ON student_fee_ledger (student_id, status)');
+
+        // Attendance (Students & Teachers)
+        batch.execute('CREATE INDEX IF NOT EXISTS idx_student_attendance_date_class ON student_attendance (date, class)');
+        batch.execute('CREATE INDEX IF NOT EXISTS idx_student_attendance_student ON student_attendance (student_id)');
+        batch.execute('CREATE INDEX IF NOT EXISTS idx_student_attendance_date ON student_attendance (date)');
+        batch.execute('CREATE INDEX IF NOT EXISTS idx_teacher_attendance_date ON teacher_attendance (date)');
+        batch.execute('CREATE INDEX IF NOT EXISTS idx_teacher_attendance_staff ON teacher_attendance (staff_id)');
+
+        // Timetable & Substitution
+        batch.execute('CREATE INDEX IF NOT EXISTS idx_timetable_class_sec_day ON timetable (class, section, day_of_week)');
+        batch.execute('CREATE INDEX IF NOT EXISTS idx_timetable_staff_day ON timetable (staff_id, day_of_week)');
+        batch.execute('CREATE INDEX IF NOT EXISTS idx_timetable_day ON timetable (day_of_week)');
+        batch.execute('CREATE INDEX IF NOT EXISTS idx_substitutions_date ON substitutions (date)');
+
+        // Library
+        batch.execute('CREATE INDEX IF NOT EXISTS idx_book_issues_borrower ON book_issues (borrower_id, status)');
+        batch.execute('CREATE INDEX IF NOT EXISTS idx_book_issues_book ON book_issues (book_id)');
+
+        // Discounts
+        batch.execute('CREATE INDEX IF NOT EXISTS idx_student_discounts_student ON student_discounts (student_id, academic_year)');
+
+        // Exams & Marks
+        batch.execute('CREATE INDEX IF NOT EXISTS idx_exam_class_year ON exams (class, academic_year)');
+        batch.execute('CREATE INDEX IF NOT EXISTS idx_exam_sub_exam ON exam_subjects (exam_id)');
+        batch.execute('CREATE INDEX IF NOT EXISTS idx_marks_student ON marks (student_id)');
+        batch.execute('CREATE INDEX IF NOT EXISTS idx_marks_subject ON marks (exam_subject_id)');
+        batch.execute('CREATE INDEX IF NOT EXISTS idx_marks_student_subject ON marks (student_id, exam_subject_id)');
+
+        // Transport
+        batch.execute('CREATE INDEX IF NOT EXISTS idx_route_stop_order ON route_stops (route_id, stop_order)');
+        batch.execute('CREATE INDEX IF NOT EXISTS idx_st_student ON student_transport (student_id)');
+        batch.execute('CREATE INDEX IF NOT EXISTS idx_st_route ON student_transport (route_id)');
+
+        // Classes & Sections
+        batch.execute('CREATE INDEX IF NOT EXISTS idx_classes_year ON classes (academic_year)');
+        batch.execute('CREATE INDEX IF NOT EXISTS idx_sections_class ON sections (class_id)');
+
+        // Staff
+        batch.execute('CREATE INDEX IF NOT EXISTS idx_staff_active ON staff (is_active)');
+        batch.execute('CREATE INDEX IF NOT EXISTS idx_staff_dept ON staff (department_id)');
+        batch.execute('CREATE INDEX IF NOT EXISTS idx_staff_role ON staff (role)');
+
+        // Inventory
+        batch.execute('CREATE INDEX IF NOT EXISTS idx_inventory_cat ON inventory_items (category_id)');
+        batch.execute('CREATE INDEX IF NOT EXISTS idx_stock_trans_item ON stock_transactions (item_id)');
+
+        await batch.commit(noResult: true);
+      } catch (e) {
+        print('DatabaseHelper index creation warning: $e');
+      }
     } catch (e) {
       print('DatabaseHelper ensureSchemaIntegrity warning: $e');
     }

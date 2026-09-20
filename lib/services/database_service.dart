@@ -1444,6 +1444,22 @@ class DatabaseService {
     final allStaff = await getAllStaff(activeOnly: true);
     final otherTeachers = allStaff.where((s) => s.id != staffId && s.role == 'teacher').toList();
 
+    // Query all busy periods for other teachers on this day in a single batch query
+    final busyResults = await db.query(
+      'timetable',
+      columns: ['staff_id', 'period_number'],
+      where: 'day_of_week = ?',
+      whereArgs: [dayOfWeek],
+    );
+    final busyMap = <String, Set<int>>{};
+    for (final r in busyResults) {
+      final sId = r['staff_id'] as String?;
+      final pNum = r['period_number'] as int?;
+      if (sId != null && pNum != null) {
+        busyMap.putIfAbsent(sId, () => {}).add(pNum);
+      }
+    }
+
     final List<Map<String, dynamic>> suggestions = [];
 
     for (final map in periodEntries) {
@@ -1451,8 +1467,8 @@ class DatabaseService {
       final List<Staff> freeTeachers = [];
 
       for (final teacher in otherTeachers) {
-        final freePeriods = await getFreePeriods(teacher.id, date);
-        if (freePeriods.contains(timetableEntry.periodNumber)) {
+        final busy = busyMap[teacher.id] ?? const <int>{};
+        if (!busy.contains(timetableEntry.periodNumber)) {
           freeTeachers.add(teacher);
         }
       }
@@ -2269,10 +2285,21 @@ class DatabaseService {
       where: 'grade_level IN ($placeholders) AND is_active = 1 AND is_alumni = 0',
       whereArgs: aliases,
     );
+    if (students.isEmpty) return;
+
+    final structures = await getFeeStructuresForClass(fs.className, fs.academicYear);
+    final feeHeads = await getAllFeeHeads();
+    final allDiscountTypes = await getAllDiscountTypes();
 
     for (final s in students) {
       final studentId = s['id'] as String;
-      await syncLedgerAmountsForStudent(studentId, fs.academicYear);
+      await syncLedgerAmountsForStudent(
+        studentId, 
+        fs.academicYear,
+        cachedStructures: structures,
+        cachedFeeHeads: feeHeads,
+        cachedDiscountTypes: allDiscountTypes,
+      );
     }
   }
 
@@ -2288,26 +2315,17 @@ class DatabaseService {
       final placeholders = aliases.isEmpty ? '?' : List.filled(aliases.length, '?').join(', ');
       final whereArgs = aliases.isEmpty ? [fs.className] : aliases;
       
-      // Delete unpaid ledger rows for this fee head in this academic year for all students in this class
-      final students = await db.query(
-        'students',
-        where: 'grade_level IN ($placeholders) AND is_active = 1 AND is_alumni = 0',
-        whereArgs: whereArgs,
-      );
-      
       final feeHeadId = fs.feeHeadId ?? fs.feeCategoryId;
       final cleanAy = fs.academicYear.startsWith('ay-') ? fs.academicYear.substring(3) : fs.academicYear;
       final ayCandidates = [fs.academicYear, cleanAy, 'ay-$cleanAy'];
       final ayPh = List.filled(ayCandidates.length, '?').join(', ');
 
-      for (final s in students) {
-        final studentId = s['id'] as String;
-        await db.delete(
-          'student_fee_ledger',
-          where: 'student_id = ? AND fee_head_id = ? AND academic_year IN ($ayPh) AND status IN (\'pending\', \'overdue\') AND amount_paid = 0',
-          whereArgs: [studentId, feeHeadId, ...ayCandidates],
-        );
-      }
+      // Delete unpaid ledger rows for this fee head in this academic year in a single query
+      await db.delete(
+        'student_fee_ledger',
+        where: 'fee_head_id = ? AND academic_year IN ($ayPh) AND status IN (\'pending\', \'overdue\') AND amount_paid = 0 AND student_id IN (SELECT id FROM students WHERE grade_level IN ($placeholders) AND is_active = 1 AND is_alumni = 0)',
+        whereArgs: [feeHeadId, ...ayCandidates, ...whereArgs],
+      );
     }
 
     return await _deleteLogged(db, 'fee_structures', where: 'id = ?', whereArgs: [id]);
@@ -2384,7 +2402,13 @@ class DatabaseService {
   }
 
   /// Sync unpaid ledger rows when a discount is added or removed for a specific student
-  Future<void> syncLedgerAmountsForStudent(String studentId, String academicYear) async {
+  Future<void> syncLedgerAmountsForStudent(
+    String studentId, 
+    String academicYear, {
+    List<FeeStructure>? cachedStructures,
+    List<FeeHead>? cachedFeeHeads,
+    List<DiscountType>? cachedDiscountTypes,
+  }) async {
     final db = await _db;
     final student = await getStudentById(studentId);
     if (student == null) return;
@@ -2401,13 +2425,13 @@ class DatabaseService {
     }
 
     // 2. Fetch all structures, fee heads, and active discounts for the student
-    final structures = await getFeeStructuresForClass(student.gradeLevel, academicYear);
-    final feeHeads = await getAllFeeHeads();
+    final structures = cachedStructures ?? await getFeeStructuresForClass(student.gradeLevel, academicYear);
+    final feeHeads = cachedFeeHeads ?? await getAllFeeHeads();
     final feeHeadMap = {for (var fh in feeHeads) fh.id: fh};
     final structureMap = {for (var fs in structures) (fs.feeHeadId ?? fs.feeCategoryId): fs};
 
     final studentDiscounts = await getDiscountsForStudent(studentId, academicYear);
-    final allDiscountTypes = await getAllDiscountTypes();
+    final allDiscountTypes = cachedDiscountTypes ?? await getAllDiscountTypes();
     final discountTypeMap = {for (var dt in allDiscountTypes) dt.id: dt};
 
     double totalPercent = 0.0;
@@ -4045,27 +4069,45 @@ class DatabaseService {
   Future<List<Map<String, dynamic>>> getFleetOverview({String academicYear = '2026-2027'}) async {
     final db = await _db;
     final vehicles = await getAllVehicles();
+    if (vehicles.isEmpty) return [];
+
+    // Query all routes that have a vehicle_id in a single query
+    final routes = await db.rawQuery('SELECT id, route_name, vehicle_id FROM routes WHERE vehicle_id IS NOT NULL');
+    final routeByVehicle = <String, Map<String, dynamic>>{};
+    final routeIds = <String>[];
+    for (final r in routes) {
+      final vId = r['vehicle_id'] as String?;
+      if (vId != null) {
+        routeByVehicle[vId] = r;
+        routeIds.add(r['id'] as String);
+      }
+    }
+
+    // Query student counts grouped by route_id in a single query
+    final studentCountByRoute = <String, int>{};
+    if (routeIds.isNotEmpty) {
+      final placeholders = List.filled(routeIds.length, '?').join(', ');
+      final countResults = await db.rawQuery('''
+        SELECT route_id, COUNT(*) as cnt FROM student_transport
+        WHERE route_id IN ($placeholders) AND academic_year = ? AND is_active = 1
+        GROUP BY route_id
+      ''', [...routeIds, academicYear]);
+      for (final cr in countResults) {
+        final rId = cr['route_id'] as String?;
+        final cnt = cr['cnt'] as int? ?? 0;
+        if (rId != null) {
+          studentCountByRoute[rId] = cnt;
+        }
+      }
+    }
+
     final List<Map<String, dynamic>> overview = [];
 
     for (final v in vehicles) {
-      // Find route assigned to vehicle
-      final routes = await db.rawQuery('SELECT * FROM routes WHERE vehicle_id = ?', [v.id]);
-      String routeName = 'Unassigned';
-      String? routeId;
-      if (routes.isNotEmpty) {
-        routeName = routes.first['route_name'] as String;
-        routeId = routes.first['id'] as String;
-      }
-
-      // Count assigned students on this vehicle's routes
-      int studentCount = 0;
-      if (routeId != null) {
-        final countResult = await db.rawQuery('''
-          SELECT COUNT(*) as cnt FROM student_transport
-          WHERE route_id = ? AND academic_year = ? AND is_active = 1
-        ''', [routeId, academicYear]);
-        studentCount = countResult.first['cnt'] as int? ?? 0;
-      }
+      final route = routeByVehicle[v.id];
+      final routeName = route != null ? (route['route_name'] as String? ?? 'Unassigned') : 'Unassigned';
+      final routeId = route != null ? route['id'] as String? : null;
+      final studentCount = routeId != null ? (studentCountByRoute[routeId] ?? 0) : 0;
 
       overview.add({
         'vehicle': v,
@@ -4583,8 +4625,24 @@ class DatabaseService {
     final examSubjects = await getExamSubjects(examId);
     List<Map<String, dynamic>> subjectPerformance = [];
 
+    // Pre-fetch all marks for these subjects in a single query
+    final subjectIds = examSubjects.map((e) => e.id).toList();
+    final marksBySubject = <String, List<Map<String, dynamic>>>{};
+    if (subjectIds.isNotEmpty) {
+      final placeholders = List.filled(subjectIds.length, '?').join(', ');
+      final allMarks = await db.query(
+        'marks',
+        where: 'exam_subject_id IN ($placeholders)',
+        whereArgs: subjectIds,
+      );
+      for (final m in allMarks) {
+        final subId = m['exam_subject_id'] as String;
+        marksBySubject.putIfAbsent(subId, () => []).add(m);
+      }
+    }
+
     for (var es in examSubjects) {
-      final marksRows = await db.query('marks', where: 'exam_subject_id = ?', whereArgs: [es.id]);
+      final marksRows = marksBySubject[es.id] ?? const [];
       
       double totalMarks = 0;
       int passCount = 0;
@@ -5092,20 +5150,47 @@ class DatabaseService {
       where: 'grade_level = ? AND section = ? AND is_active = 1',
       whereArgs: [className, section],
     );
+    if (studentsResult.isEmpty) return [];
+
+    final studentIds = studentsResult.map((s) => s['id'] as String).toList();
+    final placeholders = List.filled(studentIds.length, '?').join(', ');
+    
+    // Fetch all attendance records for these students in a single query
+    final allAttRecords = await db.query(
+      'student_attendance',
+      columns: ['student_id', 'status'],
+      where: 'student_id IN ($placeholders)',
+      whereArgs: studentIds,
+    );
+
+    final attByStudent = <String, List<String>>{};
+    for (final r in allAttRecords) {
+      final sId = r['student_id'] as String;
+      final status = r['status'] as String;
+      attByStudent.putIfAbsent(sId, () => []).add(status);
+    }
 
     List<Map<String, dynamic>> lowAttendanceList = [];
 
     for (var sRow in studentsResult) {
       final studentId = sRow['id'] as String;
-      final percent = await computeAttendancePercentForReportCard(studentId, academicYear);
+      final statuses = attByStudent[studentId];
+      if (statuses == null || statuses.isEmpty) continue;
+
+      int presentAndLate = 0;
+      int halfDay = 0;
+      for (final status in statuses) {
+        if (status == 'present' || status == 'late') presentAndLate++;
+        if (status == 'half_day') halfDay++;
+      }
+      final total = statuses.length;
+      final percent = total > 0 ? ((presentAndLate + halfDay * 0.5) / total) * 100 : 0.0;
+
       if (percent < threshold && percent > 0.0) { 
-         final attRecords = await db.query('student_attendance', where: 'student_id = ?', whereArgs: [studentId]);
-         if (attRecords.isNotEmpty) {
-            lowAttendanceList.add({
-              'student': Student.fromMap(sRow),
-              'percent': percent,
-            });
-         }
+        lowAttendanceList.add({
+          'student': Student.fromMap(sRow),
+          'percent': percent,
+        });
       }
     }
     return lowAttendanceList;

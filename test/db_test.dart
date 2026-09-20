@@ -2,14 +2,28 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:school_management_system/core/database/database_helper.dart';
 import 'package:school_management_system/services/database_service.dart';
 import 'package:school_management_system/models/models.dart';
-import 'package:school_management_system/models/inventory.dart';
-import 'package:school_management_system/models/book.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
+import 'package:flutter/services.dart';
+import 'dart:ffi';
+import 'dart:io';
+import 'package:sqlite3/open.dart';
+
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+
   setUpAll(() {
+    if (Platform.isLinux) {
+      open.overrideFor(OperatingSystem.linux, () => DynamicLibrary.open('/usr/lib/x86_64-linux-gnu/libsqlite3.so.0'));
+    }
     sqfliteFfiInit();
     databaseFactory = databaseFactoryFfi;
+
+    const MethodChannel channel = MethodChannel('plugins.flutter.io/path_provider');
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(channel, (MethodCall methodCall) async {
+      return Directory.systemTemp.path;
+    });
   });
 
   test('Create Book', () async {
@@ -31,7 +45,7 @@ void main() {
     final dbService = DatabaseService(dbHelper: dbHelper);
     
     // Attempting to create an inventory item directly
-    final item = InventoryItem(
+    const item = InventoryItem(
       id: 'inv-1',
       name: 'Test Item',
       categoryId: 'cat-1',
