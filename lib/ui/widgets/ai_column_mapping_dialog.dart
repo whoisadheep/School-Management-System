@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../core/theme/app_theme.dart';
 import '../../services/column_mapping_service.dart';
+import 'thinking_orb_widget.dart';
 
 /// A full-screen dialog that shows AI-suggested column mappings
 /// with dropdowns so the user can review & override before importing.
@@ -111,7 +112,12 @@ class _AIColumnMappingDialogState extends State<AIColumnMappingDialog> {
           ),
           title: Row(
             children: [
-              const Icon(Icons.auto_fix_high_rounded, size: 22),
+              const EduviaThinkingOrb(
+                size: 22,
+                state: OrbState.connecting,
+                showGlow: false,
+                theme: OrbTheme.dark,
+              ),
               const SizedBox(width: 10),
               Text(
                 'AI Smart Column Mapper',

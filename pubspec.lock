@@ -9,6 +9,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "85.0.0"
+  agent_orbs:
+    dependency: "direct main"
+    description:
+      name: agent_orbs
+      sha256: c6dc65b10af224706d748a592057084fdb4dc9655da6e55b835c2e25455062e6
+      url: "https://pub.dev"
+    source: hosted
+    version: "0.1.0"
   analyzer:
     dependency: transitive
     description:

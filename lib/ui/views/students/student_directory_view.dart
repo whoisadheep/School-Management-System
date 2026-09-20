@@ -16,6 +16,7 @@ import '../../../services/report_generator.dart';
 import '../../../services/settings_service.dart';
 import '../../widgets/pdf_preview_dialog.dart';
 import '../../widgets/blobatar.dart';
+import '../../widgets/thinking_orb_widget.dart';
 import '../../../services/app_logger.dart';
 import '../fees/student_fee_ledger_view.dart';
 import '../attendance/student_attendance_history_dialog.dart';
@@ -1109,11 +1110,11 @@ class _StudentDirectoryViewState extends ConsumerState<StudentDirectoryView>
                                 ? _buildStudentGrid(context, students)
                                 : _buildStudentTable(context, students);
                           },
-                          loading: () => const Center(
-                            child: CircularProgressIndicator(
-                              color: AppTheme.primaryPurple,
-                              strokeWidth: 2,
-                            ),
+                          loading: () => const ThinkingLoadingCard(
+                            message: 'Loading student directory...',
+                            subMessage: 'Retrieving student profiles & enrollments',
+                            state: OrbState.working,
+                            size: 48,
                           ),
                           error: (err, stack) => Center(
                             child: Text(

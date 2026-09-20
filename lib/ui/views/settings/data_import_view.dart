@@ -11,6 +11,7 @@ import 'package:school_management_system/providers/dashboard_provider.dart';
 import 'package:school_management_system/services/import_service.dart';
 import 'package:school_management_system/services/column_mapping_service.dart';
 import 'package:school_management_system/ui/widgets/ai_column_mapping_dialog.dart';
+import 'package:school_management_system/ui/widgets/thinking_orb_widget.dart';
 import '../students/student_directory_view.dart';
 
 class DataImportView extends ConsumerStatefulWidget {
@@ -610,7 +611,12 @@ class _DataImportViewState extends ConsumerState<DataImportView> {
                 ElevatedButton.icon(
                   onPressed: _isAnyBusy ? null : _importStudentsWithAI,
                   icon: (_isAnalyzingStudents || _isImportingStudents)
-                      ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                      ? EduviaThinkingOrb(
+                          state: _isAnalyzingStudents ? OrbState.searching : OrbState.working,
+                          size: 18,
+                          showGlow: false,
+                          theme: OrbTheme.dark,
+                        )
                       : const Icon(Icons.auto_fix_high_rounded, size: 16),
                   label: Text(
                     _isAnalyzingStudents
@@ -726,7 +732,12 @@ class _DataImportViewState extends ConsumerState<DataImportView> {
                 ElevatedButton.icon(
                   onPressed: _isAnyBusy ? null : _importStaffWithAI,
                   icon: (_isAnalyzingStaff || _isImportingStaff)
-                      ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                      ? EduviaThinkingOrb(
+                          state: _isAnalyzingStaff ? OrbState.searching : OrbState.working,
+                          size: 18,
+                          showGlow: false,
+                          theme: OrbTheme.dark,
+                        )
                       : const Icon(Icons.auto_fix_high_rounded, size: 16),
                   label: Text(
                     _isAnalyzingStaff
@@ -781,8 +792,17 @@ class _DataImportViewState extends ConsumerState<DataImportView> {
                 children: [
                   Row(
                     children: [
-                      if (_isAnyBusy) const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)),
-                      if (_isAnyBusy) const SizedBox(width: 8),
+                      if (_isAnyBusy)
+                        Padding(
+                          padding: const EdgeInsets.only(right: 8),
+                          child: EduviaThinkingOrb(
+                            state: (_isAnalyzingStudents || _isAnalyzingStaff)
+                                ? OrbState.searching
+                                : OrbState.working,
+                            size: 18,
+                            showGlow: false,
+                          ),
+                        ),
                       Text(
                         _isAnyBusy ? 'Processing...' : 'Result',
                         style: GoogleFonts.poppins(fontWeight: FontWeight.bold),

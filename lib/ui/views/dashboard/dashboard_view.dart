@@ -10,6 +10,7 @@ import '../../../providers/dashboard_provider.dart';
 import '../../../providers/navigation_provider.dart';
 import '../../../providers/services_provider.dart';
 import '../../layout/widgets/hover_scale.dart';
+import '../../widgets/thinking_orb_widget.dart';
 
 class DashboardView extends ConsumerStatefulWidget {
   const DashboardView({super.key});
@@ -93,10 +94,16 @@ class _DashboardViewState extends ConsumerState<DashboardView> {
                 ],
               ),
               loading: () => const Center(
-                  child: Padding(
-                padding: EdgeInsets.all(48.0),
-                child: CircularProgressIndicator(),
-              )),
+                child: Padding(
+                  padding: EdgeInsets.all(48.0),
+                  child: ThinkingLoadingCard(
+                    message: 'Loading dashboard...',
+                    subMessage: 'Calculating live academic & financial metrics',
+                    state: OrbState.working,
+                    size: 48,
+                  ),
+                ),
+              ),
               error: (e, s) => Center(child: Text('Error: $e')),
             ),
           ],

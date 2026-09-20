@@ -4,6 +4,7 @@ import 'package:google_fonts/google_fonts.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../providers/services_provider.dart';
 import '../../../providers/navigation_provider.dart';
+import '../../widgets/thinking_orb_widget.dart';
 import 'widgets/assistant_message_content.dart';
 
 class AssistantView extends ConsumerStatefulWidget {
@@ -25,13 +26,10 @@ class AssistantMessage {
   }) : timestamp = timestamp ?? DateTime.now();
 }
 
-class _AssistantViewState extends ConsumerState<AssistantView> with TickerProviderStateMixin {
+class _AssistantViewState extends ConsumerState<AssistantView> {
   final TextEditingController _controller = TextEditingController();
   final ScrollController _scrollController = ScrollController();
   final FocusNode _focusNode = FocusNode();
-  
-  late AnimationController _pulseController;
-  late Animation<double> _pulseAnimation;
   
   final List<AssistantMessage> _messages = [
     AssistantMessage(
@@ -43,19 +41,12 @@ class _AssistantViewState extends ConsumerState<AssistantView> with TickerProvid
   ];
   bool _isProcessing = false;
   bool? _isAiOnline;
+  OrbState _currentOrbState = OrbState.breathing;
+  String _currentThinkingLabel = 'Thinking...';
 
   @override
   void initState() {
     super.initState();
-    _pulseController = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 1500),
-    )..repeat(reverse: true);
-    
-    _pulseAnimation = Tween<double>(begin: 0.3, end: 1.0).animate(
-      CurvedAnimation(parent: _pulseController, curve: Curves.easeInOut),
-    );
-
     _verifyAiConnection();
   }
 
@@ -82,7 +73,6 @@ class _AssistantViewState extends ConsumerState<AssistantView> with TickerProvid
     _controller.dispose();
     _scrollController.dispose();
     _focusNode.dispose();
-    _pulseController.dispose();
     super.dispose();
   }
 
@@ -90,9 +80,45 @@ class _AssistantViewState extends ConsumerState<AssistantView> with TickerProvid
     final text = (presetText ?? _controller.text).trim();
     if (text.isEmpty) return;
 
+    OrbState orbState = OrbState.working;
+    String thinkingLabel = 'Thinking...';
+    final lower = text.toLowerCase();
+    if (lower.contains('fee') ||
+        lower.contains('paid') ||
+        lower.contains('due') ||
+        lower.contains('balance') ||
+        lower.contains('calculate') ||
+        lower.contains('sum') ||
+        lower.contains('total') ||
+        lower.contains('salary')) {
+      orbState = OrbState.solving;
+      thinkingLabel = 'Analyzing records & calculating metrics...';
+    } else if (lower.contains('find') ||
+        lower.contains('search') ||
+        lower.contains('show') ||
+        lower.contains('who') ||
+        lower.contains('list') ||
+        lower.contains('which') ||
+        lower.contains('where')) {
+      orbState = OrbState.searching;
+      thinkingLabel = 'Searching school database...';
+    } else if (lower.contains('write') ||
+        lower.contains('compose') ||
+        lower.contains('generate') ||
+        lower.contains('draft') ||
+        lower.contains('report')) {
+      orbState = OrbState.composing;
+      thinkingLabel = 'Composing response...';
+    } else {
+      orbState = OrbState.working;
+      thinkingLabel = 'Consulting Eduvia Assistant...';
+    }
+
     setState(() {
       _messages.add(AssistantMessage(text: text, isUser: true));
       _isProcessing = true;
+      _currentOrbState = orbState;
+      _currentThinkingLabel = thinkingLabel;
       if (presetText == null) _controller.clear();
     });
     
@@ -141,12 +167,16 @@ class _AssistantViewState extends ConsumerState<AssistantView> with TickerProvid
           mainAxisSize: MainAxisSize.min,
           children: [
             Container(
-              padding: const EdgeInsets.all(8),
+              padding: const EdgeInsets.all(4),
               decoration: BoxDecoration(
                 color: AppTheme.primarySoft,
                 borderRadius: BorderRadius.circular(12),
               ),
-              child: const Icon(Icons.auto_awesome, color: AppTheme.primaryPurple, size: 20),
+              child: EduviaThinkingOrb(
+                size: 24,
+                state: _isProcessing ? _currentOrbState : OrbState.breathing,
+                showGlow: true,
+              ),
             ),
             const SizedBox(width: 12),
             Column(
@@ -252,6 +282,37 @@ class _AssistantViewState extends ConsumerState<AssistantView> with TickerProvid
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          Center(
+            child: Padding(
+              padding: const EdgeInsets.only(top: 4, bottom: 24),
+              child: Column(
+                children: [
+                  const EduviaThinkingOrb(
+                    size: 64,
+                    state: OrbState.breathing,
+                    showGlow: true,
+                  ),
+                  const SizedBox(height: 12),
+                  Text(
+                    'Eduvia Intelligence Ready',
+                    style: GoogleFonts.poppins(
+                      fontSize: 13.5,
+                      fontWeight: FontWeight.w600,
+                      color: AppTheme.primaryPurple,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    'Ask anything about students, staff, fee collection, attendance, or schedules',
+                    style: GoogleFonts.poppins(
+                      fontSize: 11.5,
+                      color: AppTheme.textSecondary,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
           Padding(
             padding: const EdgeInsets.only(left: 4, bottom: 10),
             child: Text(
@@ -402,12 +463,16 @@ class _AssistantViewState extends ConsumerState<AssistantView> with TickerProvid
         children: [
           Container(
             margin: const EdgeInsets.only(right: 10),
-            padding: const EdgeInsets.all(8),
+            padding: const EdgeInsets.all(4),
             decoration: const BoxDecoration(
-              color: AppTheme.primaryPurple,
+              color: AppTheme.primarySoft,
               shape: BoxShape.circle,
             ),
-            child: const Icon(Icons.smart_toy_rounded, color: Colors.white, size: 16),
+            child: EduviaThinkingOrb(
+              state: _currentOrbState,
+              size: 28,
+              showGlow: false,
+            ),
           ),
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
@@ -425,30 +490,18 @@ class _AssistantViewState extends ConsumerState<AssistantView> with TickerProvid
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                FadeTransition(
-                  opacity: _pulseAnimation,
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: List.generate(3, (index) {
-                      return Container(
-                        margin: const EdgeInsets.symmetric(horizontal: 3),
-                        width: 7,
-                        height: 7,
-                        decoration: const BoxDecoration(
-                          color: AppTheme.primaryLight,
-                          shape: BoxShape.circle,
-                        ),
-                      );
-                    }),
-                  ),
+                EduviaThinkingOrb(
+                  state: _currentOrbState,
+                  size: 18,
+                  showGlow: false,
                 ),
-                const SizedBox(width: 8),
+                const SizedBox(width: 10),
                 Text(
-                  'Thinking...',
+                  _currentThinkingLabel,
                   style: GoogleFonts.poppins(
-                    fontSize: 12,
-                    color: AppTheme.textSecondary,
-                    fontStyle: FontStyle.italic,
+                    fontSize: 12.5,
+                    fontWeight: FontWeight.w500,
+                    color: AppTheme.primaryPurple,
                   ),
                 ),
               ],
