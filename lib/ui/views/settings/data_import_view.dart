@@ -11,6 +11,7 @@ import 'package:school_management_system/providers/dashboard_provider.dart';
 import 'package:school_management_system/services/import_service.dart';
 import 'package:school_management_system/services/column_mapping_service.dart';
 import 'package:school_management_system/ui/widgets/ai_column_mapping_dialog.dart';
+import '../students/student_directory_view.dart';
 
 class DataImportView extends ConsumerStatefulWidget {
   const DataImportView({super.key});
@@ -137,6 +138,8 @@ class _DataImportViewState extends ConsumerState<DataImportView> {
       );
 
       ref.invalidate(studentsListProvider);
+      ref.invalidate(studentDirectoryProvider);
+      ref.invalidate(studentDirectoryStatsProvider);
       ref.invalidate(dashboardMetricsProvider);
 
       setState(() {

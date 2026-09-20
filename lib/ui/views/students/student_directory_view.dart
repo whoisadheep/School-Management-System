@@ -26,6 +26,7 @@ final studentGradeFilterProvider = StateProvider<String>((ref) => 'All');
 final studentStatusFilterProvider = StateProvider<String>((ref) => 'Active');
 
 final studentDirectoryStatsProvider = FutureProvider<Map<String, dynamic>>((ref) async {
+  ref.watch(studentsListProvider);
   final dbService = ref.watch(databaseServiceProvider);
   final all = await dbService.getAllStudents(activeOnly: false);
   final now = DateTime.now();
@@ -110,6 +111,7 @@ bool _matchesGrade(String studentGrade, String targetGrade) {
 
 final studentDirectoryProvider =
     FutureProvider<List<Student>>((ref) async {
+  ref.watch(studentsListProvider);
   final query = ref.watch(studentSearchQueryProvider);
   final grade = ref.watch(studentGradeFilterProvider);
   final statusFilter = ref.watch(studentStatusFilterProvider);
@@ -154,6 +156,9 @@ class _StudentDirectoryViewState extends ConsumerState<StudentDirectoryView>
 
   final _searchController = TextEditingController();
   Timer? _debounceTimer;
+  Timer? _autoRefreshTimer;
+  int? _lastStudentCount;
+  String? _lastUpdated;
   int _currentPage = 0;
   int _itemsPerPage = 24;
   String _viewMode = 'grid'; // 'grid' or 'table'
@@ -215,10 +220,42 @@ class _StudentDirectoryViewState extends ConsumerState<StudentDirectoryView>
     _glowAnimation = Tween<double>(begin: 0.8, end: 1.2).animate(
       CurvedAnimation(parent: _animController, curve: Curves.easeInOutSine),
     );
+
+    _startAutoRefreshTimer();
+  }
+
+  void _startAutoRefreshTimer() {
+    _autoRefreshTimer?.cancel();
+    _autoRefreshTimer = Timer.periodic(const Duration(seconds: 3), (_) {
+      _checkForDataChanges();
+    });
+  }
+
+  Future<void> _checkForDataChanges({bool force = false}) async {
+    if (!mounted) return;
+    try {
+      final db = await ref.read(databaseServiceProvider).rawDb;
+      final res = await db.rawQuery('SELECT COUNT(*) as count, MAX(updated_at) as last_updated FROM students');
+      if (res.isNotEmpty && mounted) {
+        final count = res.first['count'] as int? ?? 0;
+        final lastUpdated = res.first['last_updated']?.toString() ?? '';
+        if (force || (_lastStudentCount != null && (count != _lastStudentCount || lastUpdated != _lastUpdated))) {
+          _lastStudentCount = count;
+          _lastUpdated = lastUpdated;
+          ref.invalidate(studentsListProvider);
+          ref.invalidate(studentDirectoryProvider);
+          ref.invalidate(studentDirectoryStatsProvider);
+        } else if (_lastStudentCount == null) {
+          _lastStudentCount = count;
+          _lastUpdated = lastUpdated;
+        }
+      }
+    } catch (_) {}
   }
 
   @override
   void dispose() {
+    _autoRefreshTimer?.cancel();
     _debounceTimer?.cancel();
     _animController.dispose();
     _searchController.dispose();
@@ -227,6 +264,12 @@ class _StudentDirectoryViewState extends ConsumerState<StudentDirectoryView>
 
   @override
   Widget build(BuildContext context) {
+    ref.listen<NavigationTab>(selectedTabProvider, (previous, next) {
+      if (next == NavigationTab.students) {
+        _checkForDataChanges(force: true);
+      }
+    });
+
     ref.listen<Student?>(pendingStudentProfileProvider, (previous, student) {
       if (student == null) return;
       ref.read(pendingStudentProfileProvider.notifier).state = null;

@@ -13,6 +13,7 @@ import '../../../providers/dashboard_provider.dart';
 import '../../../services/file_storage_service.dart';
 import '../../../services/sound_service.dart';
 import '../../widgets/blobatar.dart';
+import '../students/student_directory_view.dart';
 
 class AdmissionView extends ConsumerStatefulWidget {
   const AdmissionView({super.key});
@@ -368,6 +369,8 @@ class _AdmissionViewState extends ConsumerState<AdmissionView> {
     if (success && mounted) {
       SoundService().playSuccess();
       ref.invalidate(studentsListProvider);
+      ref.invalidate(studentDirectoryProvider);
+      ref.invalidate(studentDirectoryStatsProvider);
       ref.invalidate(dashboardMetricsProvider);
     } else if (!success && mounted) {
       SoundService().playAlert();
