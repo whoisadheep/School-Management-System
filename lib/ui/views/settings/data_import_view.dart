@@ -21,9 +21,14 @@ class DataImportView extends ConsumerStatefulWidget {
 }
 
 class _DataImportViewState extends ConsumerState<DataImportView> {
-  bool _isImporting = false;
-  bool _isAnalyzing = false;
+  bool _isImportingStudents = false;
+  bool _isAnalyzingStudents = false;
+  bool _isImportingStaff = false;
+  bool _isAnalyzingStaff = false;
   String _importResult = '';
+
+  bool get _isAnyBusy =>
+      _isImportingStudents || _isAnalyzingStudents || _isImportingStaff || _isAnalyzingStaff;
 
   Future<void> _downloadTemplate(String type) async {
     try {
@@ -78,7 +83,7 @@ class _DataImportViewState extends ConsumerState<DataImportView> {
 
       // Step 1: Extract headers
       setState(() {
-        _isAnalyzing = true;
+        _isAnalyzingStudents = true;
         _importResult = '';
       });
 
@@ -89,7 +94,7 @@ class _DataImportViewState extends ConsumerState<DataImportView> {
 
       if (headers.isEmpty) {
         setState(() {
-          _isAnalyzing = false;
+          _isAnalyzingStudents = false;
           _importResult = 'Error: Could not read headers from the file. Is it empty?';
         });
         return;
@@ -99,7 +104,7 @@ class _DataImportViewState extends ConsumerState<DataImportView> {
       final mappingService = ColumnMappingService(dbService);
       final mappingResponse = await mappingService.mapColumnsWithAI(headers);
 
-      setState(() { _isAnalyzing = false; });
+      setState(() { _isAnalyzingStudents = false; });
 
       if (!mounted) return;
 
@@ -128,7 +133,7 @@ class _DataImportViewState extends ConsumerState<DataImportView> {
 
       // Step 5: Run import
       setState(() {
-        _isImporting = true;
+        _isImportingStudents = true;
         _importResult = 'Importing $totalRows students...';
       });
 
@@ -246,8 +251,8 @@ class _DataImportViewState extends ConsumerState<DataImportView> {
       }
     } finally {
       setState(() {
-        _isImporting = false;
-        _isAnalyzing = false;
+        _isImportingStudents = false;
+        _isAnalyzingStudents = false;
       });
     }
   }
@@ -268,7 +273,7 @@ class _DataImportViewState extends ConsumerState<DataImportView> {
 
       // Step 1: Extract headers & samples
       setState(() {
-        _isAnalyzing = true;
+        _isAnalyzingStaff = true;
         _importResult = '';
       });
 
@@ -279,7 +284,7 @@ class _DataImportViewState extends ConsumerState<DataImportView> {
 
       if (headers.isEmpty) {
         setState(() {
-          _isAnalyzing = false;
+          _isAnalyzingStaff = false;
           _importResult = 'Error: Could not read headers from the file. Is it empty?';
         });
         return;
@@ -293,7 +298,7 @@ class _DataImportViewState extends ConsumerState<DataImportView> {
       );
 
       setState(() {
-        _isAnalyzing = false;
+        _isAnalyzingStaff = false;
       });
 
       if (!mounted) return;
@@ -324,7 +329,7 @@ class _DataImportViewState extends ConsumerState<DataImportView> {
 
       // Step 5: Run import
       setState(() {
-        _isImporting = true;
+        _isImportingStaff = true;
         _importResult = 'Importing $totalRows staff members...';
       });
 
@@ -440,8 +445,8 @@ class _DataImportViewState extends ConsumerState<DataImportView> {
       }
     } finally {
       setState(() {
-        _isImporting = false;
-        _isAnalyzing = false;
+        _isImportingStaff = false;
+        _isAnalyzingStaff = false;
       });
     }
   }
@@ -596,19 +601,21 @@ class _DataImportViewState extends ConsumerState<DataImportView> {
             Row(
               children: [
                 OutlinedButton.icon(
-                  onPressed: (_isImporting || _isAnalyzing) ? null : () => _downloadTemplate('students'),
+                  onPressed: _isAnyBusy ? null : () => _downloadTemplate('students'),
                   icon: const Icon(Icons.download, size: 16),
                   label: Text('Download Template', style: GoogleFonts.poppins(fontWeight: FontWeight.w500, fontSize: 12)),
                   style: OutlinedButton.styleFrom(foregroundColor: AppTheme.primaryPurple),
                 ),
                 const SizedBox(width: 16),
                 ElevatedButton.icon(
-                  onPressed: (_isImporting || _isAnalyzing) ? null : _importStudentsWithAI,
-                  icon: _isAnalyzing
+                  onPressed: _isAnyBusy ? null : _importStudentsWithAI,
+                  icon: (_isAnalyzingStudents || _isImportingStudents)
                       ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
                       : const Icon(Icons.auto_fix_high_rounded, size: 16),
                   label: Text(
-                    _isAnalyzing ? 'AI Analyzing...' : 'Import with AI Mapper',
+                    _isAnalyzingStudents
+                        ? 'AI Analyzing...'
+                        : (_isImportingStudents ? 'Importing...' : 'Import with AI Mapper'),
                     style: GoogleFonts.poppins(fontWeight: FontWeight.w600, fontSize: 12),
                   ),
                   style: ElevatedButton.styleFrom(
@@ -710,19 +717,21 @@ class _DataImportViewState extends ConsumerState<DataImportView> {
             Row(
               children: [
                 OutlinedButton.icon(
-                  onPressed: (_isImporting || _isAnalyzing) ? null : () => _downloadTemplate('staff'),
+                  onPressed: _isAnyBusy ? null : () => _downloadTemplate('staff'),
                   icon: const Icon(Icons.download, size: 16),
                   label: Text('Download Template', style: GoogleFonts.poppins(fontWeight: FontWeight.w500, fontSize: 12)),
                   style: OutlinedButton.styleFrom(foregroundColor: AppTheme.primaryPurple),
                 ),
                 const SizedBox(width: 16),
                 ElevatedButton.icon(
-                  onPressed: (_isImporting || _isAnalyzing) ? null : _importStaffWithAI,
-                  icon: _isAnalyzing
+                  onPressed: _isAnyBusy ? null : _importStaffWithAI,
+                  icon: (_isAnalyzingStaff || _isImportingStaff)
                       ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
                       : const Icon(Icons.auto_fix_high_rounded, size: 16),
                   label: Text(
-                    _isAnalyzing ? 'AI Analyzing...' : 'Import with AI Mapper',
+                    _isAnalyzingStaff
+                        ? 'AI Analyzing...'
+                        : (_isImportingStaff ? 'Importing...' : 'Import with AI Mapper'),
                     style: GoogleFonts.poppins(fontWeight: FontWeight.w600, fontSize: 12),
                   ),
                   style: ElevatedButton.styleFrom(
@@ -757,10 +766,14 @@ class _DataImportViewState extends ConsumerState<DataImportView> {
         _buildStudentImportCard(),
         _buildStaffImportCard(),
         
-        if (_isImporting || _importResult.isNotEmpty) ...[
+        if (_isAnyBusy || _importResult.isNotEmpty) ...[
           const SizedBox(height: 24),
           Card(
-            color: _isImporting ? Colors.blue.shade50 : (_importResult.contains('Error') || (_importResult.contains('Failed: ') && !_importResult.contains('Failed: 0')) ? Colors.orange.shade50 : Colors.green.shade50),
+            color: _isAnyBusy
+                ? Colors.blue.shade50
+                : (_importResult.contains('Error') || (_importResult.contains('Failed: ') && !_importResult.contains('Failed: 0'))
+                    ? Colors.orange.shade50
+                    : Colors.green.shade50),
             child: Padding(
               padding: const EdgeInsets.all(16.0),
               child: Column(
@@ -768,10 +781,10 @@ class _DataImportViewState extends ConsumerState<DataImportView> {
                 children: [
                   Row(
                     children: [
-                      if (_isImporting) const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)),
-                      if (_isImporting) const SizedBox(width: 8),
+                      if (_isAnyBusy) const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)),
+                      if (_isAnyBusy) const SizedBox(width: 8),
                       Text(
-                        _isImporting ? 'Processing...' : 'Result',
+                        _isAnyBusy ? 'Processing...' : 'Result',
                         style: GoogleFonts.poppins(fontWeight: FontWeight.bold),
                       ),
                     ],

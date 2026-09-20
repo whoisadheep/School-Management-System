@@ -325,6 +325,16 @@ class ImportService {
     String? currentStaffCode;
     final bool autoStaffCode = !mapping.containsKey('staff_code');
 
+    // Pre-load all departments to resolve names to IDs and satisfy foreign key constraints
+    final Map<String, String> deptMap = {}; // lowercase name or id -> department id
+    try {
+      final existingDepartments = await dbService.getAllDepartments();
+      for (final d in existingDepartments) {
+        deptMap[d.id.toLowerCase()] = d.id;
+        deptMap[d.name.toLowerCase()] = d.id;
+      }
+    } catch (_) {}
+
     for (var i = 0; i < rows.length; i++) {
       final row = rows[i];
       try {
@@ -363,20 +373,20 @@ class ImportService {
           }
         }
 
-        // Role normalization
-        String roleInput = getValue('role').toLowerCase();
+        // Role normalization (must be one of: 'teacher', 'admin', 'support_staff', 'driver')
+        String roleInput = getValue('role').toLowerCase().trim();
         String role = 'teacher';
-        if (roleInput.contains('teach') ||
-            roleInput.contains('faculty') ||
-            roleInput.contains('educator') ||
-            roleInput.contains('lecturer') ||
-            roleInput.contains('instructor')) {
-          role = 'teacher';
-        } else if (roleInput.contains('princ') ||
+        if (roleInput.contains('admin') ||
+            roleInput.contains('princ') ||
             roleInput.contains('head') ||
             roleInput.contains('director') ||
-            roleInput.contains('admin')) {
-          role = 'principal';
+            roleInput.contains('account') ||
+            roleInput.contains('clerk') ||
+            roleInput.contains('manager') ||
+            roleInput.contains('coord') ||
+            roleInput.contains('dean') ||
+            roleInput.contains('office')) {
+          role = 'admin';
         } else if (roleInput.contains('drive')) {
           role = 'driver';
         } else if (roleInput.contains('support') ||
@@ -385,11 +395,56 @@ class ImportService {
             roleInput.contains('clean') ||
             roleInput.contains('guard') ||
             roleInput.contains('security') ||
-            roleInput.contains('clerk') ||
-            roleInput.contains('attendant')) {
+            roleInput.contains('attendant') ||
+            roleInput.contains('helper') ||
+            roleInput.contains('maid') ||
+            roleInput.contains('worker')) {
           role = 'support_staff';
-        } else if (roleInput.isNotEmpty) {
-          role = roleInput;
+        } else {
+          role = 'teacher';
+        }
+
+        // Designation: if not explicitly mapped, or if role had special title (e.g. Principal), keep it
+        String? designation = getValue('designation').isNotEmpty ? getValue('designation') : null;
+        if (designation == null) {
+          final originalRole = getValue('role').trim();
+          if (originalRole.isNotEmpty && originalRole.toLowerCase() != role) {
+            designation = originalRole;
+          }
+        }
+
+        // Department ID: resolve name to UUID in departments table (or create if not existing)
+        String? departmentId;
+        final deptValue = getValue('department_id').trim();
+        if (deptValue.isNotEmpty) {
+          final lowerDept = deptValue.toLowerCase();
+          if (deptMap.containsKey(lowerDept)) {
+            departmentId = deptMap[lowerDept];
+          } else {
+            try {
+              final newDept = Department(
+                id: const Uuid().v4(),
+                name: deptValue,
+                createdAt: DateTime.now(),
+              );
+              await dbService.insertDepartment(newDept);
+              deptMap[lowerDept] = newDept.id;
+              deptMap[newDept.id.toLowerCase()] = newDept.id;
+              departmentId = newDept.id;
+            } catch (_) {
+              // If insert fails (e.g. duplicate name in DB), re-fetch and try matching
+              try {
+                final reloaded = await dbService.getAllDepartments();
+                for (final d in reloaded) {
+                  deptMap[d.id.toLowerCase()] = d.id;
+                  deptMap[d.name.toLowerCase()] = d.id;
+                }
+                departmentId = deptMap[lowerDept];
+              } catch (_) {
+                departmentId = null;
+              }
+            }
+          }
         }
 
         // Salary parsing
@@ -408,7 +463,7 @@ class ImportService {
 
         // Gender normalization
         String? gender;
-        final rawGender = getValue('gender').toLowerCase();
+        final rawGender = getValue('gender').toLowerCase().trim();
         if (rawGender.startsWith('m')) {
           gender = 'male';
         } else if (rawGender.startsWith('f')) {
@@ -432,8 +487,8 @@ class ImportService {
           gender: gender,
           bloodGroup: getValue('blood_group').isNotEmpty ? getValue('blood_group') : null,
           role: role,
-          departmentId: getValue('department_id').isNotEmpty ? getValue('department_id') : null,
-          designation: getValue('designation').isNotEmpty ? getValue('designation') : null,
+          departmentId: departmentId,
+          designation: designation,
           joiningDate: joiningDate,
           qualification: getValue('qualification').isNotEmpty ? getValue('qualification') : null,
           experienceYears: experienceYears ?? 0,
@@ -454,7 +509,18 @@ class ImportService {
         await dbService.insertStaff(staff);
         success++;
       } catch (e) {
-        errors.add("Row ${i + 2}: $e");
+        final errorMsg = e.toString();
+        if (errorMsg.contains('UNIQUE constraint failed: staff.email')) {
+          errors.add("Row ${i + 2}: Duplicate email already exists");
+        } else if (errorMsg.contains('UNIQUE constraint failed: staff.phone')) {
+          errors.add("Row ${i + 2}: Duplicate phone number already exists");
+        } else if (errorMsg.contains('UNIQUE constraint failed: staff.staff_code')) {
+          errors.add("Row ${i + 2}: Duplicate employee ID already exists");
+        } else if (errorMsg.contains('FOREIGN KEY constraint failed')) {
+          errors.add("Row ${i + 2}: Department foreign key failed");
+        } else {
+          errors.add("Row ${i + 2}: $e");
+        }
         failure++;
       }
     }
