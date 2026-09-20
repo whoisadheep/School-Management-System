@@ -252,8 +252,8 @@ class _DataImportViewState extends ConsumerState<DataImportView> {
     }
   }
 
-  /// Legacy staff import (no AI mapping needed — simpler schema).
-  Future<void> _importStaff() async {
+  /// Staff import with AI Smart Column Mapper.
+  Future<void> _importStaffWithAI() async {
     try {
       FilePickerResult? result = await FilePicker.platform.pickFiles(
         type: FileType.custom,
@@ -262,14 +262,77 @@ class _DataImportViewState extends ConsumerState<DataImportView> {
 
       if (result == null || result.files.isEmpty) return;
 
+      final file = result.files.first;
+      final dbService = ref.read(databaseServiceProvider);
+      final importService = ImportService(dbService: dbService);
+
+      // Step 1: Extract headers & samples
       setState(() {
-        _isImporting = true;
-        _importResult = 'Importing...';
+        _isAnalyzing = true;
+        _importResult = '';
       });
 
-      final file = result.files.first;
-      final importService = ImportService(dbService: ref.read(databaseServiceProvider));
-      final res = await importService.importStaff(file);
+      final headers = await importService.extractHeaders(file);
+      final sampleRow = await importService.extractSampleRow(file);
+      final rows = await importService.parseFile(file);
+      final totalRows = rows.length;
+
+      if (headers.isEmpty) {
+        setState(() {
+          _isAnalyzing = false;
+          _importResult = 'Error: Could not read headers from the file. Is it empty?';
+        });
+        return;
+      }
+
+      // Step 2: Ask AI to map columns (OpenRouter -> Groq -> Gemini -> Local)
+      final mappingService = ColumnMappingService(dbService);
+      final mappingResponse = await mappingService.mapColumnsWithAI(
+        headers,
+        entityType: ImportEntityType.staff,
+      );
+
+      setState(() {
+        _isAnalyzing = false;
+      });
+
+      if (!mounted) return;
+
+      // Step 3: Show review dialog
+      final confirmedMappings = await AIColumnMappingDialog.show(
+        context: context,
+        mappings: mappingResponse.mappings,
+        sampleRow: sampleRow,
+        totalRows: totalRows,
+        entityType: ImportEntityType.staff,
+        providerName: mappingResponse.providerName,
+        model: mappingResponse.model,
+      );
+
+      if (confirmedMappings == null) {
+        // User cancelled
+        return;
+      }
+
+      // Step 4: Build the eduviaKey -> sourceColumn mapping
+      final Map<String, String> finalMapping = {};
+      for (final m in confirmedMappings) {
+        if (m.eduviaFieldKey != 'skip') {
+          finalMapping[m.eduviaFieldKey] = m.sourceHeader;
+        }
+      }
+
+      // Step 5: Run import
+      setState(() {
+        _isImporting = true;
+        _importResult = 'Importing $totalRows staff members...';
+      });
+
+      final res = await importService.importStaffWithMapping(
+        file: file,
+        mapping: finalMapping,
+      );
+
       ref.invalidate(staffListProvider);
       ref.invalidate(dashboardMetricsProvider);
 
@@ -302,7 +365,7 @@ class _DataImportViewState extends ConsumerState<DataImportView> {
                           ),
                         ),
                         Text(
-                          '${res.successCount} staff record${res.successCount == 1 ? '' : 's'} imported.${res.failureCount > 0 ? " (${res.failureCount} failed)" : ""}',
+                          '${res.successCount} staff record${res.successCount == 1 ? '' : 's'} imported through AI Mapper.${res.failureCount > 0 ? " (${res.failureCount} failed)" : ""}',
                           style: GoogleFonts.poppins(
                             fontSize: 12,
                             color: Colors.white.withValues(alpha: 0.95),
@@ -337,7 +400,7 @@ class _DataImportViewState extends ConsumerState<DataImportView> {
                   const SizedBox(width: 12),
                   Expanded(
                     child: Text(
-                      'No staff records imported. ${res.failureCount} failed validation.',
+                      'No staff records imported. ${res.failureCount} record(s) failed validation.',
                       style: GoogleFonts.poppins(fontSize: 13, color: Colors.white),
                     ),
                   ),
@@ -378,6 +441,7 @@ class _DataImportViewState extends ConsumerState<DataImportView> {
     } finally {
       setState(() {
         _isImporting = false;
+        _isAnalyzing = false;
       });
     }
   }
@@ -573,31 +637,99 @@ class _DataImportViewState extends ConsumerState<DataImportView> {
           children: [
             Row(
               children: [
-                const Icon(Icons.people, size: 32, color: AppTheme.primaryPurple),
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: AppTheme.primaryPurple.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: const Icon(Icons.people_rounded, size: 28, color: AppTheme.primaryPurple),
+                ),
                 const SizedBox(width: 16),
-                Text('Import Staff', style: GoogleFonts.poppins(fontSize: 18, fontWeight: FontWeight.bold, color: AppTheme.textPrimary)),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Text('Import Staff', style: GoogleFonts.poppins(fontSize: 18, fontWeight: FontWeight.bold, color: AppTheme.textPrimary)),
+                          const SizedBox(width: 10),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: AppTheme.primaryPurple.withValues(alpha: 0.1),
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const Icon(Icons.auto_fix_high_rounded, size: 12, color: AppTheme.primaryPurple),
+                                const SizedBox(width: 4),
+                                Text(
+                                  'AI Smart Mapper',
+                                  style: GoogleFonts.poppins(fontSize: 10, fontWeight: FontWeight.w600, color: AppTheme.primaryPurple),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
               ],
             ),
             const SizedBox(height: 16),
             Text(
-              '1. Download the template CSV.\n2. Fill in your data matching the columns.\n3. Upload the filled file (.csv or .xlsx).',
-              style: GoogleFonts.poppins(color: AppTheme.textSecondary, fontSize: 13),
+              'Upload any CSV or Excel file — our AI will automatically detect and map your staff columns to Eduvia fields.\n'
+              'No need to match exact column names! Review the mapping before importing.',
+              style: GoogleFonts.poppins(color: AppTheme.textSecondary, fontSize: 13, height: 1.5),
+            ),
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: const Color(0xFFF0FDF4),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: const Color(0xFFBBF7D0)),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.shield_rounded, size: 16, color: Color(0xFF16A34A)),
+                  const SizedBox(width: 8),
+                  Flexible(
+                    child: Text(
+                      '🔒 Only column headers are sent to AI — zero staff data leaves your device.',
+                      style: GoogleFonts.poppins(fontSize: 11, color: const Color(0xFF166534), fontWeight: FontWeight.w500),
+                    ),
+                  ),
+                ],
+              ),
             ),
             const SizedBox(height: 16),
             Row(
               children: [
                 OutlinedButton.icon(
-                  onPressed: _isImporting ? null : () => _downloadTemplate('staff'),
+                  onPressed: (_isImporting || _isAnalyzing) ? null : () => _downloadTemplate('staff'),
                   icon: const Icon(Icons.download, size: 16),
                   label: Text('Download Template', style: GoogleFonts.poppins(fontWeight: FontWeight.w500, fontSize: 12)),
                   style: OutlinedButton.styleFrom(foregroundColor: AppTheme.primaryPurple),
                 ),
                 const SizedBox(width: 16),
                 ElevatedButton.icon(
-                  onPressed: _isImporting ? null : _importStaff,
-                  icon: const Icon(Icons.upload_file, size: 16),
-                  label: Text('Import Data', style: GoogleFonts.poppins(fontWeight: FontWeight.w600, fontSize: 12)),
-                  style: ElevatedButton.styleFrom(backgroundColor: AppTheme.primaryPurple, foregroundColor: Colors.white),
+                  onPressed: (_isImporting || _isAnalyzing) ? null : _importStaffWithAI,
+                  icon: _isAnalyzing
+                      ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                      : const Icon(Icons.auto_fix_high_rounded, size: 16),
+                  label: Text(
+                    _isAnalyzing ? 'AI Analyzing...' : 'Import with AI Mapper',
+                    style: GoogleFonts.poppins(fontWeight: FontWeight.w600, fontSize: 12),
+                  ),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppTheme.primaryPurple,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                  ),
                 ),
               ],
             ),

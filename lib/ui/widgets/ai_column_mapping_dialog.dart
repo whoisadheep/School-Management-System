@@ -12,6 +12,7 @@ class AIColumnMappingDialog extends StatefulWidget {
   final List<ColumnMapping> mappings;
   final List<String> sampleRow;
   final int totalRows;
+  final ImportEntityType entityType;
 
   final String? providerName;
   final String? model;
@@ -21,6 +22,7 @@ class AIColumnMappingDialog extends StatefulWidget {
     required this.mappings,
     required this.sampleRow,
     required this.totalRows,
+    this.entityType = ImportEntityType.student,
     this.providerName,
     this.model,
   });
@@ -31,6 +33,7 @@ class AIColumnMappingDialog extends StatefulWidget {
     required List<ColumnMapping> mappings,
     required List<String> sampleRow,
     required int totalRows,
+    ImportEntityType entityType = ImportEntityType.student,
     String? providerName,
     String? model,
   }) {
@@ -41,6 +44,7 @@ class AIColumnMappingDialog extends StatefulWidget {
         mappings: mappings,
         sampleRow: sampleRow,
         totalRows: totalRows,
+        entityType: entityType,
         providerName: providerName,
         model: model,
       ),
@@ -53,22 +57,24 @@ class AIColumnMappingDialog extends StatefulWidget {
 
 class _AIColumnMappingDialogState extends State<AIColumnMappingDialog> {
   late List<ColumnMapping> _mappings;
-  bool _autoGenerateAdmissionNo = false;
+  bool _autoGenerateId = false;
 
   @override
   void initState() {
     super.initState();
     _mappings = List.from(widget.mappings);
 
-    // Check if any column is mapped to admission_number
-    final hasAdmissionMapping = _mappings.any((m) => m.eduviaFieldKey == 'admission_number');
-    _autoGenerateAdmissionNo = !hasAdmissionMapping;
+    // Check if any column is mapped to the entity's ID field
+    final idFieldKey = widget.entityType == ImportEntityType.staff ? 'staff_code' : 'admission_number';
+    final hasIdMapping = _mappings.any((m) => m.eduviaFieldKey == idFieldKey);
+    _autoGenerateId = !hasIdMapping;
   }
 
   int get _mappedCount => _mappings.where((m) => m.eduviaFieldKey != 'skip').length;
   int get _skippedCount => _mappings.where((m) => m.eduviaFieldKey == 'skip').length;
   bool get _hasFirstName => _mappings.any((m) => m.eduviaFieldKey == 'first_name' || m.eduviaFieldKey == 'full_name');
   bool get _hasClass => _mappings.any((m) => m.eduviaFieldKey == 'class');
+  bool get _isValid => widget.entityType == ImportEntityType.staff ? _hasFirstName : (_hasFirstName && _hasClass);
 
   Color _confidenceColor(double confidence) {
     if (confidence >= 0.8) return const Color(0xFF16A34A);
@@ -117,12 +123,12 @@ class _AIColumnMappingDialogState extends State<AIColumnMappingDialog> {
             Padding(
               padding: const EdgeInsets.only(right: 16),
               child: ElevatedButton.icon(
-                onPressed: (_hasFirstName && _hasClass)
+                onPressed: _isValid
                     ? () => Navigator.of(context).pop(_mappings)
                     : null,
                 icon: const Icon(Icons.check_rounded, size: 18),
                 label: Text(
-                  'Confirm & Import ${widget.totalRows} Students',
+                  'Confirm & Import ${widget.totalRows} ${widget.entityType == ImportEntityType.staff ? 'Staff' : 'Students'}',
                   style: GoogleFonts.poppins(fontWeight: FontWeight.w600, fontSize: 12),
                 ),
                 style: ElevatedButton.styleFrom(
@@ -158,24 +164,26 @@ class _AIColumnMappingDialogState extends State<AIColumnMappingDialog> {
                   const SizedBox(width: 16),
                   _buildStatChip(Icons.table_rows_rounded, '${widget.totalRows} Rows', AppTheme.primaryPurple),
                   const Spacer(),
-                  // Auto-generate admission number toggle
+                  // Auto-generate ID toggle
                   Row(
                     children: [
                       Text(
-                        'Auto-generate Admission No. (0001, 0002...)',
+                        widget.entityType == ImportEntityType.staff
+                            ? 'Auto-generate Employee ID (EMP-YYYY-XXX)'
+                            : 'Auto-generate Admission No. (0001, 0002...)',
                         style: GoogleFonts.poppins(fontSize: 12, color: AppTheme.textSecondary),
                       ),
                       const SizedBox(width: 8),
                       Switch(
-                        value: _autoGenerateAdmissionNo,
+                        value: _autoGenerateId,
                         activeTrackColor: AppTheme.primaryPurple,
                         onChanged: (val) {
                           setState(() {
-                            _autoGenerateAdmissionNo = val;
+                            _autoGenerateId = val;
                             if (val) {
-                              // Remove any existing admission_number mapping
+                              final targetKey = widget.entityType == ImportEntityType.staff ? 'staff_code' : 'admission_number';
                               for (final m in _mappings) {
-                                if (m.eduviaFieldKey == 'admission_number') {
+                                if (m.eduviaFieldKey == targetKey) {
                                   m.eduviaFieldKey = 'skip';
                                 }
                               }
@@ -190,7 +198,7 @@ class _AIColumnMappingDialogState extends State<AIColumnMappingDialog> {
             ),
 
             // Validation warnings
-            if (!_hasFirstName || !_hasClass)
+            if (!_isValid)
               Container(
                 width: double.infinity,
                 color: const Color(0xFFFEF3C7),
@@ -200,11 +208,13 @@ class _AIColumnMappingDialogState extends State<AIColumnMappingDialog> {
                     const Icon(Icons.warning_amber_rounded, color: Color(0xFFD97706), size: 18),
                     const SizedBox(width: 10),
                     Text(
-                      !_hasFirstName && !_hasClass
-                          ? 'Required: Map at least "First Name" (or "Full Name") and "Class / Grade" to import.'
-                          : !_hasFirstName
-                              ? 'Required: Map a column to "First Name" or "Full Name".'
-                              : 'Required: Map a column to "Class / Grade".',
+                      widget.entityType == ImportEntityType.staff
+                          ? 'Required: Map at least "First Name" (or "Full Name") to import staff.'
+                          : (!_hasFirstName && !_hasClass)
+                              ? 'Required: Map at least "First Name" (or "Full Name") and "Class / Grade" to import.'
+                              : !_hasFirstName
+                                  ? 'Required: Map a column to "First Name" or "Full Name".'
+                                  : 'Required: Map a column to "Class / Grade".',
                       style: GoogleFonts.poppins(fontSize: 12, color: const Color(0xFF92400E), fontWeight: FontWeight.w500),
                     ),
                   ],
@@ -221,7 +231,7 @@ class _AIColumnMappingDialogState extends State<AIColumnMappingDialog> {
                   const Icon(Icons.shield_rounded, color: Color(0xFF2563EB), size: 16),
                   const SizedBox(width: 8),
                   Text(
-                    '🔒 Only column headers were sent to AI — zero student data was shared.',
+                    '🔒 Only column headers were sent to AI — zero ${widget.entityType == ImportEntityType.staff ? 'staff' : 'student'} data was shared.',
                     style: GoogleFonts.poppins(fontSize: 11, color: const Color(0xFF1E40AF), fontWeight: FontWeight.w500),
                   ),
                 ],
@@ -368,7 +378,10 @@ class _AIColumnMappingDialogState extends State<AIColumnMappingDialog> {
                                           isExpanded: true,
                                           icon: const Icon(Icons.arrow_drop_down_rounded, size: 20),
                                           style: GoogleFonts.poppins(fontSize: 12, color: AppTheme.textPrimary),
-                                          items: EduviaField.studentFields.map((field) {
+                                          items: (widget.entityType == ImportEntityType.staff
+                                                  ? EduviaField.staffFields
+                                                  : EduviaField.studentFields)
+                                              .map((field) {
                                             return DropdownMenuItem(
                                               value: field.key,
                                               child: Row(
@@ -395,8 +408,9 @@ class _AIColumnMappingDialogState extends State<AIColumnMappingDialog> {
                                             if (val != null) {
                                               setState(() {
                                                 mapping.eduviaFieldKey = val;
-                                                if (val == 'admission_number') {
-                                                  _autoGenerateAdmissionNo = false;
+                                                final idFieldKey = widget.entityType == ImportEntityType.staff ? 'staff_code' : 'admission_number';
+                                                if (val == idFieldKey) {
+                                                  _autoGenerateId = false;
                                                 }
                                               });
                                             }

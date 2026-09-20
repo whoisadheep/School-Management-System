@@ -308,23 +308,167 @@ class ImportService {
 
     return ImportResult(successCount: success, failureCount: failure, errors: errors);
   }
-  
-  DateTime? _parseDate(String? dateStr) {
-    if (dateStr == null || dateStr.trim().isEmpty) return null;
-    try {
-      return DateTime.parse(dateStr.trim());
-    } catch (e) {
-      return null;
+
+  /// Import staff using AI-confirmed column mappings.
+  /// [mapping] is a map of eduviaFieldKey -> sourceColumnHeader.
+  /// If staff_code key is absent or empty, employee codes are auto-generated.
+  Future<ImportResult> importStaffWithMapping({
+    required PlatformFile file,
+    required Map<String, String> mapping,
+  }) async {
+    final rows = await parseFile(file);
+    int success = 0;
+    int failure = 0;
+    List<String> errors = [];
+
+    // Track sequential staff code generation
+    String? currentStaffCode;
+    final bool autoStaffCode = !mapping.containsKey('staff_code');
+
+    for (var i = 0; i < rows.length; i++) {
+      final row = rows[i];
+      try {
+        String getValue(String eduviaKey) {
+          final sourceCol = mapping[eduviaKey];
+          if (sourceCol == null) return '';
+          return row[sourceCol]?.toString().trim() ?? '';
+        }
+
+        // Handle full_name -> first + last split
+        String firstName = getValue('first_name');
+        String lastName = getValue('last_name');
+        if (firstName.isEmpty && mapping.containsKey('full_name')) {
+          final fullName = getValue('full_name');
+          final parts = fullName.split(RegExp(r'\s+'));
+          if (parts.isNotEmpty) firstName = parts.first;
+          if (parts.length > 1) lastName = parts.sublist(1).join(' ');
+        }
+
+        if (firstName.isEmpty) {
+          errors.add("Row ${i + 2}: Missing required field: First Name (or Full Name)");
+          failure++;
+          continue;
+        }
+
+        // Staff Code / Employee ID
+        String staffCode;
+        if (autoStaffCode) {
+          currentStaffCode = await dbService.generateNextStaffCode(afterCode: currentStaffCode);
+          staffCode = currentStaffCode;
+        } else {
+          staffCode = getValue('staff_code');
+          if (staffCode.isEmpty) {
+            currentStaffCode = await dbService.generateNextStaffCode(afterCode: currentStaffCode);
+            staffCode = currentStaffCode;
+          }
+        }
+
+        // Role normalization
+        String roleInput = getValue('role').toLowerCase();
+        String role = 'teacher';
+        if (roleInput.contains('teach') ||
+            roleInput.contains('faculty') ||
+            roleInput.contains('educator') ||
+            roleInput.contains('lecturer') ||
+            roleInput.contains('instructor')) {
+          role = 'teacher';
+        } else if (roleInput.contains('princ') ||
+            roleInput.contains('head') ||
+            roleInput.contains('director') ||
+            roleInput.contains('admin')) {
+          role = 'principal';
+        } else if (roleInput.contains('drive')) {
+          role = 'driver';
+        } else if (roleInput.contains('support') ||
+            roleInput.contains('peon') ||
+            roleInput.contains('staff') ||
+            roleInput.contains('clean') ||
+            roleInput.contains('guard') ||
+            roleInput.contains('security') ||
+            roleInput.contains('clerk') ||
+            roleInput.contains('attendant')) {
+          role = 'support_staff';
+        } else if (roleInput.isNotEmpty) {
+          role = roleInput;
+        }
+
+        // Salary parsing
+        double? basicSalary;
+        final rawSalary = getValue('basic_salary').replaceAll(RegExp(r'[^0-9.]'), '');
+        if (rawSalary.isNotEmpty) {
+          basicSalary = double.tryParse(rawSalary);
+        }
+
+        // Experience parsing
+        int? experienceYears;
+        final rawExp = getValue('experience_years').replaceAll(RegExp(r'[^0-9]'), '');
+        if (rawExp.isNotEmpty) {
+          experienceYears = int.tryParse(rawExp);
+        }
+
+        // Gender normalization
+        String? gender;
+        final rawGender = getValue('gender').toLowerCase();
+        if (rawGender.startsWith('m')) {
+          gender = 'male';
+        } else if (rawGender.startsWith('f')) {
+          gender = 'female';
+        } else if (rawGender.isNotEmpty) {
+          gender = 'other';
+        }
+
+        // Joining Date
+        String joiningDate = getValue('joining_date');
+        if (joiningDate.isEmpty) {
+          joiningDate = DateTime.now().toIso8601String().substring(0, 10);
+        }
+
+        final staff = Staff(
+          id: const Uuid().v4(),
+          staffCode: staffCode,
+          firstName: firstName,
+          lastName: lastName,
+          dob: getValue('dob').isNotEmpty ? getValue('dob') : null,
+          gender: gender,
+          bloodGroup: getValue('blood_group').isNotEmpty ? getValue('blood_group') : null,
+          role: role,
+          departmentId: getValue('department_id').isNotEmpty ? getValue('department_id') : null,
+          designation: getValue('designation').isNotEmpty ? getValue('designation') : null,
+          joiningDate: joiningDate,
+          qualification: getValue('qualification').isNotEmpty ? getValue('qualification') : null,
+          experienceYears: experienceYears ?? 0,
+          phone: getValue('phone').isNotEmpty ? getValue('phone') : null,
+          email: getValue('email').isNotEmpty ? getValue('email') : null,
+          address: getValue('address').isNotEmpty ? getValue('address') : null,
+          emergencyContact: getValue('emergency_contact').isNotEmpty ? getValue('emergency_contact') : null,
+          basicSalary: basicSalary,
+          bankAccountNumber: getValue('bank_account_number').isNotEmpty ? getValue('bank_account_number') : null,
+          bankIfsc: getValue('bank_ifsc').isNotEmpty ? getValue('bank_ifsc') : null,
+          panNumber: getValue('pan_number').isNotEmpty ? getValue('pan_number') : null,
+          aadhaarNumber: getValue('aadhaar_number').isNotEmpty ? getValue('aadhaar_number') : null,
+          isActive: true,
+          createdAt: DateTime.now(),
+          updatedAt: DateTime.now(),
+        );
+
+        await dbService.insertStaff(staff);
+        success++;
+      } catch (e) {
+        errors.add("Row ${i + 2}: $e");
+        failure++;
+      }
     }
+
+    return ImportResult(successCount: success, failureCount: failure, errors: errors);
   }
   
   String generateStudentTemplateCSV() {
-    return "Admission Number,Roll Number,First Name,Last Name,Date of Birth,Gender,Blood Group,Religion,Category,Aadhar Number,Class,Section,Admission Date,Father Name,Mother Name,Guardian Name,Contact Number 1,Contact Number 2,Email,Current Address,Permanent Address,Medical History\n" +
+    return "Admission Number,Roll Number,First Name,Last Name,Date of Birth,Gender,Blood Group,Religion,Category,Aadhar Number,Class,Section,Admission Date,Father Name,Mother Name,Guardian Name,Contact Number 1,Contact Number 2,Email,Current Address,Permanent Address,Medical History\n"
            "STD001,101,John,Doe,2010-05-15,male,O+,Christian,General,123456789012,10,A,2023-04-01,Richard Doe,Jane Doe,,9876543210,,johndoe@example.com,123 Main St,123 Main St,None";
   }
 
   String generateStaffTemplateCSV() {
-    return "Employee ID,First Name,Last Name,Role,Department ID,Date of Birth,Gender,Joining Date,Qualification,Experience Years,Contact Number,Email,Address,Basic Salary\n" +
+    return "Employee ID,First Name,Last Name,Role,Department ID,Date of Birth,Gender,Joining Date,Qualification,Experience Years,Contact Number,Email,Address,Basic Salary\n"
            "EMP001,Alice,Smith,teacher,,1985-08-22,female,2020-01-15,M.Sc. B.Ed,5,9876543210,alice@example.com,456 Elm St,50000";
   }
 }
