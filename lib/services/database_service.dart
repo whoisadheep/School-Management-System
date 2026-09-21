@@ -1823,11 +1823,83 @@ class DatabaseService {
     return await _deleteLogged(db, 'classes', where: 'id = ?', whereArgs: [id]);
   }
 
+  /// Get all sections across all classes
+  Future<List<Section>> getAllSections() async {
+    final db = await _db;
+    final results = await db.query('sections', orderBy: 'class_id ASC, name ASC');
+    return results.map((m) => Section.fromMap(m)).toList();
+  }
+
   /// Get sections for a class
   Future<List<Section>> getSectionsForClass(String classId) async {
     final db = await _db;
     final results = await db.query('sections', where: 'class_id = ?', whereArgs: [classId], orderBy: 'name ASC');
     return results.map((m) => Section.fromMap(m)).toList();
+  }
+
+  /// Get student counts for all sections in a single batched query
+  Future<Map<String, int>> getAllSectionStudentCounts() async {
+    final db = await _db;
+    final results = await db.rawQuery('''
+      SELECT 
+        sec.id as sec_id,
+        COUNT(s.id) as cnt
+      FROM sections sec
+      LEFT JOIN classes c ON sec.class_id = c.id
+      LEFT JOIN students s ON s.is_active = 1 AND (
+        s.section_id = sec.id
+        OR (
+          (s.section_id IS NULL OR s.section_id = '')
+          AND (
+            s.class_id = sec.class_id
+            OR LOWER(TRIM(s.grade_level)) = LOWER(TRIM(c.name))
+            OR LOWER(TRIM(s.grade_level)) = LOWER(TRIM(REPLACE(c.name, 'Grade ', '')))
+            OR LOWER(TRIM(s.grade_level)) = LOWER(TRIM(REPLACE(c.name, 'Class ', '')))
+            OR LOWER(TRIM(c.name)) = 'grade ' || LOWER(TRIM(s.grade_level))
+            OR LOWER(TRIM(c.name)) = 'class ' || LOWER(TRIM(s.grade_level))
+          )
+          AND UPPER(TRIM(COALESCE(s.section, 'A'))) = UPPER(TRIM(sec.name))
+        )
+      )
+      GROUP BY sec.id
+    ''');
+    final map = <String, int>{};
+    for (final row in results) {
+      final id = row['sec_id'] as String?;
+      if (id != null) {
+        map[id] = (row['cnt'] as num?)?.toInt() ?? 0;
+      }
+    }
+    return map;
+  }
+
+  /// Get student counts for all classes in a single batched query
+  Future<Map<String, int>> getAllClassStudentCounts() async {
+    final db = await _db;
+    final results = await db.rawQuery('''
+      SELECT 
+        c.id as cls_id,
+        COUNT(s.id) as cnt
+      FROM classes c
+      LEFT JOIN students s ON s.is_active = 1 AND (
+        s.class_id = c.id
+        OR s.section_id IN (SELECT id FROM sections WHERE class_id = c.id)
+        OR LOWER(TRIM(s.grade_level)) = LOWER(TRIM(c.name))
+        OR LOWER(TRIM(s.grade_level)) = LOWER(TRIM(REPLACE(c.name, 'Grade ', '')))
+        OR LOWER(TRIM(s.grade_level)) = LOWER(TRIM(REPLACE(c.name, 'Class ', '')))
+        OR LOWER(TRIM(c.name)) = 'grade ' || LOWER(TRIM(s.grade_level))
+        OR LOWER(TRIM(c.name)) = 'class ' || LOWER(TRIM(s.grade_level))
+      )
+      GROUP BY c.id
+    ''');
+    final map = <String, int>{};
+    for (final row in results) {
+      final id = row['cls_id'] as String?;
+      if (id != null) {
+        map[id] = (row['cnt'] as num?)?.toInt() ?? 0;
+      }
+    }
+    return map;
   }
 
   /// Create section
@@ -1935,6 +2007,16 @@ class DatabaseService {
   // ============================================================================
   // CLASS SUBJECTS CRUD OPERATIONS
   // ============================================================================
+
+  /// Get all class subjects across all classes
+  Future<List<ClassSubject>> getAllClassSubjects() async {
+    final db = await _db;
+    final results = await db.query(
+      'class_subjects',
+      orderBy: 'class_id ASC, subject_name ASC',
+    );
+    return results.map((m) => ClassSubject.fromMap(m)).toList();
+  }
 
   /// Get all subjects configured for a specific class ID
   Future<List<ClassSubject>> getSubjectsForClass(String classId) async {

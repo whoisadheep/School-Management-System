@@ -380,6 +380,10 @@ class _ClassSectionSetupViewState extends ConsumerState<ClassSectionSetupView> {
   Widget build(BuildContext context) {
     final classesAsync = ref.watch(classListProvider);
     final staffAsync = ref.watch(staffListProvider);
+    final sectionsAsync = ref.watch(allSectionsProvider);
+    final subjectsAsync = ref.watch(allClassSubjectsProvider);
+    final sectionCountsAsync = ref.watch(allSectionStudentCountsProvider);
+    final classCountsAsync = ref.watch(allClassStudentCountsProvider);
 
     return Scaffold(
       backgroundColor: AppTheme.bgSurface,
@@ -450,130 +454,47 @@ class _ClassSectionSetupViewState extends ConsumerState<ClassSectionSetupView> {
           ),
 
           // Academic Year Filter
-
-
           Padding(
-
-
             padding: const EdgeInsets.fromLTRB(32, 24, 32, 0),
-
-
             child: Row(
-
-
               children: [
-
-
                 const Icon(Icons.filter_list_rounded, color: AppTheme.primaryPurple, size: 20),
-
-
                 const SizedBox(width: 8),
-
-
                 Text('Filter by Academic Year:', style: GoogleFonts.poppins(fontWeight: FontWeight.w600, color: AppTheme.textPrimary)),
-
-
                 const SizedBox(width: 16),
-
-
                 Container(
-
-
                   width: 200,
-
-
                   padding: const EdgeInsets.symmetric(horizontal: 16),
-
-
                   decoration: BoxDecoration(
-
-
                     color: Colors.white,
-
-
                     borderRadius: BorderRadius.circular(8),
-
-
                     border: Border.all(color: AppTheme.divider),
-
-
                   ),
-
-
                   child: DropdownButtonHideUnderline(
-
-
                     child: classesAsync.when(
-
-
                       data: (classes) {
-
-
                         final years = classes.map((c) => c.academicYear).where((y) => y != null).map((y) => y!).toSet().toList()..sort();
-
-
                         return DropdownButton<String>(
-
-
                           value: _selectedAcademicYear,
-
-
                           isExpanded: true,
-
-
                           icon: const Icon(Icons.keyboard_arrow_down_rounded, color: AppTheme.textSecondary),
-
-
                           items: [
-
-
                             const DropdownMenuItem(value: 'All', child: Text('All Sessions')),
-
-
                             ...years.map((y) => DropdownMenuItem(value: y, child: Text(y))),
-
-
                           ],
-
-
                           onChanged: (val) {
-
-
                             if (val != null) setState(() => _selectedAcademicYear = val);
-
-
                           },
-
-
                         );
-
-
                       },
-
-
                       loading: () => const SizedBox(height: 48, child: Center(child: CircularProgressIndicator())),
-
-
                       error: (_, __) => const Text('Error'),
-
-
                     ),
-
-
                   ),
-
-
                 ),
-
-
               ],
-
-
             ),
-
-
           ),
-
 
           // Main Content List
           Expanded(
@@ -607,10 +528,28 @@ class _ClassSectionSetupViewState extends ConsumerState<ClassSectionSetupView> {
                     );
                   }
 
+                  final allSections = sectionsAsync.value ?? [];
+                  final allSubjects = subjectsAsync.value ?? [];
+                  final sectionCounts = sectionCountsAsync.value ?? {};
+                  final classCounts = classCountsAsync.value ?? {};
+                  final staffList = staffAsync.value ?? [];
+
+                  final Map<String, List<Section>> sectionsByClass = {};
+                  for (final sec in allSections) {
+                    sectionsByClass.putIfAbsent(sec.classId, () => []).add(sec);
+                  }
+
+                  final Map<String, List<ClassSubject>> subjectsByClass = {};
+                  for (final sub in allSubjects) {
+                    subjectsByClass.putIfAbsent(sub.classId, () => []).add(sub);
+                  }
+
                   return Column(
                     children: classes.where((c) => _selectedAcademicYear == 'All' || c.academicYear == _selectedAcademicYear).map((classModel) {
                       final isExpanded = _expandedClasses[classModel.id] ?? true;
-                      final sectionsAsync = ref.watch(sectionsForClassProvider(classModel.id));
+                      final sections = sectionsByClass[classModel.id] ?? [];
+                      final subjects = subjectsByClass[classModel.id] ?? [];
+                      final enrolledClassCount = classCounts[classModel.id] ?? 0;
 
                       return Container(
                         margin: const EdgeInsets.only(bottom: 16),
@@ -662,318 +601,280 @@ class _ClassSectionSetupViewState extends ConsumerState<ClassSectionSetupView> {
                                                   fontWeight: FontWeight.bold,
                                                   color: AppTheme.textPrimary)),
                                           const SizedBox(height: 2),
-                                          Consumer(
-                                            builder: (context, ref, _) {
-                                              final classStudentCountAsync = ref.watch(classStudentCountProvider(classModel.id));
-                                              final countText = classStudentCountAsync.when(
-                                                data: (cnt) => '  •  Enrolled: $cnt Students',
-                                                loading: () => '',
-                                                error: (_, __) => '',
-                                              );
-                                              return Text('Academic Year: ${classModel.academicYear ?? "Current"}$countText  •  Default Capacity: ${classModel.capacity ?? 40} Seats',
-                                                  style: GoogleFonts.poppins(fontSize: 12, color: AppTheme.textSecondary));
-                                            },
-                                          ),
+                                          Text('Academic Year: ${classModel.academicYear ?? "Current"}  •  Enrolled: $enrolledClassCount Students  •  Default Capacity: ${classModel.capacity ?? 40} Seats',
+                                              style: GoogleFonts.poppins(fontSize: 12, color: AppTheme.textSecondary)),
                                         ],
                                       ),
                                     ),
-                                     OutlinedButton.icon(
-                                       onPressed: () => _showManageClassSubjectsDialog(context, classModel),
-                                       icon: const Icon(Icons.menu_book_rounded, size: 14),
-                                       label: Text('Subjects', style: GoogleFonts.poppins(fontSize: 11, fontWeight: FontWeight.bold)),
-                                       style: OutlinedButton.styleFrom(
-                                         foregroundColor: AppTheme.primaryPurple,
-                                         side: const BorderSide(color: AppTheme.primaryPurple),
-                                       ),
-                                     ),
-                                     const SizedBox(width: 8),
-                                     OutlinedButton.icon(
-                                       onPressed: () => _showAddEditSectionDialog(context, classModel),
-                                       icon: const Icon(Icons.add_rounded, size: 14),
-                                       label: Text('Add Section', style: GoogleFonts.poppins(fontSize: 11, fontWeight: FontWeight.bold)),
-                                       style: OutlinedButton.styleFrom(
-                                         foregroundColor: AppTheme.primaryPurple,
-                                         side: const BorderSide(color: AppTheme.primaryPurple),
-                                       ),
-                                     ),
-                                     const SizedBox(width: 12),
-                                     IconButton(
-                                       icon: const Icon(Icons.edit_outlined, color: AppTheme.textSecondary, size: 20),
-                                       onPressed: () => _showAddEditClassDialog(context, classModel: classModel),
-                                       tooltip: 'Edit Class',
-                                     ),
-                                     IconButton(
-                                       icon: const Icon(Icons.delete_outline_rounded, color: AppTheme.error, size: 20),
-                                       onPressed: () {
-                                         if (!PermissionHelper.requireAdminRole(context, ref, RiskyAction.deleteRecord)) return;
-                                         _confirmDeleteClass(context, classModel);
-                                       },
-                                       tooltip: 'Delete Class',
-                                     ),
-                                     Icon(isExpanded ? Icons.keyboard_arrow_up_rounded : Icons.keyboard_arrow_down_rounded, color: AppTheme.textSecondary),
-                                   ],
-                                 ),
-                               ),
-                             ),
+                                    OutlinedButton.icon(
+                                      onPressed: () => _showManageClassSubjectsDialog(context, classModel),
+                                      icon: const Icon(Icons.menu_book_rounded, size: 14),
+                                      label: Text('Subjects', style: GoogleFonts.poppins(fontSize: 11, fontWeight: FontWeight.bold)),
+                                      style: OutlinedButton.styleFrom(
+                                        foregroundColor: AppTheme.primaryPurple,
+                                        side: const BorderSide(color: AppTheme.primaryPurple),
+                                      ),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    OutlinedButton.icon(
+                                      onPressed: () => _showAddEditSectionDialog(context, classModel),
+                                      icon: const Icon(Icons.add_rounded, size: 14),
+                                      label: Text('Add Section', style: GoogleFonts.poppins(fontSize: 11, fontWeight: FontWeight.bold)),
+                                      style: OutlinedButton.styleFrom(
+                                        foregroundColor: AppTheme.primaryPurple,
+                                        side: const BorderSide(color: AppTheme.primaryPurple),
+                                      ),
+                                    ),
+                                    const SizedBox(width: 12),
+                                    IconButton(
+                                      icon: const Icon(Icons.edit_outlined, color: AppTheme.textSecondary, size: 20),
+                                      onPressed: () => _showAddEditClassDialog(context, classModel: classModel),
+                                      tooltip: 'Edit Class',
+                                    ),
+                                    IconButton(
+                                      icon: const Icon(Icons.delete_outline_rounded, color: AppTheme.error, size: 20),
+                                      onPressed: () {
+                                        if (!PermissionHelper.requireAdminRole(context, ref, RiskyAction.deleteRecord)) return;
+                                        _confirmDeleteClass(context, classModel);
+                                      },
+                                      tooltip: 'Delete Class',
+                                    ),
+                                    Icon(isExpanded ? Icons.keyboard_arrow_up_rounded : Icons.keyboard_arrow_down_rounded, color: AppTheme.textSecondary),
+                                  ],
+                                ),
+                              ),
+                            ),
 
-                             // Class Content (Expandable: Subjects & Sections)
-                             if (isExpanded) ...[
-                               const Divider(height: 1),
-                               // Class Subjects Section
-                               Padding(
-                                 padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
-                                 child: Column(
-                                   crossAxisAlignment: CrossAxisAlignment.start,
-                                   children: [
-                                     Row(
-                                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                       children: [
-                                         Row(
-                                           children: [
-                                             const Icon(Icons.auto_stories_rounded, size: 18, color: AppTheme.primaryPurple),
-                                             const SizedBox(width: 8),
-                                             Text(
-                                               'Class Subjects Curriculum',
-                                               style: GoogleFonts.poppins(fontSize: 13, fontWeight: FontWeight.bold, color: AppTheme.textPrimary),
-                                             ),
-                                             const SizedBox(width: 8),
-                                             Consumer(
-                                               builder: (context, ref, _) {
-                                                 final subsAsync = ref.watch(classSubjectsProvider(classModel.id));
-                                                 return subsAsync.when(
-                                                   data: (subs) => Container(
-                                                     padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                                                     decoration: BoxDecoration(
-                                                       color: AppTheme.primaryPurple.withValues(alpha: 0.1),
-                                                       borderRadius: BorderRadius.circular(12),
-                                                     ),
-                                                     child: Text(
-                                                       '${subs.length} subjects',
-                                                       style: GoogleFonts.poppins(fontSize: 10, fontWeight: FontWeight.w600, color: AppTheme.primaryPurple),
-                                                     ),
-                                                   ),
-                                                   loading: () => const SizedBox.shrink(),
-                                                   error: (_, __) => const SizedBox.shrink(),
-                                                 );
-                                               },
-                                             ),
-                                           ],
-                                         ),
-                                         TextButton.icon(
-                                           onPressed: () => _showManageClassSubjectsDialog(context, classModel),
-                                           icon: const Icon(Icons.tune_rounded, size: 14),
-                                           label: Text('Manage Subjects', style: GoogleFonts.poppins(fontSize: 11, fontWeight: FontWeight.w600)),
-                                           style: TextButton.styleFrom(foregroundColor: AppTheme.primaryPurple),
-                                         ),
-                                       ],
-                                     ),
-                                     const SizedBox(height: 8),
-                                     Consumer(
-                                       builder: (context, ref, _) {
-                                         final subsAsync = ref.watch(classSubjectsProvider(classModel.id));
-                                         return subsAsync.when(
-                                           data: (subjects) {
-                                             if (subjects.isEmpty) {
-                                               return Container(
-                                                 width: double.infinity,
-                                                 padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                                                 decoration: BoxDecoration(
-                                                   color: AppTheme.bgMain,
-                                                   borderRadius: BorderRadius.circular(8),
-                                                   border: Border.all(color: AppTheme.divider),
-                                                 ),
-                                                 child: Row(
-                                                   children: [
-                                                     const Icon(Icons.info_outline_rounded, size: 16, color: AppTheme.textHint),
-                                                     const SizedBox(width: 8),
-                                                     Expanded(
-                                                       child: Text(
-                                                         'No subjects configured for ${classModel.name} yet. Configure subjects to auto-populate them when creating exams.',
-                                                         style: GoogleFonts.poppins(fontSize: 11, color: AppTheme.textSecondary, fontStyle: FontStyle.italic),
-                                                       ),
-                                                     ),
-                                                     TextButton(
-                                                       onPressed: () => _showManageClassSubjectsDialog(context, classModel),
-                                                       child: const Text('Add Subjects', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
-                                                     ),
-                                                   ],
-                                                 ),
-                                               );
-                                             }
-                                             return Wrap(
-                                               spacing: 8,
-                                               runSpacing: 8,
-                                               children: subjects.map((sub) {
-                                                 return Container(
-                                                   padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                                                   decoration: BoxDecoration(
-                                                     color: AppTheme.bgMain,
-                                                     borderRadius: BorderRadius.circular(8),
-                                                     border: Border.all(color: AppTheme.divider),
-                                                   ),
-                                                   child: Row(
-                                                     mainAxisSize: MainAxisSize.min,
-                                                     children: [
-                                                       const Icon(Icons.menu_book_rounded, size: 14, color: AppTheme.primaryPurple),
-                                                       const SizedBox(width: 6),
-                                                       Text(
-                                                         sub.subjectName,
-                                                         style: GoogleFonts.poppins(fontSize: 12, fontWeight: FontWeight.w600, color: AppTheme.textPrimary),
-                                                       ),
-                                                       const SizedBox(width: 6),
-                                                       Container(
-                                                         padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
-                                                         decoration: BoxDecoration(
-                                                           color: Colors.white,
-                                                           borderRadius: BorderRadius.circular(4),
-                                                           border: Border.all(color: AppTheme.divider),
-                                                         ),
-                                                         child: Text(
-                                                           'Max: ${sub.defaultMaxMarks.toStringAsFixed(0)} | Pass: ${sub.defaultPassMarks.toStringAsFixed(0)}',
-                                                           style: GoogleFonts.poppins(fontSize: 10, color: AppTheme.textSecondary),
-                                                         ),
-                                                       ),
-                                                       const SizedBox(width: 4),
-                                                       InkWell(
-                                                         onTap: () async {
-                                                           final dbService = ref.read(databaseServiceProvider);
-                                                           await dbService.deleteClassSubject(sub.id);
-                                                           ref.invalidate(classSubjectsProvider(classModel.id));
-                                                         },
-                                                         borderRadius: BorderRadius.circular(10),
-                                                         child: const Padding(
-                                                           padding: EdgeInsets.all(2.0),
-                                                           child: Icon(Icons.close, size: 14, color: AppTheme.textSecondary),
-                                                         ),
-                                                       ),
-                                                     ],
-                                                   ),
-                                                 );
-                                               }).toList(),
-                                             );
-                                           },
-                                           loading: () => const LinearProgressIndicator(),
-                                           error: (e, _) => Text('Error loading subjects: $e', style: GoogleFonts.poppins(fontSize: 11, color: AppTheme.error)),
-                                         );
-                                       },
-                                     ),
-                                   ],
-                                 ),
-                               ),
-                               const Divider(height: 1),
+                            // Class Content (Expandable: Subjects & Sections)
+                            if (isExpanded) ...[
+                              const Divider(height: 1),
+                              // Class Subjects Section
+                              Padding(
+                                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Row(
+                                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                      children: [
+                                        Row(
+                                          children: [
+                                            const Icon(Icons.auto_stories_rounded, size: 18, color: AppTheme.primaryPurple),
+                                            const SizedBox(width: 8),
+                                            Text(
+                                              'Class Subjects Curriculum',
+                                              style: GoogleFonts.poppins(fontSize: 13, fontWeight: FontWeight.bold, color: AppTheme.textPrimary),
+                                            ),
+                                            const SizedBox(width: 8),
+                                            Container(
+                                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                              decoration: BoxDecoration(
+                                                color: AppTheme.primaryPurple.withValues(alpha: 0.1),
+                                                borderRadius: BorderRadius.circular(12),
+                                              ),
+                                              child: Text(
+                                                '${subjects.length} subjects',
+                                                style: GoogleFonts.poppins(fontSize: 10, fontWeight: FontWeight.w600, color: AppTheme.primaryPurple),
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                        TextButton.icon(
+                                          onPressed: () => _showManageClassSubjectsDialog(context, classModel),
+                                          icon: const Icon(Icons.tune_rounded, size: 14),
+                                          label: Text('Manage Subjects', style: GoogleFonts.poppins(fontSize: 11, fontWeight: FontWeight.w600)),
+                                          style: TextButton.styleFrom(foregroundColor: AppTheme.primaryPurple),
+                                        ),
+                                      ],
+                                    ),
+                                    const SizedBox(height: 8),
+                                    if (subjects.isEmpty)
+                                      Container(
+                                        width: double.infinity,
+                                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                                        decoration: BoxDecoration(
+                                          color: AppTheme.bgMain,
+                                          borderRadius: BorderRadius.circular(8),
+                                          border: Border.all(color: AppTheme.divider),
+                                        ),
+                                        child: Row(
+                                          children: [
+                                            const Icon(Icons.info_outline_rounded, size: 16, color: AppTheme.textHint),
+                                            const SizedBox(width: 8),
+                                            Expanded(
+                                              child: Text(
+                                                'No subjects configured for ${classModel.name} yet. Configure subjects to auto-populate them when creating exams.',
+                                                style: GoogleFonts.poppins(fontSize: 11, color: AppTheme.textSecondary, fontStyle: FontStyle.italic),
+                                              ),
+                                            ),
+                                            TextButton(
+                                              onPressed: () => _showManageClassSubjectsDialog(context, classModel),
+                                              child: const Text('Add Subjects', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+                                            ),
+                                          ],
+                                        ),
+                                      )
+                                    else
+                                      Wrap(
+                                        spacing: 8,
+                                        runSpacing: 8,
+                                        children: subjects.map((sub) {
+                                          return Container(
+                                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                                            decoration: BoxDecoration(
+                                              color: AppTheme.bgMain,
+                                              borderRadius: BorderRadius.circular(8),
+                                              border: Border.all(color: AppTheme.divider),
+                                            ),
+                                            child: Row(
+                                              mainAxisSize: MainAxisSize.min,
+                                              children: [
+                                                const Icon(Icons.menu_book_rounded, size: 14, color: AppTheme.primaryPurple),
+                                                const SizedBox(width: 6),
+                                                Text(
+                                                  sub.subjectName,
+                                                  style: GoogleFonts.poppins(fontSize: 12, fontWeight: FontWeight.w600, color: AppTheme.textPrimary),
+                                                ),
+                                                const SizedBox(width: 6),
+                                                Container(
+                                                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+                                                  decoration: BoxDecoration(
+                                                    color: Colors.white,
+                                                    borderRadius: BorderRadius.circular(4),
+                                                    border: Border.all(color: AppTheme.divider),
+                                                  ),
+                                                  child: Text(
+                                                    'Max: ${sub.defaultMaxMarks.toStringAsFixed(0)} | Pass: ${sub.defaultPassMarks.toStringAsFixed(0)}',
+                                                    style: GoogleFonts.poppins(fontSize: 10, color: AppTheme.textSecondary),
+                                                  ),
+                                                ),
+                                                const SizedBox(width: 4),
+                                                InkWell(
+                                                  onTap: () async {
+                                                    final dbService = ref.read(databaseServiceProvider);
+                                                    await dbService.deleteClassSubject(sub.id);
+                                                    ref.invalidate(allClassSubjectsProvider);
+                                                    ref.invalidate(classSubjectsProvider(classModel.id));
+                                                  },
+                                                  borderRadius: BorderRadius.circular(10),
+                                                  child: const Padding(
+                                                    padding: EdgeInsets.all(2.0),
+                                                    child: Icon(Icons.close, size: 14, color: AppTheme.textSecondary),
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                          );
+                                        }).toList(),
+                                      ),
+                                  ],
+                                ),
+                              ),
+                              const Divider(height: 1),
                               Padding(
                                 padding: const EdgeInsets.all(20),
-                                child: sectionsAsync.when(
-                                  data: (sections) {
-                                    if (sections.isEmpty) {
-                                      return Padding(
+                                child: sections.isEmpty
+                                    ? Padding(
                                         padding: const EdgeInsets.symmetric(vertical: 12.0),
                                         child: Center(
                                           child: Text('No sections created for ${classModel.name}. Click "Add Section" to create Section A.',
                                               style: GoogleFonts.poppins(fontSize: 12, color: AppTheme.textHint, fontStyle: FontStyle.italic)),
                                         ),
-                                      );
-                                    }
-                                    return Wrap(
-                                      spacing: 16,
-                                      runSpacing: 16,
-                                      children: sections.map((sec) {
-                                        final studentCountAsync = ref.watch(sectionStudentCountProvider(sec.id));
-                                        final staffList = staffAsync.value ?? [];
-                                        final teacher = staffList.where((s) => s.id == sec.classTeacherId).firstOrNull;
+                                      )
+                                    : Wrap(
+                                        spacing: 16,
+                                        runSpacing: 16,
+                                        children: sections.map((sec) {
+                                          final count = sectionCounts[sec.id] ?? 0;
+                                          final teacher = staffList.where((s) => s.id == sec.classTeacherId).firstOrNull;
 
-                                        return Container(
-                                          width: 320,
-                                          padding: const EdgeInsets.all(16),
-                                          decoration: BoxDecoration(
-                                            color: AppTheme.bgSurface,
-                                            borderRadius: BorderRadius.circular(12),
-                                            border: Border.all(color: AppTheme.divider),
-                                          ),
-                                          child: Column(
-                                            crossAxisAlignment: CrossAxisAlignment.start,
-                                            children: [
-                                              Row(
-                                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                                children: [
-                                                  Container(
-                                                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                                                    decoration: BoxDecoration(
-                                                      color: AppTheme.primaryPurple,
-                                                      borderRadius: BorderRadius.circular(6),
-                                                    ),
-                                                    child: Text('Section ${sec.name}',
-                                                        style: GoogleFonts.poppins(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12)),
-                                                  ),
-                                                  Row(
-                                                    children: [
-                                                      IconButton(
-                                                        icon: const Icon(Icons.edit_outlined, size: 16, color: AppTheme.textSecondary),
-                                                        onPressed: () => _showAddEditSectionDialog(context, classModel, section: sec),
+                                          return Container(
+                                            width: 320,
+                                            padding: const EdgeInsets.all(16),
+                                            decoration: BoxDecoration(
+                                              color: AppTheme.bgSurface,
+                                              borderRadius: BorderRadius.circular(12),
+                                              border: Border.all(color: AppTheme.divider),
+                                            ),
+                                            child: Column(
+                                              crossAxisAlignment: CrossAxisAlignment.start,
+                                              children: [
+                                                Row(
+                                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                                  children: [
+                                                    Container(
+                                                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                                      decoration: BoxDecoration(
+                                                        color: AppTheme.primaryPurple,
+                                                        borderRadius: BorderRadius.circular(6),
                                                       ),
-                                                      IconButton(
-                                                        icon: const Icon(Icons.delete_outline_rounded, size: 16, color: AppTheme.error),
-                                                        onPressed: () async {
-                                                          if (!PermissionHelper.requireAdminRole(context, ref, RiskyAction.deleteRecord)) return;
-                                                          final dbService = ref.read(databaseServiceProvider);
-                                                          
-                                                          final count = await dbService.getStudentCountForSection(sec.id);
-                                                          if (count > 0) {
-                                                            if (context.mounted) {
-                                                              ScaffoldMessenger.of(context).showSnackBar(
-                                                                SnackBar(content: Text('Cannot delete section with $count enrolled student(s).'), backgroundColor: AppTheme.error),
-                                                              );
+                                                      child: Text('Section ${sec.name}',
+                                                          style: GoogleFonts.poppins(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12)),
+                                                    ),
+                                                    Row(
+                                                      children: [
+                                                        IconButton(
+                                                          icon: const Icon(Icons.edit_outlined, size: 16, color: AppTheme.textSecondary),
+                                                          onPressed: () => _showAddEditSectionDialog(context, classModel, section: sec),
+                                                        ),
+                                                        IconButton(
+                                                          icon: const Icon(Icons.delete_outline_rounded, size: 16, color: AppTheme.error),
+                                                          onPressed: () async {
+                                                            if (!PermissionHelper.requireAdminRole(context, ref, RiskyAction.deleteRecord)) return;
+                                                            final dbService = ref.read(databaseServiceProvider);
+                                                            
+                                                            final count = await dbService.getStudentCountForSection(sec.id);
+                                                            if (count > 0) {
+                                                              if (context.mounted) {
+                                                                ScaffoldMessenger.of(context).showSnackBar(
+                                                                  SnackBar(content: Text('Cannot delete section with $count enrolled student(s).'), backgroundColor: AppTheme.error),
+                                                                );
+                                                              }
+                                                              return;
                                                             }
-                                                            return;
-                                                          }
 
-                                                          await dbService.deleteSection(sec.id);
-                                                          ref.invalidate(sectionsForClassProvider(classModel.id));
-                                                          ref.invalidate(classStudentCountProvider(classModel.id));
-                                                        },
-                                                      ),
-                                                    ],
-                                                  ),
-                                                ],
-                                              ),
-                                              const SizedBox(height: 12),
-                                              studentCountAsync.when(
-                                                data: (count) => Text('Enrolled Students: $count / ${sec.capacity ?? 40} Seats',
-                                                    style: GoogleFonts.poppins(fontSize: 12, fontWeight: FontWeight.w600, color: AppTheme.textPrimary)),
-                                                loading: () => const SizedBox(height: 16),
-                                                error: (_, __) => const SizedBox(height: 16),
-                                              ),
-                                              const SizedBox(height: 6),
-                                              Row(
-                                                children: [
-                                                  const Icon(Icons.person_rounded, size: 14, color: AppTheme.primaryPurple),
-                                                  const SizedBox(width: 6),
-                                                  Expanded(
-                                                    child: Text(
-                                                      teacher != null ? 'In-Charge: ${teacher.fullName}' : 'In-Charge: Unassigned',
-                                                      style: GoogleFonts.poppins(
-                                                        fontSize: 11,
-                                                        fontWeight: teacher != null ? FontWeight.bold : FontWeight.normal,
-                                                        color: teacher != null ? AppTheme.primaryPurple : AppTheme.textHint,
-                                                      ),
-                                                      overflow: TextOverflow.ellipsis,
+                                                            await dbService.deleteSection(sec.id);
+                                                            ref.invalidate(allSectionsProvider);
+                                                            ref.invalidate(allSectionStudentCountsProvider);
+                                                            ref.invalidate(allClassStudentCountsProvider);
+                                                            ref.invalidate(sectionsForClassProvider(classModel.id));
+                                                            ref.invalidate(classStudentCountProvider(classModel.id));
+                                                          },
+                                                        ),
+                                                      ],
                                                     ),
-                                                  ),
-                                                  InkWell(
-                                                    onTap: () => _showAssignTeacherDialog(context, sec, staffList),
-                                                    child: Text('Assign', style: GoogleFonts.poppins(fontSize: 11, color: AppTheme.primaryPurple, fontWeight: FontWeight.bold, decoration: TextDecoration.underline)),
-                                                  ),
-                                                ],
-                                              ),
-                                            ],
-                                          ),
-                                        );
-                                      }).toList(),
-                                    );
-                                  },
-                                  loading: () => const CircularProgressIndicator(),
-                                  error: (e, s) => Text('Error loading sections: $e'),
-                                ),
+                                                  ],
+                                                ),
+                                                const SizedBox(height: 12),
+                                                Text('Enrolled Students: $count / ${sec.capacity ?? 40} Seats',
+                                                    style: GoogleFonts.poppins(fontSize: 12, fontWeight: FontWeight.w600, color: AppTheme.textPrimary)),
+                                                const SizedBox(height: 6),
+                                                Row(
+                                                  children: [
+                                                    const Icon(Icons.person_rounded, size: 14, color: AppTheme.primaryPurple),
+                                                    const SizedBox(width: 6),
+                                                    Expanded(
+                                                      child: Text(
+                                                        teacher != null ? 'In-Charge: ${teacher.fullName}' : 'In-Charge: Unassigned',
+                                                        style: GoogleFonts.poppins(
+                                                          fontSize: 11,
+                                                          fontWeight: teacher != null ? FontWeight.bold : FontWeight.normal,
+                                                          color: teacher != null ? AppTheme.primaryPurple : AppTheme.textHint,
+                                                        ),
+                                                        overflow: TextOverflow.ellipsis,
+                                                      ),
+                                                    ),
+                                                    InkWell(
+                                                      onTap: () => _showAssignTeacherDialog(context, sec, staffList),
+                                                      child: Text('Assign', style: GoogleFonts.poppins(fontSize: 11, color: AppTheme.primaryPurple, fontWeight: FontWeight.bold, decoration: TextDecoration.underline)),
+                                                    ),
+                                                  ],
+                                                ),
+                                              ],
+                                            ),
+                                          );
+                                        }).toList(),
+                                      ),
                               ),
                             ],
                           ],
@@ -1086,6 +987,9 @@ class _ClassSectionSetupViewState extends ConsumerState<ClassSectionSetupView> {
                 }
 
                 ref.invalidate(classListProvider);
+                ref.invalidate(allSectionsProvider);
+                ref.invalidate(allClassStudentCountsProvider);
+                ref.invalidate(allSectionStudentCountsProvider);
 
                 if (context.mounted) {
                   Navigator.pop(context);
@@ -1163,6 +1067,9 @@ class _ClassSectionSetupViewState extends ConsumerState<ClassSectionSetupView> {
                   await dbService.updateSection(updatedSec);
                 }
 
+                ref.invalidate(allSectionsProvider);
+                ref.invalidate(allSectionStudentCountsProvider);
+                ref.invalidate(allClassStudentCountsProvider);
                 ref.invalidate(sectionsForClassProvider(classModel.id));
                 ref.invalidate(classStudentCountProvider(classModel.id));
                 if (section != null) ref.invalidate(sectionStudentCountProvider(section.id));
@@ -1220,6 +1127,7 @@ class _ClassSectionSetupViewState extends ConsumerState<ClassSectionSetupView> {
               onPressed: () async {
                 final dbService = ref.read(databaseServiceProvider);
                 await dbService.assignClassTeacherToSection(section.id, selectedStaffId);
+                ref.invalidate(allSectionsProvider);
                 ref.invalidate(sectionsForClassProvider(section.classId));
 
                 if (context.mounted) {
@@ -1281,6 +1189,10 @@ class _ClassSectionSetupViewState extends ConsumerState<ClassSectionSetupView> {
             onPressed: () async {
               await dbService.deleteClass(classModel.id);
               ref.invalidate(classListProvider);
+              ref.invalidate(allSectionsProvider);
+              ref.invalidate(allClassStudentCountsProvider);
+              ref.invalidate(allSectionStudentCountsProvider);
+              ref.invalidate(allClassSubjectsProvider);
 
               if (context.mounted) {
                 Navigator.pop(context);
@@ -1403,6 +1315,7 @@ class _ClassSectionSetupViewState extends ConsumerState<ClassSectionSetupView> {
                                         );
                                         await dbService.addClassSubject(sub);
                                         ref.invalidate(classSubjectsProvider(classModel.id));
+                                        ref.invalidate(allClassSubjectsProvider);
                                       },
                               );
                             }).toList(),
@@ -1484,6 +1397,7 @@ class _ClassSectionSetupViewState extends ConsumerState<ClassSectionSetupView> {
                               await dbService.addClassSubject(sub);
                               subjectNameCtrl.clear();
                               ref.invalidate(classSubjectsProvider(classModel.id));
+                              ref.invalidate(allClassSubjectsProvider);
                             },
                             icon: const Icon(Icons.add, size: 16),
                             label: Text('Add', style: GoogleFonts.poppins(fontSize: 12, fontWeight: FontWeight.bold)),
@@ -1513,6 +1427,7 @@ class _ClassSectionSetupViewState extends ConsumerState<ClassSectionSetupView> {
                                       final standard = ['Mathematics', 'English', 'Hindi', 'Science', 'Social Studies'];
                                       await dbService.setSubjectsForClass(classModel.id, standard);
                                       ref.invalidate(classSubjectsProvider(classModel.id));
+                                      ref.invalidate(allClassSubjectsProvider);
                                     },
                                     icon: const Icon(Icons.auto_fix_high_rounded, size: 14),
                                     label: Text('Seed Standard Subjects', style: GoogleFonts.poppins(fontSize: 11)),
@@ -1583,6 +1498,7 @@ class _ClassSectionSetupViewState extends ConsumerState<ClassSectionSetupView> {
                                     onPressed: () async {
                                       await dbService.deleteClassSubject(s.id);
                                       ref.invalidate(classSubjectsProvider(classModel.id));
+                                      ref.invalidate(allClassSubjectsProvider);
                                     },
                                   ),
                                 );

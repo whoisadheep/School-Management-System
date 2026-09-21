@@ -335,6 +335,30 @@ final classSubjectsProvider = FutureProvider.family<List<ClassSubject>, String>(
   return await dbService.getSubjectsForClass(classId);
 });
 
+/// Batch: All Sections Provider (fetches all sections in a single query)
+final allSectionsProvider = FutureProvider<List<Section>>((ref) async {
+  final dbService = ref.watch(databaseServiceProvider);
+  return await dbService.getAllSections();
+});
+
+/// Batch: All Section Student Counts Provider (fetches all counts in a single query)
+final allSectionStudentCountsProvider = FutureProvider<Map<String, int>>((ref) async {
+  final dbService = ref.watch(databaseServiceProvider);
+  return await dbService.getAllSectionStudentCounts();
+});
+
+/// Batch: All Class Student Counts Provider (fetches all counts in a single query)
+final allClassStudentCountsProvider = FutureProvider<Map<String, int>>((ref) async {
+  final dbService = ref.watch(databaseServiceProvider);
+  return await dbService.getAllClassStudentCounts();
+});
+
+/// Batch: All Class Subjects Provider (fetches all subjects in a single query)
+final allClassSubjectsProvider = FutureProvider<List<ClassSubject>>((ref) async {
+  final dbService = ref.watch(databaseServiceProvider);
+  return await dbService.getAllClassSubjects();
+});
+
 // ============================================================================
 // FEE HEADS & STRUCTURE CONFIGURATION PROVIDERS (PHASE 1)
 // ============================================================================
