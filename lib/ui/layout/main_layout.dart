@@ -6,6 +6,7 @@ import '../../providers/auth_provider.dart';
 import '../../providers/license_provider.dart';
 import '../../providers/navigation_provider.dart';
 import '../../services/license_service.dart';
+import '../../services/telemetry_service.dart';
 import '../views/admission/admission_view.dart';
 import '../views/students/student_directory_view.dart';
 import '../views/staff/staff_directory_view.dart';
@@ -126,6 +127,12 @@ class _MainLayoutState extends ConsumerState<MainLayout> {
     }
 
     final selectedTab = ref.watch(selectedTabProvider);
+
+    ref.listen<NavigationTab>(selectedTabProvider, (prev, next) {
+      if (prev != next) {
+        TelemetryService.instance.trackScreenView(next.name);
+      }
+    });
 
     return CallbackShortcuts(
       bindings: {

@@ -12,6 +12,7 @@ import '../../../providers/services_provider.dart';
 import '../../../providers/dashboard_provider.dart';
 import '../../../services/file_storage_service.dart';
 import '../../../services/sound_service.dart';
+import '../../../services/telemetry_service.dart';
 import '../../widgets/blobatar.dart';
 import '../students/student_directory_view.dart';
 
@@ -365,8 +366,13 @@ class _AdmissionViewState extends ConsumerState<AdmissionView> {
       return;
     }
 
+    final formState = ref.read(admissionFormProvider);
     final success = await formNotifier.submitAdmission();
     if (success && mounted) {
+      TelemetryService.instance.trackStudentAdmitted(
+        gradeLevel: formState.gradeLevel.isNotEmpty ? formState.gradeLevel : null,
+        gender: formState.gender.isNotEmpty ? formState.gender : null,
+      );
       SoundService().playSuccess();
       ref.invalidate(studentsListProvider);
       ref.invalidate(studentDirectoryProvider);

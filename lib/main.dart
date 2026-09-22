@@ -5,8 +5,8 @@ import 'package:school_management_system/app.dart';
 import 'package:school_management_system/core/database/database_helper.dart';
 import 'package:school_management_system/services/app_logger.dart';
 import 'package:school_management_system/services/crash_reporting_service.dart';
+import 'package:school_management_system/services/telemetry_service.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
-import 'dart:io' show Platform;
 
 void main() {
   runZonedGuarded(
@@ -24,6 +24,7 @@ void main() {
       try {
         await CrashReportingService.instance.initialize();
         await AppLogger.instance.initialize();
+        await TelemetryService.instance.initialize();
         AppLogger.instance.info('Application starting...');
       } catch (e) {
         debugPrint('Logger initialization error: $e');

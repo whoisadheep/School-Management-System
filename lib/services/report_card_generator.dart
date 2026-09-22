@@ -6,6 +6,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import '../models/models.dart';
+import 'telemetry_service.dart';
 
 /// Printable PDF Report Card Generator
 class ReportCardGenerator {
@@ -18,6 +19,7 @@ class ReportCardGenerator {
     String schoolAddress = '123 Education Boulevard, Academic District',
     String schoolContact = 'Phone: +1 800 555-0199 | Email: exams@school.edu',
   }) async {
+    TelemetryService.instance.trackReportExported(reportType: 'exam_report_card');
     final pdf = pw.Document();
     final dateFormatter = DateFormat('dd MMM yyyy');
 

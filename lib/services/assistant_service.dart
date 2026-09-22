@@ -2,7 +2,7 @@ import 'package:dio/dio.dart';
 import 'ai_provider_service.dart';
 import 'database_service.dart';
 import 'rag_service.dart';
-import '../providers/navigation_provider.dart';
+import 'telemetry_service.dart';
 
 class AssistantService {
   final DatabaseService _dbService;
@@ -33,6 +33,7 @@ class AssistantService {
     }
 
     final intent = _rag.classifyIntent(trimmed);
+    TelemetryService.instance.trackAiQuery(intent: intent.name);
 
     // 1. Intent: Greeting
     if (intent == AssistantIntent.greeting) {

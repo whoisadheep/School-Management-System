@@ -6,6 +6,7 @@ import '../../../core/theme/app_theme.dart';
 import '../../../models/models.dart';
 import '../../../core/auth/permission_helper.dart';
 import '../../../providers/services_provider.dart';
+import '../../../services/telemetry_service.dart';
 
 /// Transport Management View — Fleet Overview, Vehicle Setup,
 /// Route & Stop Configuration, and Driver Route Manifest.
@@ -1122,6 +1123,11 @@ class _TransportViewState extends ConsumerState<TransportView> with SingleTicker
                         academicYear: academicYear,
                       );
 
+                      TelemetryService.instance.trackTransportOperation(
+                        action: 'student_assigned',
+                        properties: {'academic_year': academicYear},
+                      );
+
                       ref.invalidate(allStudentTransportsProvider(academicYear));
                       ref.invalidate(fleetOverviewProvider);
                       ref.invalidate(routesListProvider);
@@ -1650,6 +1656,10 @@ class _TransportViewState extends ConsumerState<TransportView> with SingleTicker
                         fitnessExpiry: fitnessExp,
                       );
                       await dbService.insertVehicle(newV);
+                      TelemetryService.instance.trackTransportOperation(
+                        action: 'vehicle_added',
+                        properties: {'vehicle_type': vehicleType},
+                      );
                     }
 
                     ref.invalidate(vehiclesProvider);
@@ -1821,6 +1831,9 @@ class _TransportViewState extends ConsumerState<TransportView> with SingleTicker
                         endPoint: endController.text.trim(),
                       );
                       await dbService.insertRoute(newRoute);
+                      TelemetryService.instance.trackTransportOperation(
+                        action: 'route_created',
+                      );
                     }
 
                     ref.invalidate(routesListProvider);

@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../models/models.dart';
 import '../../../../providers/student_attendance_provider.dart';
 import '../../../../providers/services_provider.dart';
+import '../../../../services/telemetry_service.dart';
 import '../../../../core/theme/app_theme.dart';
 
 class StudentAttendanceView extends ConsumerStatefulWidget {
@@ -58,9 +59,17 @@ class _StudentAttendanceViewState extends ConsumerState<StudentAttendanceView> w
 
     await db.bulkUpdateAttendance(dateStr, _selectedClass, _selectedSection, finalList);
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Attendance saved successfully'), backgroundColor: AppTheme.success),
+    TelemetryService.instance.trackAttendanceMarked(
+      className: _selectedClass,
+      section: _selectedSection,
+      studentCount: finalList.length,
     );
+
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Attendance saved successfully'), backgroundColor: AppTheme.success),
+      );
+    }
     
     _editedAttendance.clear();
     

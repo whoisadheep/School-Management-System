@@ -6,6 +6,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import '../models/models.dart';
+import 'telemetry_service.dart';
 
 /// PDF Report Generator utility to generate A4-sized fee payment receipts
 /// and save them to the local Windows Documents directory.
@@ -25,6 +26,7 @@ class ReportGenerator {
     String schoolAddress = '123 Education Boulevard, Academic District',
     String schoolContact = 'Phone: +1 800 555-0199 | Email: finance@school.edu',
   }) async {
+    TelemetryService.instance.trackReportExported(reportType: 'payment_receipt');
     final pdf = pw.Document();
 
     final formattedReceiptNumber = receiptNumber ?? 'RCT-${transaction.timestamp.year}-${transaction.id.substring(0, 4).toUpperCase()}';
@@ -727,6 +729,7 @@ class ReportGenerator {
     String schoolAddress = '123 Education Boulevard, Academic District',
     String schoolContact = 'Phone: +91 9876543210 | Email: finance@school.edu',
   }) async {
+    TelemetryService.instance.trackReportExported(reportType: 'batch_payment_receipt');
     final pdf = pw.Document();
 
     final formattedReceiptNumber = receiptNumber ?? 'RCT-${DateTime.now().year}-${DateTime.now().millisecondsSinceEpoch.toString().substring(7)}';
@@ -1429,6 +1432,7 @@ class ReportGenerator {
     String schoolAddress = '123 Education Boulevard, Academic District',
     String schoolContact = 'Phone: +1 800 555-0199',
   }) async {
+    TelemetryService.instance.trackReportExported(reportType: 'student_id_card');
     final pdf = pw.Document();
 
     final primaryColor = PdfColor.fromHex('#1A73E8');
@@ -1637,6 +1641,7 @@ class ReportGenerator {
     String schoolAddress = '123 Education Boulevard, Academic District',
     String affiliationNo = 'AFF-CBSE-2024-99881',
   }) async {
+    TelemetryService.instance.trackReportExported(reportType: 'transfer_certificate');
     final pdf = pw.Document();
 
     final primaryColor = PdfColor.fromHex('#1A73E8');

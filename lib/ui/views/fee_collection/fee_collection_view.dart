@@ -14,6 +14,7 @@ import '../../../services/bulk_invoice_service.dart';
 import '../../widgets/payment_receipt_dialog.dart';
 import '../../../services/app_logger.dart';
 import '../../../services/sound_service.dart';
+import '../../../services/telemetry_service.dart';
 
 /// Remade Form-Based Fee Collection View:
 /// Features:
@@ -2148,6 +2149,12 @@ class _FeeCollectionViewState extends ConsumerState<FeeCollectionView> with Sing
       ref.invalidate(invoicesListProvider);
       ref.invalidate(dashboardMetricsProvider);
 
+      TelemetryService.instance.trackFeeCollected(
+        amount: paidAmount,
+        paymentMethod: _rapidPaymentMethod,
+        ledgerCount: selectedLedgers.length,
+      );
+
       SoundService().playSuccess();
 
       if (mounted) {
@@ -3259,6 +3266,12 @@ Thank you for your payment!''';
       ref.invalidate(studentPaymentHistoryProvider);
       ref.invalidate(invoicesListProvider);
       ref.invalidate(dashboardMetricsProvider);
+
+      TelemetryService.instance.trackFeeCollected(
+        amount: paidAmount,
+        paymentMethod: _selectedMethod,
+        ledgerCount: selectedLedgers.length,
+      );
 
       if (mounted) {
         await PaymentReceiptDialog.show(
