@@ -75,6 +75,7 @@ class LicenseDetails {
 /// Offline License Status Enum
 enum LicenseStatus {
   active,
+  trial,
   gracePeriod, // Within 7 days of expiration
   expired,
   tampered,
@@ -150,14 +151,52 @@ class LicenseService {
 
     // 2. Fetch stored license key
     final storedKey = await _settingsService.getSetting('license_key');
-    if (storedKey == null || storedKey.trim().isEmpty) {
+    if (storedKey != null && storedKey.trim().isNotEmpty) {
+      return await verifyAndApplyLicenseKey(storedKey, isInitialization: true);
+    }
+
+    // 3. No permanent key stored: Check 30-day Free Trial
+    return await _validateFreeTrial();
+  }
+
+  static const int trialDurationDays = 30;
+
+  /// Validates or initializes the 30-day offline free trial period
+  Future<LicenseValidationResult> _validateFreeTrial() async {
+    try {
+      final trialStartStr = await _settingsService.getSetting('trial_start_date');
+      DateTime trialStartDate;
+
+      if (trialStartStr == null || trialStartStr.trim().isEmpty) {
+        // First run on this installation: record trial start date
+        trialStartDate = DateTime.now();
+        await _settingsService.setSetting('trial_start_date', trialStartDate.toIso8601String());
+      } else {
+        trialStartDate = DateTime.tryParse(trialStartStr) ?? DateTime.now();
+      }
+
+      final now = DateTime.now();
+      final daysPassed = now.difference(trialStartDate).inDays;
+      final daysRemaining = trialDurationDays - daysPassed;
+
+      if (daysRemaining > 0) {
+        return LicenseValidationResult(
+          status: LicenseStatus.trial,
+          daysRemaining: daysRemaining,
+          message: 'Free Trial: $daysRemaining day(s) remaining.',
+        );
+      } else {
+        return const LicenseValidationResult(
+          status: LicenseStatus.unlicensed,
+          message: 'Your 30-day free trial has expired. Please activate software with a valid offline License Key.',
+        );
+      }
+    } catch (_) {
       return const LicenseValidationResult(
         status: LicenseStatus.unlicensed,
         message: 'No license key found. Please activate software with a valid offline License Key.',
       );
     }
-
-    return await verifyAndApplyLicenseKey(storedKey, isInitialization: true);
   }
 
   /// Verify and apply a new user-entered RSA License Key string.

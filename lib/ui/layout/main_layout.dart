@@ -223,6 +223,45 @@ class _MainLayoutState extends ConsumerState<MainLayout> {
     WidgetRef ref,
     LicenseValidationResult result,
   ) {
+    if (result.status == LicenseStatus.trial) {
+      return Container(
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            colors: [Color(0xFF4C3BCF), Color(0xFF6D5BEE)],
+          ),
+        ),
+        child: Row(
+          children: [
+            const Icon(Icons.workspace_premium_rounded, color: Color(0xFFFDE68A), size: 18),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                '30-DAY FREE TRIAL ACTIVE (${result.daysRemaining} days remaining) — Enjoy full access to all features.',
+                style: const TextStyle(color: Colors.white, fontSize: 12.5, fontWeight: FontWeight.w600),
+              ),
+            ),
+            ElevatedButton.icon(
+              onPressed: () {
+                Navigator.of(context).push(
+                  MaterialPageRoute(builder: (_) => const LicenseActivationView()),
+                );
+              },
+              icon: const Icon(Icons.vpn_key_rounded, size: 14),
+              label: const Text('Enter License Key', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.white,
+                foregroundColor: const Color(0xFF4C3BCF),
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+                elevation: 0,
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
     if (result.status == LicenseStatus.gracePeriod) {
       return Container(
         width: double.infinity,

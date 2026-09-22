@@ -37,7 +37,7 @@ class TelemetryService {
   String _apiKey = '';
   String _hostUrl = 'https://us.i.posthog.com';
   String _distinctId = '';
-  String _appVersion = '1.0.28';
+  String _appVersion = '1.0.29';
   String _schoolName = 'Eduvia School';
   bool _initialized = false;
   Timer? _heartbeatTimer;
