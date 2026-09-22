@@ -1,12 +1,15 @@
 import 'dart:convert';
 import 'package:crypto/crypto.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../../providers/auth_provider.dart';
 import '../../../providers/license_provider.dart';
 import '../../../services/license_generator.dart';
 import '../../../core/auth/permission_helper.dart';
 import '../../../services/license_service.dart';
+import '../../../services/telemetry_service.dart';
 
 class LicenseActivationView extends ConsumerStatefulWidget {
   const LicenseActivationView({super.key});
@@ -46,10 +49,12 @@ class _LicenseActivationViewState extends ConsumerState<LicenseActivationView> {
       appBar: AppBar(
         backgroundColor: const Color(0xFF1E293B),
         title: const Text('Software License Activation', style: TextStyle(color: Colors.white)),
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: Colors.white),
-          onPressed: () => Navigator.of(context).pop(),
-        ),
+        leading: Navigator.of(context).canPop()
+            ? IconButton(
+                icon: const Icon(Icons.arrow_back, color: Colors.white),
+                onPressed: () => Navigator.of(context).pop(),
+              )
+            : null,
       ),
       body: Center(
         child: SingleChildScrollView(
@@ -249,23 +254,24 @@ class _LicenseActivationViewState extends ConsumerState<LicenseActivationView> {
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    // Quick Test Key Generator button for demo
-                    TextButton.icon(
-                      onPressed: () async {
-                        if (!PermissionHelper.requireAdminRole(context, ref, RiskyAction.licenseManagement)) return;
-                        final hwId = await ref.read(hardwareIdProvider.future);
-                        final demoKey = LicenseGenerator.generateLicenseKey(
-                          hardwareId: hwId,
-                          expiryDate: DateTime.now().add(const Duration(days: 365)),
-                          clientName: "Mother's Kids Play School",
-                        );
-                        setState(() {
-                          _keyController.text = demoKey;
-                        });
-                      },
-                      icon: const Icon(Icons.auto_awesome, size: 14, color: Color(0xFF60A5FA)),
-                      label: const Text('Generate 1-Year Demo Key', style: TextStyle(color: Color(0xFF60A5FA), fontSize: 12)),
-                    ),
+                    if (kDebugMode)
+                      TextButton.icon(
+                        onPressed: () async {
+                          final hwId = await ref.read(hardwareIdProvider.future);
+                          final demoKey = LicenseGenerator.generateLicenseKey(
+                            hardwareId: hwId,
+                            expiryDate: DateTime.now().add(const Duration(days: 365)),
+                            clientName: "Eduvia School",
+                          );
+                          setState(() {
+                            _keyController.text = demoKey;
+                          });
+                        },
+                        icon: const Icon(Icons.auto_awesome, size: 14, color: Color(0xFF60A5FA)),
+                        label: const Text('Generate 1-Year Demo Key (Debug Only)', style: TextStyle(color: Color(0xFF60A5FA), fontSize: 12)),
+                      )
+                    else
+                      const SizedBox.shrink(),
 
                     ElevatedButton.icon(
                       onPressed: _isActivating ? null : _handleActivate,
@@ -303,7 +309,10 @@ class _LicenseActivationViewState extends ConsumerState<LicenseActivationView> {
   }
 
   Future<void> _handleActivate() async {
-    if (!PermissionHelper.requireAdminRole(context, ref, RiskyAction.licenseManagement)) return;
+    final authState = ref.read(authProvider);
+    if (authState.isAuthenticated) {
+      if (!PermissionHelper.requireAdminRole(context, ref, RiskyAction.licenseManagement)) return;
+    }
     if (_keyController.text.trim().isEmpty) return;
 
     setState(() {
@@ -318,5 +327,15 @@ class _LicenseActivationViewState extends ConsumerState<LicenseActivationView> {
       _isSuccess = !result.status.isReadOnly;
       _statusMessage = result.message;
     });
+
+    if (!result.status.isReadOnly) {
+      TelemetryService.instance.trackFeatureUsage('license_activated', {
+        'client_name': result.details?.clientName ?? 'Unknown',
+      });
+
+      if (mounted && Navigator.of(context).canPop()) {
+        Navigator.of(context).pop();
+      }
+    }
   }
 }

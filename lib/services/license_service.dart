@@ -151,14 +151,9 @@ class LicenseService {
     // 2. Fetch stored license key
     final storedKey = await _settingsService.getSetting('license_key');
     if (storedKey == null || storedKey.trim().isEmpty) {
-      return LicenseValidationResult(
-        status: LicenseStatus.active,
-        details: LicenseDetails(
-          type: LicenseType.standard,
-          clientName: 'Eduvia',
-          issuedAt: DateTime(2026, 1, 1),
-        ),
-        message: 'Eduvia - Active Enterprise License',
+      return const LicenseValidationResult(
+        status: LicenseStatus.unlicensed,
+        message: 'No license key found. Please activate software with a valid offline License Key.',
       );
     }
 

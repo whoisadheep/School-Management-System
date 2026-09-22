@@ -1,7 +1,7 @@
 {
-  "latest_version": "1.0.27",
-  "download_url": "https://github.com/whoisadheep/School-Management-System/releases/download/v1.0.27/Eduvia-Installer.exe",
+  "latest_version": "1.0.28",
+  "download_url": "https://github.com/whoisadheep/School-Management-System/releases/download/v1.0.28/Eduvia-Installer.exe",
   "sha256": "",
-  "changelog": "Interactive satisfying tactile 3D buttons, PostHog business telemetry for fee collection, student admissions, attendance marking, transport operations, and exam report cards.",
+  "changelog": "Enforced hardware-locked offline RSA license activation requirement on all new PC installations before login/onboarding.",
   "mandatory_update": false
 }

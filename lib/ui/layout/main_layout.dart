@@ -105,8 +105,24 @@ class _MainLayoutState extends ConsumerState<MainLayout> {
 
   @override
   Widget build(BuildContext context) {
-    final authState = ref.watch(authProvider);
     final licenseAsync = ref.watch(licenseStateProvider);
+
+    // 1. Initial boot license check: show loader while resolving hardware ID and license key
+    if (licenseAsync.isLoading) {
+      return const Scaffold(
+        backgroundColor: Color(0xFF0F172A),
+        body: Center(
+          child: CircularProgressIndicator(color: Color(0xFF4C3BCF)),
+        ),
+      );
+    }
+
+    // 2. Unlicensed software: gate immediately to offline RSA license activation
+    if (licenseAsync.value?.status == LicenseStatus.unlicensed) {
+      return const LicenseActivationView();
+    }
+
+    final authState = ref.watch(authProvider);
 
     if (!authState.isAuthenticated) {
       return const AdminLoginView();
