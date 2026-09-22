@@ -1,13 +1,18 @@
+import 'dart:async';
 import 'dart:convert';
 import 'package:crypto/crypto.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:google_fonts/google_fonts.dart';
+import '../../../core/auth/permission_helper.dart';
+import '../../../core/theme/app_theme.dart';
 import '../../../providers/auth_provider.dart';
 import '../../../providers/license_provider.dart';
-import '../../../core/auth/permission_helper.dart';
 import '../../../services/license_service.dart';
 import '../../../services/telemetry_service.dart';
+import '../../widgets/blobatar.dart';
 
 class LicenseActivationView extends ConsumerStatefulWidget {
   const LicenseActivationView({super.key});
@@ -21,301 +26,825 @@ class _LicenseActivationViewState extends ConsumerState<LicenseActivationView> {
   bool _isActivating = false;
   String? _statusMessage;
   bool _isSuccess = false;
+  LicenseValidationResult? _successResult;
   bool _showTamperInstructions = false;
+  bool _hasCopied = false;
+  Timer? _copyTimer;
+  int _shakeCounter = 0;
 
   @override
   void dispose() {
     _keyController.dispose();
+    _copyTimer?.cancel();
     super.dispose();
   }
 
   String _generateTamperIncidentId(String hwId) {
-    // Generate a short alphanumeric hash for support reference
     final str = '$hwId-${DateTime.now().millisecondsSinceEpoch}';
     final bytes = utf8.encode(str);
     final digest = sha256.convert(bytes);
     return digest.toString().substring(0, 10).toUpperCase();
   }
 
+  void _onCopyHardwareId(String hwId) {
+    Clipboard.setData(ClipboardData(text: hwId));
+    setState(() => _hasCopied = true);
+    _copyTimer?.cancel();
+    _copyTimer = Timer(const Duration(seconds: 2), () {
+      if (mounted) setState(() => _hasCopied = false);
+    });
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('Hardware ID copied to clipboard!', style: GoogleFonts.poppins(fontSize: 13)),
+        backgroundColor: AppTheme.primaryPurple,
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+        duration: const Duration(seconds: 2),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final hardwareIdAsync = ref.watch(hardwareIdProvider);
     final licenseState = ref.watch(licenseStateProvider).value;
+    final screenWidth = MediaQuery.of(context).size.width;
+    final isWide = screenWidth > 900;
 
     return Scaffold(
-      backgroundColor: const Color(0xFF0F172A),
-      appBar: AppBar(
-        backgroundColor: const Color(0xFF1E293B),
-        title: const Text('Software License Activation', style: TextStyle(color: Colors.white)),
-        leading: Navigator.of(context).canPop()
-            ? IconButton(
-                icon: const Icon(Icons.arrow_back, color: Colors.white),
-                onPressed: () => Navigator.of(context).pop(),
-              )
-            : null,
+      backgroundColor: Colors.white,
+      body: Row(
+        children: [
+          // ── Left Branding Panel (hidden on narrow screens) ──
+          if (isWide)
+            Expanded(
+              flex: 5,
+              child: Container(
+                color: AppTheme.primaryPurple,
+                padding: const EdgeInsets.symmetric(horizontal: 60, vertical: 48),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Brand Logo
+                    Row(
+                      children: [
+                        Container(
+                          width: 40,
+                          height: 40,
+                          decoration: BoxDecoration(
+                            color: Colors.white.withValues(alpha: 0.15),
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          clipBehavior: Clip.antiAlias,
+                          child: Image.asset(
+                            'assets/icons/app_icon.png',
+                            width: 40,
+                            height: 40,
+                            fit: BoxFit.contain,
+                            errorBuilder: (_, __, ___) => const Icon(
+                              Icons.school_rounded,
+                              color: Colors.white,
+                              size: 24,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Text(
+                          'Eduvia',
+                          style: GoogleFonts.poppins(
+                            color: Colors.white,
+                            fontSize: 22,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ],
+                    )
+                        .animate()
+                        .fadeIn(duration: 400.ms, curve: Curves.easeOut)
+                        .slideY(begin: -0.15, end: 0),
+
+                    const Spacer(),
+
+                    // Animated Blobatar Mascot Trio with subtle breathing loop
+                    Center(
+                      child: const Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Blobatar(seed: 'license-shield', size: 72, borderRadius: 36),
+                          SizedBox(width: 16),
+                          Blobatar(seed: 'license-key', size: 96, borderRadius: 48),
+                          SizedBox(width: 16),
+                          Blobatar(seed: 'license-lock', size: 72, borderRadius: 36),
+                        ],
+                      )
+                          .animate()
+                          .fadeIn(delay: 150.ms, duration: 500.ms, curve: Curves.easeOut)
+                          .scale(begin: const Offset(0.9, 0.9), end: const Offset(1, 1), curve: Curves.easeOutBack)
+                          .animate(onPlay: (controller) => controller.repeat(reverse: true))
+                          .moveY(begin: 0, end: -6, duration: 2500.ms, curve: Curves.easeInOut),
+                    ),
+
+                    const SizedBox(height: 40),
+
+                    // Tagline
+                    Text(
+                      'Activate\nYour License',
+                      style: GoogleFonts.poppins(
+                        color: Colors.white,
+                        fontSize: 40,
+                        fontWeight: FontWeight.w700,
+                        height: 1.2,
+                      ),
+                    )
+                        .animate()
+                        .fadeIn(delay: 250.ms, duration: 450.ms)
+                        .slideY(begin: 0.1, end: 0, curve: Curves.easeOutCubic),
+
+                    const SizedBox(height: 20),
+
+                    Text(
+                      'Enter your vendor-issued license key to unlock\npermanent access to the Eduvia platform.',
+                      style: GoogleFonts.poppins(
+                        color: Colors.white.withValues(alpha: 0.75),
+                        fontSize: 15,
+                        height: 1.6,
+                      ),
+                    )
+                        .animate()
+                        .fadeIn(delay: 350.ms, duration: 450.ms),
+
+                    const Spacer(),
+
+                    // Security Badges
+                    Row(
+                      children: [
+                        Icon(Icons.shield_rounded, color: Colors.white.withValues(alpha: 0.6), size: 16),
+                        const SizedBox(width: 8),
+                        Text(
+                          'Hardware-locked  •  Offline activation  •  RSA-2048',
+                          style: GoogleFonts.poppins(
+                            color: Colors.white.withValues(alpha: 0.6),
+                            fontSize: 12,
+                          ),
+                        ),
+                      ],
+                    )
+                        .animate()
+                        .fadeIn(delay: 450.ms, duration: 400.ms),
+                  ],
+                ),
+              ),
+            ),
+
+          // ── Right Form / Success Panel ──
+          Expanded(
+            flex: 4,
+            child: Container(
+              color: Colors.white,
+              child: Column(
+                children: [
+                  // Top bar with back button (only shown if navigated and not in success state)
+                  if (Navigator.of(context).canPop() && !_isSuccess)
+                    Align(
+                      alignment: Alignment.topLeft,
+                      child: Padding(
+                        padding: const EdgeInsets.only(left: 12, top: 12),
+                        child: IconButton(
+                          icon: const Icon(Icons.arrow_back_rounded, color: AppTheme.textSecondary),
+                          onPressed: () => Navigator.of(context).pop(),
+                          tooltip: 'Go back',
+                        ),
+                      ),
+                    )
+                  else
+                    const SizedBox(height: 48),
+
+                  Expanded(
+                    child: Center(
+                      child: SingleChildScrollView(
+                        padding: const EdgeInsets.symmetric(horizontal: 48, vertical: 24),
+                        child: ConstrainedBox(
+                          constraints: const BoxConstraints(maxWidth: 420),
+                          child: AnimatedSwitcher(
+                            duration: const Duration(milliseconds: 500),
+                            switchInCurve: Curves.easeOutCubic,
+                            switchOutCurve: Curves.easeInCubic,
+                            child: _isSuccess
+                                ? _buildSuccessCelebrationView()
+                                : _buildActivationForm(hardwareIdAsync, licenseState, isWide),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
       ),
-      body: Center(
-        child: SingleChildScrollView(
-          child: Container(
-            width: 580,
-            padding: const EdgeInsets.all(32),
+    );
+  }
+
+  /// Builds the standard license input form with entrance animations
+  Widget _buildActivationForm(
+    AsyncValue<String> hardwareIdAsync,
+    dynamic licenseState,
+    bool isWide,
+  ) {
+    return Column(
+      key: const ValueKey('activation_form'),
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Mobile-only app icon
+        if (!isWide) ...[
+          Center(
+            child: Image.asset(
+              'assets/icons/app_icon.png',
+              width: 56,
+              height: 56,
+              fit: BoxFit.contain,
+              errorBuilder: (_, __, ___) => const Icon(
+                Icons.school_rounded,
+                color: AppTheme.primaryPurple,
+                size: 48,
+              ),
+            ),
+          ),
+          const SizedBox(height: 24),
+        ],
+
+        // Header
+        Text(
+          'License Activation',
+          style: GoogleFonts.poppins(
+            color: AppTheme.textPrimary,
+            fontSize: 26,
+            fontWeight: FontWeight.w700,
+          ),
+        )
+            .animate()
+            .fadeIn(duration: 400.ms, curve: Curves.easeOut)
+            .slideY(begin: 0.1, end: 0),
+
+        const SizedBox(height: 6),
+
+        Text(
+          'Activate your offline installation',
+          style: GoogleFonts.poppins(
+            color: AppTheme.textSecondary,
+            fontSize: 14,
+          ),
+        )
+            .animate()
+            .fadeIn(delay: 80.ms, duration: 400.ms),
+
+        const SizedBox(height: 28),
+
+        // ── 30-Day Free Trial Banner ──
+        if (licenseState?.status == LicenseStatus.trial) ...[
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
             decoration: BoxDecoration(
-              color: const Color(0xFF1E293B),
-              borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: const Color(0xFF334155)),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.4),
-                  blurRadius: 24,
-                  offset: const Offset(0, 8),
+              color: AppTheme.primarySoft,
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: AppTheme.primaryLight.withValues(alpha: 0.25)),
+            ),
+            child: Row(
+              children: [
+                const Icon(Icons.workspace_premium_rounded, color: AppTheme.primaryPurple, size: 22),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        '30-Day Free Trial Active',
+                        style: GoogleFonts.poppins(
+                          color: AppTheme.primaryDark,
+                          fontWeight: FontWeight.w600,
+                          fontSize: 13,
+                        ),
+                      ),
+                      Text(
+                        '${licenseState?.daysRemaining} day(s) remaining. Enter a permanent license key to activate forever.',
+                        style: GoogleFonts.poppins(
+                          color: AppTheme.textSecondary,
+                          fontSize: 12,
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ],
             ),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
+          )
+              .animate()
+              .fadeIn(delay: 120.ms, duration: 400.ms)
+              .slideY(begin: 0.08, end: 0),
+          const SizedBox(height: 20),
+        ],
+
+        // ── Hardware ID Card ──
+        Text(
+          'Your Hardware ID',
+          style: GoogleFonts.poppins(
+            color: AppTheme.textPrimary,
+            fontSize: 13,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          'Share this ID with Kishan — 9839994285 to get your key',
+          style: GoogleFonts.poppins(
+            color: AppTheme.textHint,
+            fontSize: 11.5,
+          ),
+        ),
+        const SizedBox(height: 8),
+
+        hardwareIdAsync.when(
+          data: (hwId) => _buildHardwareIdCard(hwId, licenseState),
+          loading: () => Container(
+            height: 52,
+            decoration: BoxDecoration(
+              color: const Color(0xFFF9FAFB),
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: const Color(0xFFE5E7EB)),
+            ),
+            child: const Center(
+              child: SizedBox(
+                width: 20,
+                height: 20,
+                child: CircularProgressIndicator(strokeWidth: 2, color: AppTheme.primaryPurple),
+              ),
+            ),
+          ),
+          error: (e, _) => Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: AppTheme.errorLight,
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Row(
               children: [
-                // Header
-                Row(
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF2563EB).withValues(alpha: 0.2),
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: const Icon(Icons.vpn_key_rounded, color: Color(0xFF3B82F6), size: 28),
-                    ),
-                    const SizedBox(width: 16),
-                    const Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'Offline RSA License Activation',
-                          style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white),
-                        ),
-                        SizedBox(height: 2),
-                        Text(
-                          'Hardware-locked license activation for single Windows PC',
-                          style: TextStyle(color: Color(0xFF94A3B8), fontSize: 12.5),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-
-                const SizedBox(height: 20),
-
-                if (licenseState?.status == LicenseStatus.trial) ...[
-                  Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF312E81),
-                      borderRadius: BorderRadius.circular(10),
-                      border: Border.all(color: const Color(0xFF4C3BCF)),
-                    ),
-                    child: Row(
-                      children: [
-                        const Icon(Icons.workspace_premium_rounded, color: Color(0xFFFDE68A), size: 20),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              const Text(
-                                '30-Day Free Trial Active',
-                                style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13),
-                              ),
-                              Text(
-                                '${licenseState?.daysRemaining} day(s) remaining. Enter a permanent license key below to activate permanently.',
-                                style: const TextStyle(color: Color(0xFFC7D2FE), fontSize: 11.5),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                ],
-
-                // ── Hardware ID Card ──
-                hardwareIdAsync.when(
-                  data: (hwId) => Container(
-                    padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF0F172A),
-                      borderRadius: BorderRadius.circular(10),
-                      border: Border.all(color: const Color(0xFF334155)),
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          children: [
-                            const Icon(Icons.laptop_windows_rounded, color: Color(0xFF94A3B8), size: 20),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  const Text('YOUR PC HARDWARE ID (Send to Kishan - 9839994285)', style: TextStyle(color: Color(0xFF64748B), fontSize: 10, fontWeight: FontWeight.bold)),
-                                  const SizedBox(height: 2),
-                                  Text(
-                                    hwId,
-                                    style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14, fontFamily: 'monospace'),
-                                  ),
-                                ],
-                              ),
-                            ),
-                            ElevatedButton.icon(
-                              onPressed: () {
-                                Clipboard.setData(ClipboardData(text: hwId));
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(content: Text('Hardware ID copied to clipboard!')),
-                                );
-                              },
-                              icon: const Icon(Icons.copy_rounded, size: 14),
-                              label: const Text('Copy ID'),
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: const Color(0xFF334155),
-                                foregroundColor: Colors.white,
-                                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                              ),
-                            ),
-                          ],
-                        ),
-                        
-                        if (licenseState?.status == LicenseStatus.tampered) ...[
-                           const SizedBox(height: 16),
-                           const Divider(color: Color(0xFF334155)),
-                           const SizedBox(height: 8),
-                           Row(
-                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                             children: [
-                               const Text('System locked due to clock tampering.', style: TextStyle(color: Color(0xFFEF4444), fontSize: 12)),
-                               TextButton.icon(
-                                 onPressed: () {
-                                   setState(() {
-                                     _showTamperInstructions = !_showTamperInstructions;
-                                   });
-                                 },
-                                 icon: const Icon(Icons.support_agent_rounded, size: 16, color: Color(0xFFFBBF24)),
-                                 label: const Text('Request Unlock', style: TextStyle(color: Color(0xFFFBBF24))),
-                               ),
-                             ],
-                           )
-                        ],
-                        
-                        if (_showTamperInstructions) ...[
-                          const SizedBox(height: 12),
-                          Container(
-                            padding: const EdgeInsets.all(12),
-                            decoration: BoxDecoration(
-                              color: const Color(0xFF451A03),
-                              borderRadius: BorderRadius.circular(8),
-                              border: Border.all(color: const Color(0xFF78350F)),
-                            ),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                const Text('TAMPER RESET INSTRUCTIONS', style: TextStyle(color: Color(0xFFFCD34D), fontSize: 11, fontWeight: FontWeight.bold)),
-                                const SizedBox(height: 8),
-                                const Text('If your CMOS battery died or the clock was reset accidentally, please WhatsApp Sai Infotek support with your Hardware ID and the following Incident ID:', style: TextStyle(color: Color(0xFFFDE68A), fontSize: 12)),
-                                const SizedBox(height: 8),
-                                SelectableText('Incident ID: ${_generateTamperIncidentId(hwId)}', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontFamily: 'monospace')),
-                                const SizedBox(height: 4),
-                                const Text('You will receive a Tamper Reset Token to paste below.', style: TextStyle(color: Color(0xFFFDE68A), fontSize: 12, fontStyle: FontStyle.italic)),
-                              ],
-                            ),
-                          )
-                        ]
-                      ],
-                    ),
-                  ),
-                  loading: () => const CircularProgressIndicator(),
-                  error: (e, s) => Text('Error: $e'),
-                ),
-
-                const SizedBox(height: 20),
-
-                // ── Paste License Key Field ──
-                const Text('PASTE RSA LICENSE KEY BELOW', style: TextStyle(color: Color(0xFF94A3B8), fontSize: 11, fontWeight: FontWeight.bold)),
-                const SizedBox(height: 8),
-                TextField(
-                  controller: _keyController,
-                  maxLines: 4,
-                  style: const TextStyle(color: Colors.white, fontSize: 12, fontFamily: 'monospace'),
-                  decoration: InputDecoration(
-                    hintText: 'Paste license key or override token string provided by vendor...',
-                    hintStyle: const TextStyle(color: Color(0xFF64748B)),
-                    filled: true,
-                    fillColor: const Color(0xFF0F172A),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(10),
-                      borderSide: const BorderSide(color: Color(0xFF334155)),
-                    ),
-                  ),
-                ),
-
-                const SizedBox(height: 16),
-
-                if (_statusMessage != null)
-                  Container(
-                    padding: const EdgeInsets.all(12),
-                    margin: const EdgeInsets.only(bottom: 16),
-                    decoration: BoxDecoration(
-                      color: _isSuccess ? const Color(0xFF064E3B) : const Color(0xFF7F1D1D),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Row(
-                      children: [
-                        Icon(_isSuccess ? Icons.check_circle_rounded : Icons.error_rounded, color: Colors.white, size: 18),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          child: Text(
-                            _statusMessage!,
-                            style: const TextStyle(color: Colors.white, fontSize: 12.5),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-
-                SizedBox(
-                  width: double.infinity,
-                  child: ElevatedButton.icon(
-                    onPressed: _isActivating ? null : _handleActivate,
-                    icon: _isActivating
-                        ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                        : const Icon(Icons.verified_rounded, size: 18),
-                    label: const Text('Activate License', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFF2563EB),
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                    ),
-                  ),
-                ),
-
-                const SizedBox(height: 18),
-                const Center(
+                const Icon(Icons.error_outline_rounded, color: AppTheme.error, size: 18),
+                const SizedBox(width: 10),
+                Expanded(
                   child: Text(
-                    'Developed by Kishan  •  Contact: 9839994285',
-                    style: TextStyle(
-                      color: Color(0xFF94A3B8),
-                      fontSize: 11.5,
-                      fontWeight: FontWeight.w500,
-                    ),
+                    'Could not detect hardware ID: $e',
+                    style: GoogleFonts.poppins(color: AppTheme.error, fontSize: 12),
                   ),
                 ),
               ],
             ),
           ),
+        )
+            .animate()
+            .fadeIn(delay: 160.ms, duration: 400.ms)
+            .slideY(begin: 0.08, end: 0),
+
+        const SizedBox(height: 22),
+
+        // ── License Key Input Field ──
+        Text(
+          'RSA License Key',
+          style: GoogleFonts.poppins(
+            color: AppTheme.textPrimary,
+            fontSize: 13,
+            fontWeight: FontWeight.w600,
+          ),
         ),
-      ),
+        const SizedBox(height: 8),
+
+        Animate(
+          key: ValueKey(_shakeCounter),
+          effects: _shakeCounter > 0
+              ? [ShakeEffect(duration: 400.ms, hz: 4, curve: Curves.easeInOutCubic, offset: const Offset(6, 0))]
+              : const [],
+          child: TextField(
+            controller: _keyController,
+            maxLines: 4,
+            style: GoogleFonts.poppins(fontSize: 12.5, color: AppTheme.textPrimary),
+            decoration: InputDecoration(
+              hintText: 'Paste license key provided by vendor...',
+              hintStyle: GoogleFonts.poppins(color: AppTheme.textHint, fontSize: 13),
+              filled: true,
+              fillColor: const Color(0xFFF9FAFB),
+              contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(10),
+                borderSide: const BorderSide(color: Color(0xFFE5E7EB)),
+              ),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(10),
+                borderSide: const BorderSide(color: Color(0xFFE5E7EB)),
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(10),
+                borderSide: const BorderSide(color: AppTheme.primaryPurple, width: 1.5),
+              ),
+            ),
+          ),
+        )
+            .animate()
+            .fadeIn(delay: 200.ms, duration: 400.ms)
+            .slideY(begin: 0.08, end: 0),
+
+        const SizedBox(height: 16),
+
+        // ── Error / Status Message ──
+        if (_statusMessage != null && !_isSuccess) ...[
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+            decoration: BoxDecoration(
+              color: AppTheme.errorLight,
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Row(
+              children: [
+                const Icon(
+                  Icons.error_outline_rounded,
+                  color: AppTheme.error,
+                  size: 18,
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    _statusMessage!,
+                    style: GoogleFonts.poppins(
+                      color: AppTheme.error,
+                      fontSize: 12.5,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          )
+              .animate()
+              .fadeIn(duration: 250.ms)
+              .shake(hz: 3, duration: 350.ms),
+          const SizedBox(height: 16),
+        ],
+
+        // ── Activate Button ──
+        SizedBox(
+          width: double.infinity,
+          height: 48,
+          child: ElevatedButton(
+            onPressed: _isActivating ? null : _handleActivate,
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppTheme.primaryPurple,
+              foregroundColor: Colors.white,
+              disabledBackgroundColor: AppTheme.primaryPurple.withValues(alpha: 0.6),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10),
+              ),
+              elevation: 0,
+            ),
+            child: _isActivating
+                ? const SizedBox(
+                    width: 22,
+                    height: 22,
+                    child: CircularProgressIndicator(
+                      color: Colors.white,
+                      strokeWidth: 2.5,
+                    ),
+                  )
+                : Text(
+                    'Activate License',
+                    style: GoogleFonts.poppins(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+          ),
+        )
+            .animate()
+            .fadeIn(delay: 240.ms, duration: 400.ms)
+            .slideY(begin: 0.08, end: 0),
+
+        const SizedBox(height: 36),
+
+        // Footer
+        Center(
+          child: Text(
+            'Developed by Kishan  •  Contact: 9839994285',
+            style: GoogleFonts.poppins(
+              fontSize: 11,
+              color: AppTheme.textHint,
+            ),
+          ),
+        )
+            .animate()
+            .fadeIn(delay: 300.ms, duration: 400.ms),
+      ],
+    );
+  }
+
+  /// Builds the hardware ID card with interactive copy feedback and tamper section
+  Widget _buildHardwareIdCard(String hwId, dynamic licenseState) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+          decoration: BoxDecoration(
+            color: const Color(0xFFF9FAFB),
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(color: const Color(0xFFE5E7EB)),
+          ),
+          child: Row(
+            children: [
+              const Icon(Icons.laptop_windows_rounded, color: AppTheme.textSecondary, size: 18),
+              const SizedBox(width: 12),
+              Expanded(
+                child: SelectableText(
+                  hwId,
+                  style: GoogleFonts.poppins(
+                    color: AppTheme.textPrimary,
+                    fontWeight: FontWeight.w600,
+                    fontSize: 13,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              SizedBox(
+                height: 32,
+                child: TextButton.icon(
+                  onPressed: () => _onCopyHardwareId(hwId),
+                  icon: Icon(
+                    _hasCopied ? Icons.check_rounded : Icons.copy_rounded,
+                    size: 14,
+                    color: _hasCopied ? AppTheme.success : AppTheme.primaryPurple,
+                  ),
+                  label: Text(
+                    _hasCopied ? 'Copied' : 'Copy',
+                    style: GoogleFonts.poppins(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: _hasCopied ? AppTheme.success : AppTheme.primaryPurple,
+                    ),
+                  ),
+                  style: TextButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(horizontal: 10),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+
+        // ── Tamper Recovery ──
+        if (licenseState?.status == LicenseStatus.tampered) ...[
+          const SizedBox(height: 12),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+            decoration: BoxDecoration(
+              color: AppTheme.errorLight,
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Row(
+              children: [
+                const Icon(Icons.warning_amber_rounded, color: AppTheme.error, size: 18),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    'System locked due to clock tampering.',
+                    style: GoogleFonts.poppins(color: AppTheme.error, fontSize: 12.5),
+                  ),
+                ),
+                TextButton(
+                  onPressed: () => setState(() => _showTamperInstructions = !_showTamperInstructions),
+                  style: TextButton.styleFrom(
+                    foregroundColor: AppTheme.primaryPurple,
+                    padding: const EdgeInsets.symmetric(horizontal: 10),
+                  ),
+                  child: Text(
+                    _showTamperInstructions ? 'Hide' : 'Request Unlock',
+                    style: GoogleFonts.poppins(fontSize: 12, fontWeight: FontWeight.w600),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+
+        if (_showTamperInstructions) ...[
+          const SizedBox(height: 10),
+          Container(
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: AppTheme.warningLight,
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: AppTheme.warning.withValues(alpha: 0.3)),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Tamper Reset Instructions',
+                  style: GoogleFonts.poppins(
+                    color: AppTheme.textPrimary,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  'If your CMOS battery died or clock was altered, WhatsApp support with your Hardware ID and this Incident ID:',
+                  style: GoogleFonts.poppins(color: AppTheme.textSecondary, fontSize: 12, height: 1.5),
+                ),
+                const SizedBox(height: 8),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: const Color(0xFFE5E7EB)),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.tag_rounded, color: AppTheme.textSecondary, size: 16),
+                      const SizedBox(width: 8),
+                      SelectableText(
+                        _generateTamperIncidentId(hwId),
+                        style: GoogleFonts.poppins(
+                          color: AppTheme.textPrimary,
+                          fontWeight: FontWeight.w600,
+                          fontSize: 13,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  'You will receive a Tamper Reset Token to paste above.',
+                  style: GoogleFonts.poppins(
+                    color: AppTheme.textHint,
+                    fontSize: 11.5,
+                    fontStyle: FontStyle.italic,
+                  ),
+                ),
+              ],
+            ),
+          )
+              .animate()
+              .fadeIn(duration: 250.ms)
+              .slideY(begin: -0.05, end: 0),
+        ],
+      ],
+    );
+  }
+
+  /// Builds the celebration / success view shown upon valid license key activation
+  Widget _buildSuccessCelebrationView() {
+    final clientName = _successResult?.details?.clientName ?? 'Authorized User';
+
+    return Column(
+      key: const ValueKey('activation_success'),
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        const SizedBox(height: 20),
+
+        // Glowing Animated Checkmark with Ripple
+        Stack(
+          alignment: Alignment.center,
+          children: [
+            // Expanding soft pulse ring
+            Container(
+              width: 110,
+              height: 110,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                border: Border.all(color: AppTheme.success.withValues(alpha: 0.35), width: 2),
+              ),
+            )
+                .animate(onPlay: (c) => c.forward())
+                .scale(begin: const Offset(0.7, 0.7), end: const Offset(1.3, 1.3), duration: 800.ms, curve: Curves.easeOut)
+                .fadeOut(duration: 800.ms),
+
+            // Inner circle with checkmark
+            Container(
+              width: 84,
+              height: 84,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: AppTheme.successLight,
+                border: Border.all(color: AppTheme.success.withValues(alpha: 0.5), width: 2.5),
+                boxShadow: [
+                  BoxShadow(
+                    color: AppTheme.success.withValues(alpha: 0.2),
+                    blurRadius: 20,
+                    offset: const Offset(0, 8),
+                  ),
+                ],
+              ),
+              child: const Center(
+                child: Icon(Icons.check_rounded, color: AppTheme.success, size: 46),
+              ),
+            )
+                .animate()
+                .scale(begin: const Offset(0.3, 0.3), end: const Offset(1.0, 1.0), duration: 650.ms, curve: Curves.elasticOut)
+                .fadeIn(duration: 300.ms),
+          ],
+        ),
+
+        const SizedBox(height: 28),
+
+        // Title
+        Text(
+          'License Activated!',
+          style: GoogleFonts.poppins(
+            color: AppTheme.textPrimary,
+            fontSize: 24,
+            fontWeight: FontWeight.w700,
+          ),
+        )
+            .animate()
+            .fadeIn(delay: 250.ms, duration: 400.ms)
+            .slideY(begin: 0.15, end: 0),
+
+        const SizedBox(height: 12),
+
+        // Client Badge
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          decoration: BoxDecoration(
+            color: AppTheme.primarySoft,
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(color: AppTheme.primaryLight.withValues(alpha: 0.2)),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.verified_user_rounded, color: AppTheme.primaryPurple, size: 16),
+              const SizedBox(width: 8),
+              Text(
+                'Licensed to: $clientName',
+                style: GoogleFonts.poppins(
+                  color: AppTheme.primaryDark,
+                  fontWeight: FontWeight.w600,
+                  fontSize: 12.5,
+                ),
+              ),
+            ],
+          ),
+        )
+            .animate()
+            .fadeIn(delay: 350.ms, duration: 400.ms)
+            .scale(begin: const Offset(0.9, 0.9), end: const Offset(1, 1)),
+
+        const SizedBox(height: 16),
+
+        Text(
+          'Hardware verification complete.\nAll Eduvia modules are now fully unlocked.',
+          textAlign: TextAlign.center,
+          style: GoogleFonts.poppins(
+            color: AppTheme.textSecondary,
+            fontSize: 13.5,
+            height: 1.5,
+          ),
+        )
+            .animate()
+            .fadeIn(delay: 450.ms, duration: 400.ms),
+
+        const SizedBox(height: 32),
+
+        // Launch Progress Bar
+        ClipRRect(
+          borderRadius: BorderRadius.circular(6),
+          child: const SizedBox(
+            width: 220,
+            height: 6,
+            child: LinearProgressIndicator(
+              backgroundColor: Color(0xFFF3F4F6),
+              color: AppTheme.primaryPurple,
+            ),
+          ),
+        )
+            .animate()
+            .fadeIn(delay: 550.ms, duration: 300.ms),
+
+        const SizedBox(height: 12),
+
+        Text(
+          'Entering workspace...',
+          style: GoogleFonts.poppins(
+            color: AppTheme.textHint,
+            fontSize: 12,
+          ),
+        )
+            .animate()
+            .fadeIn(delay: 600.ms, duration: 300.ms),
+
+        const SizedBox(height: 20),
+      ],
     );
   }
 
@@ -324,28 +853,53 @@ class _LicenseActivationViewState extends ConsumerState<LicenseActivationView> {
     if (authState.isAuthenticated) {
       if (!PermissionHelper.requireAdminRole(context, ref, RiskyAction.licenseManagement)) return;
     }
-    if (_keyController.text.trim().isEmpty) return;
+
+    final keyText = _keyController.text.trim();
+    if (keyText.isEmpty) {
+      setState(() {
+        _shakeCounter++;
+        _statusMessage = 'Please paste a valid license key.';
+      });
+      return;
+    }
 
     setState(() {
       _isActivating = true;
       _statusMessage = null;
     });
 
-    final result = await ref.read(licenseStateProvider.notifier).activateKey(_keyController.text.trim());
+    final result = await ref.read(licenseStateProvider.notifier).activateKey(keyText);
 
-    setState(() {
-      _isActivating = false;
-      _isSuccess = !result.status.isReadOnly;
-      _statusMessage = result.message;
-    });
+    if (result.status.isReadOnly) {
+      // Failed activation or read-only status
+      setState(() {
+        _isActivating = false;
+        _isSuccess = false;
+        _statusMessage = result.message;
+        _shakeCounter++;
+      });
+    } else {
+      // Successful valid license activation
+      setState(() {
+        _isActivating = false;
+        _isSuccess = true;
+        _successResult = result;
+      });
 
-    if (!result.status.isReadOnly) {
       TelemetryService.instance.trackFeatureUsage('license_activated', {
         'client_name': result.details?.clientName ?? 'Unknown',
       });
 
-      if (mounted && Navigator.of(context).canPop()) {
-        Navigator.of(context).pop();
+      // Allow user to admire the celebration animation before transitioning
+      await Future.delayed(const Duration(milliseconds: 2100));
+
+      if (mounted) {
+        // Update Riverpod provider to active state
+        ref.read(licenseStateProvider.notifier).updateState(result);
+
+        if (Navigator.of(context).canPop()) {
+          Navigator.of(context).pop();
+        }
       }
     }
   }

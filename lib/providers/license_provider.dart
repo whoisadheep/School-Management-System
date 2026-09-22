@@ -27,11 +27,16 @@ class LicenseNotifier extends StateNotifier<AsyncValue<LicenseValidationResult>>
     }
   }
 
-  Future<LicenseValidationResult> activateKey(String key) async {
-    state = const AsyncValue.loading();
+  Future<LicenseValidationResult> activateKey(String key, {bool autoUpdateState = false}) async {
     final result = await _service.verifyAndApplyLicenseKey(key);
-    state = AsyncValue.data(result);
+    if (autoUpdateState) {
+      state = AsyncValue.data(result);
+    }
     return result;
+  }
+
+  void updateState(LicenseValidationResult result) {
+    state = AsyncValue.data(result);
   }
 }
 

@@ -110,7 +110,7 @@ class _MainLayoutState extends ConsumerState<MainLayout> {
     // 1. Initial boot license check: show loader while resolving hardware ID and license key
     if (licenseAsync.isLoading) {
       return const Scaffold(
-        backgroundColor: Color(0xFF0F172A),
+        backgroundColor: Colors.white,
         body: Center(
           child: CircularProgressIndicator(color: Color(0xFF4C3BCF)),
         ),
