@@ -1,12 +1,10 @@
 import 'dart:convert';
 import 'package:crypto/crypto.dart';
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../providers/auth_provider.dart';
 import '../../../providers/license_provider.dart';
-import '../../../services/license_generator.dart';
 import '../../../core/auth/permission_helper.dart';
 import '../../../services/license_service.dart';
 import '../../../services/telemetry_service.dart';
@@ -285,42 +283,21 @@ class _LicenseActivationViewState extends ConsumerState<LicenseActivationView> {
                     ),
                   ),
 
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    if (kDebugMode)
-                      TextButton.icon(
-                        onPressed: () async {
-                          final hwId = await ref.read(hardwareIdProvider.future);
-                          final demoKey = LicenseGenerator.generateLicenseKey(
-                            hardwareId: hwId,
-                            expiryDate: DateTime.now().add(const Duration(days: 365)),
-                            clientName: "Eduvia School",
-                          );
-                          setState(() {
-                            _keyController.text = demoKey;
-                          });
-                        },
-                        icon: const Icon(Icons.auto_awesome, size: 14, color: Color(0xFF60A5FA)),
-                        label: const Text('Generate 1-Year Demo Key (Debug Only)', style: TextStyle(color: Color(0xFF60A5FA), fontSize: 12)),
-                      )
-                    else
-                      const SizedBox.shrink(),
-
-                    ElevatedButton.icon(
-                      onPressed: _isActivating ? null : _handleActivate,
-                      icon: _isActivating
-                          ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                          : const Icon(Icons.verified_rounded, size: 18),
-                      label: const Text('Activate License'),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFF2563EB),
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                      ),
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton.icon(
+                    onPressed: _isActivating ? null : _handleActivate,
+                    icon: _isActivating
+                        ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                        : const Icon(Icons.verified_rounded, size: 18),
+                    label: const Text('Activate License', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF2563EB),
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                     ),
-                  ],
+                  ),
                 ),
 
                 const SizedBox(height: 18),
