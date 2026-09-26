@@ -283,7 +283,12 @@ class DatabaseService {
     if (classRows.isNotEmpty) {
       classId = classRows.first['id'] as String?;
     } else {
-      final canonicalName = RegExp(r'^\d+$').hasMatch(cleanGrade) ? 'Grade $cleanGrade' : cleanGrade;
+      String canonicalName = cleanGrade;
+      if (RegExp(r'^\d+$').hasMatch(cleanGrade)) {
+        final n = int.tryParse(cleanGrade) ?? 1;
+        final suffix = (n == 1) ? '1st' : (n == 2) ? '2nd' : (n == 3) ? '3rd' : '${n}th';
+        canonicalName = 'Class $suffix';
+      }
       final newClassId = 'cls-${canonicalName.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '')}';
       await _insertLogged(db, 'classes', {
         'id': newClassId,
