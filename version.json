@@ -1,7 +1,7 @@
 {
-  "latest_version": "1.0.30",
-  "download_url": "https://github.com/whoisadheep/School-Management-System/releases/download/v1.0.30/Eduvia-Installer.exe",
+  "latest_version": "1.0.31",
+  "download_url": "https://github.com/whoisadheep/School-Management-System/releases/download/v1.0.31/Eduvia-Installer.exe",
   "sha256": "",
-  "changelog": "Redesigned License Activation screen with sleek minimalist design, professional entrance animations, and celebration sequence upon activation.",
+  "changelog": "Replaced hardcoded grades with dynamic classes configured in Class & Section setup across Student Directory, Promotion tool, Attendance, and Fees. Supports custom class names.",
   "mandatory_update": false
 }

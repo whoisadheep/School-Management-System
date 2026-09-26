@@ -3,6 +3,7 @@ import 'dart:async';
 import 'dart:io';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../../core/theme/app_theme.dart';
@@ -160,6 +161,7 @@ class _StudentDirectoryViewState extends ConsumerState<StudentDirectoryView>
   bool _isHeaderCollapsed = false;
 
   final _searchController = TextEditingController();
+  final _chipsScrollController = ScrollController();
   Timer? _debounceTimer;
   Timer? _autoRefreshTimer;
   int? _lastStudentCount;
@@ -318,6 +320,7 @@ class _StudentDirectoryViewState extends ConsumerState<StudentDirectoryView>
     _animController.dispose();
     _collapseController.dispose();
     _searchController.dispose();
+    _chipsScrollController.dispose();
     super.dispose();
   }
 
@@ -896,62 +899,149 @@ class _StudentDirectoryViewState extends ConsumerState<StudentDirectoryView>
                           ),
                           const SizedBox(width: 12),
 
-                          // Scrollable Class Chips
+                          // Scrollable Class Chips with Left/Right Buttons & Mouse Wheel / Drag
                           Expanded(
-                            child: SingleChildScrollView(
-                              scrollDirection: Axis.horizontal,
-                              child: Row(
-                                children: availableClasses.map((className) {
-                                  final isSelected = className == 'All'
-                                      ? selectedGrade == 'All'
-                                      : (selectedGrade != 'All' &&
-                                          _matchesGrade(selectedGrade, className));
-                                  return Padding(
-                                    padding: const EdgeInsets.only(right: 8),
-                                    child: InkWell(
-                                      onTap: () {
-                                        ref
-                                            .read(studentGradeFilterProvider
-                                                .notifier)
-                                            .state = className;
-                                        if (_currentPage != 0) {
-                                          setState(() => _currentPage = 0);
-                                        }
-                                      },
+                            child: Row(
+                              children: [
+                                // Left Scroll Button
+                                InkWell(
+                                  onTap: () {
+                                    if (_chipsScrollController.hasClients) {
+                                      _chipsScrollController.animateTo(
+                                        (_chipsScrollController.offset - 220)
+                                            .clamp(0.0, _chipsScrollController.position.maxScrollExtent),
+                                        duration: const Duration(milliseconds: 250),
+                                        curve: Curves.easeOutCubic,
+                                      );
+                                    }
+                                  },
+                                  borderRadius: BorderRadius.circular(8),
+                                  child: Container(
+                                    height: 36,
+                                    width: 26,
+                                    alignment: Alignment.center,
+                                    decoration: BoxDecoration(
+                                      color: Colors.white,
                                       borderRadius: BorderRadius.circular(8),
-                                      child: Container(
-                                        padding: const EdgeInsets.symmetric(
-                                            horizontal: 12, vertical: 8),
-                                        decoration: BoxDecoration(
-                                          color: isSelected
-                                              ? Colors.white
-                                              : Colors.transparent,
-                                          borderRadius:
-                                              BorderRadius.circular(8),
-                                          border: Border.all(
-                                            color: isSelected
-                                                ? AppTheme.primaryPurple
-                                                : const Color(0xFFE2E8F0),
-                                            width: isSelected ? 1.5 : 1,
-                                          ),
-                                        ),
-                                        child: Text(
-                                          className == 'All' ? 'All Classes' : className,
-                                          style: GoogleFonts.poppins(
-                                            fontSize: 12,
-                                            fontWeight: isSelected
-                                                ? FontWeight.w600
-                                                : FontWeight.w500,
-                                            color: isSelected
-                                                ? AppTheme.primaryPurple
-                                                : const Color(0xFF64748B),
-                                          ),
+                                      border: Border.all(color: const Color(0xFFE2E8F0)),
+                                    ),
+                                    child: const Icon(Icons.chevron_left_rounded,
+                                        size: 18, color: Color(0xFF64748B)),
+                                  ),
+                                ),
+                                const SizedBox(width: 6),
+
+                                // Scrollable Chips with Mouse Wheel Support
+                                Expanded(
+                                  child: Listener(
+                                    onPointerSignal: (pointerSignal) {
+                                      if (pointerSignal is PointerScrollEvent && _chipsScrollController.hasClients) {
+                                        final delta = pointerSignal.scrollDelta.dy != 0
+                                            ? pointerSignal.scrollDelta.dy
+                                            : pointerSignal.scrollDelta.dx;
+                                        final target = (_chipsScrollController.offset + delta)
+                                            .clamp(0.0, _chipsScrollController.position.maxScrollExtent);
+                                        _chipsScrollController.jumpTo(target);
+                                      }
+                                    },
+                                    child: ScrollConfiguration(
+                                      behavior: ScrollConfiguration.of(context).copyWith(
+                                        dragDevices: {
+                                          PointerDeviceKind.touch,
+                                          PointerDeviceKind.mouse,
+                                          PointerDeviceKind.trackpad,
+                                          PointerDeviceKind.stylus,
+                                        },
+                                      ),
+                                      child: SingleChildScrollView(
+                                        controller: _chipsScrollController,
+                                        scrollDirection: Axis.horizontal,
+                                        physics: const BouncingScrollPhysics(),
+                                        child: Row(
+                                          children: availableClasses.map((className) {
+                                            final isSelected = className == 'All'
+                                                ? selectedGrade == 'All'
+                                                : (selectedGrade != 'All' &&
+                                                    _matchesGrade(selectedGrade, className));
+                                            return Padding(
+                                              padding: const EdgeInsets.only(right: 8),
+                                              child: InkWell(
+                                                onTap: () {
+                                                  ref
+                                                      .read(studentGradeFilterProvider
+                                                          .notifier)
+                                                      .state = className;
+                                                  if (_currentPage != 0) {
+                                                    setState(() => _currentPage = 0);
+                                                  }
+                                                },
+                                                borderRadius: BorderRadius.circular(8),
+                                                child: Container(
+                                                  padding: const EdgeInsets.symmetric(
+                                                      horizontal: 12, vertical: 8),
+                                                  decoration: BoxDecoration(
+                                                    color: isSelected
+                                                        ? Colors.white
+                                                        : Colors.transparent,
+                                                    borderRadius:
+                                                        BorderRadius.circular(8),
+                                                    border: Border.all(
+                                                      color: isSelected
+                                                          ? AppTheme.primaryPurple
+                                                          : const Color(0xFFE2E8F0),
+                                                      width: isSelected ? 1.5 : 1,
+                                                    ),
+                                                  ),
+                                                  child: Text(
+                                                    className == 'All' ? 'All Classes' : className,
+                                                    style: GoogleFonts.poppins(
+                                                      fontSize: 12,
+                                                      fontWeight: isSelected
+                                                          ? FontWeight.w600
+                                                          : FontWeight.w500,
+                                                      color: isSelected
+                                                          ? AppTheme.primaryPurple
+                                                          : const Color(0xFF64748B),
+                                                    ),
+                                                  ),
+                                                ),
+                                              ),
+                                            );
+                                          }).toList(),
                                         ),
                                       ),
                                     ),
-                                  );
-                                }).toList(),
-                              ),
+                                  ),
+                                ),
+
+                                const SizedBox(width: 6),
+                                // Right Scroll Button
+                                InkWell(
+                                  onTap: () {
+                                    if (_chipsScrollController.hasClients) {
+                                      _chipsScrollController.animateTo(
+                                        (_chipsScrollController.offset + 220)
+                                            .clamp(0.0, _chipsScrollController.position.maxScrollExtent),
+                                        duration: const Duration(milliseconds: 250),
+                                        curve: Curves.easeOutCubic,
+                                      );
+                                    }
+                                  },
+                                  borderRadius: BorderRadius.circular(8),
+                                  child: Container(
+                                    height: 36,
+                                    width: 26,
+                                    alignment: Alignment.center,
+                                    decoration: BoxDecoration(
+                                      color: Colors.white,
+                                      borderRadius: BorderRadius.circular(8),
+                                      border: Border.all(color: const Color(0xFFE2E8F0)),
+                                    ),
+                                    child: const Icon(Icons.chevron_right_rounded,
+                                        size: 18, color: Color(0xFF64748B)),
+                                  ),
+                                ),
+                              ],
                             ),
                           ),
 
