@@ -209,6 +209,43 @@ class StudentFeeDuesSummary {
   });
 }
 
+/// Represents a class-to-class promotion mapping used in Whole School Mass Promotion
+class MassClassPromotionMapping {
+  final String fromClass;
+  final String? fromClassId;
+  final String toClass;
+  final String? toClassId;
+  final bool isAlumni;
+  final List<String> studentIds;
+
+  const MassClassPromotionMapping({
+    required this.fromClass,
+    this.fromClassId,
+    required this.toClass,
+    this.toClassId,
+    required this.isAlumni,
+    required this.studentIds,
+  });
+
+  MassClassPromotionMapping copyWith({
+    String? fromClass,
+    String? fromClassId,
+    String? toClass,
+    String? toClassId,
+    bool? isAlumni,
+    List<String>? studentIds,
+  }) {
+    return MassClassPromotionMapping(
+      fromClass: fromClass ?? this.fromClass,
+      fromClassId: fromClassId ?? this.fromClassId,
+      toClass: toClass ?? this.toClass,
+      toClassId: toClassId ?? this.toClassId,
+      isAlumni: isAlumni ?? this.isAlumni,
+      studentIds: studentIds ?? this.studentIds,
+    );
+  }
+}
+
 /// Represents a consolidated fee item grouping multiple contiguous months
 /// of the same fee head (e.g. "Tuition Fee" with "From April to June").
 class ConsolidatedFeeItem {

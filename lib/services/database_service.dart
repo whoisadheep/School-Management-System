@@ -565,16 +565,30 @@ class DatabaseService {
     });
   }
 
-  /// Retrieves aggregated summary of uncleared fee dues for a batch of students in an academic year
+  /// Retrieves aggregated summary of uncleared fee dues for a batch of students or all active students in an academic year
   Future<Map<String, StudentFeeDuesSummary>> getStudentsUnpaidDuesSummary({
-    required List<String> studentIds,
+    List<String>? studentIds,
     required String academicYear,
+    bool allActive = false,
   }) async {
-    if (studentIds.isEmpty) return {};
     final db = await _db;
     final cleanYear = academicYear.replaceFirst('ay-', '');
     final ayWithPrefix = academicYear.startsWith('ay-') ? academicYear : 'ay-$academicYear';
-    final placeholders = List.filled(studentIds.length, '?').join(',');
+
+    String whereClause;
+    List<dynamic> whereArgs;
+
+    if (allActive || (studentIds != null && studentIds.isEmpty)) {
+      whereClause = "s.is_active = 1 AND s.is_alumni = 0 AND (sfl.academic_year = ? OR sfl.academic_year = ?)";
+      whereArgs = [cleanYear, ayWithPrefix];
+    } else if (studentIds != null && studentIds.isNotEmpty) {
+      final placeholders = List.filled(studentIds.length, '?').join(',');
+      whereClause = "sfl.student_id IN ($placeholders) AND (sfl.academic_year = ? OR sfl.academic_year = ?)";
+      whereArgs = [...studentIds, cleanYear, ayWithPrefix];
+    } else {
+      whereClause = "s.is_active = 1 AND s.is_alumni = 0 AND (sfl.academic_year = ? OR sfl.academic_year = ?)";
+      whereArgs = [cleanYear, ayWithPrefix];
+    }
 
     final rows = await db.rawQuery('''
       SELECT sfl.*, 
@@ -586,12 +600,11 @@ class DatabaseService {
       FROM student_fee_ledger sfl
       LEFT JOIN fee_heads fh ON sfl.fee_head_id = fh.id
       JOIN students s ON sfl.student_id = s.id
-      WHERE sfl.student_id IN ($placeholders)
-        AND (sfl.academic_year = ? OR sfl.academic_year = ?)
+      WHERE $whereClause
         AND sfl.status IN ('pending', 'partial', 'overdue')
         AND (sfl.amount_due - sfl.amount_paid) > 0.01
       ORDER BY sfl.due_date ASC
-    ''', [...studentIds, cleanYear, ayWithPrefix]);
+    ''', whereArgs);
 
     final map = <String, StudentFeeDuesSummary>{};
     for (final row in rows) {
@@ -788,6 +801,178 @@ class DatabaseService {
         }
       }
     });
+  }
+
+  /// Whole-School Mass Promotion: Promotes all students across all mapped classes in a single atomic transaction.
+  /// Handles graduating classes (Alumni/Graduated), section retention/mapping, and optional arrears rollover.
+  Future<int> massPromoteStudentsWithArrearsRollover({
+    required List<MassClassPromotionMapping> mappings,
+    required String fromAcademicYear,
+    required String toAcademicYear,
+    required bool rolloverArrears,
+  }) async {
+    final db = await _db;
+    final nowIso = DateTime.now().toIso8601String();
+    final cleanFromYear = fromAcademicYear.replaceFirst('ay-', '');
+    final ayFromWithPrefix = fromAcademicYear.startsWith('ay-') ? fromAcademicYear : 'ay-$fromAcademicYear';
+    final cleanToYear = toAcademicYear.replaceFirst('ay-', '');
+    final ayToWithPrefix = toAcademicYear.startsWith('ay-') ? toAcademicYear : 'ay-$toAcademicYear';
+
+    int totalPromotedCount = 0;
+
+    await db.transaction((txn) async {
+      // Pre-fetch all classes and sections so we can map student classes & sections smoothly
+      final allClasses = await txn.query('classes');
+      final allSections = await txn.query('sections');
+
+      for (final mapping in mappings) {
+        if (mapping.studentIds.isEmpty) continue;
+
+        if (mapping.isAlumni) {
+          for (final studentId in mapping.studentIds) {
+            await _updateLogged(
+              txn,
+              'students',
+              {
+                'is_active': 0,
+                'is_alumni': 1,
+                'updated_at': nowIso,
+              },
+              where: 'id = ?',
+              whereArgs: [studentId],
+            );
+            totalPromotedCount++;
+          }
+        } else {
+          // Resolve target class ID if not explicitly provided
+          String? effectiveTargetClassId = mapping.toClassId;
+          if (effectiveTargetClassId == null) {
+            final matchedClass = allClasses.where((c) => (c['name'] as String).toLowerCase().trim() == mapping.toClass.toLowerCase().trim()).firstOrNull;
+            effectiveTargetClassId = matchedClass != null ? (matchedClass['id'] as String) : null;
+          }
+
+          // Sections for the target class
+          final targetSections = allSections.where((s) => s['class_id'] == effectiveTargetClassId).toList();
+          final defaultSection = targetSections.isNotEmpty ? targetSections.first : null;
+
+          for (final studentId in mapping.studentIds) {
+            // Find current student's section
+            final stRows = await txn.query('students', columns: ['section'], where: 'id = ?', whereArgs: [studentId]);
+            final currentSecName = stRows.isNotEmpty ? (stRows.first['section'] as String?)?.trim() : null;
+
+            Map<String, dynamic>? matchedTargetSec;
+            if (currentSecName != null && currentSecName.isNotEmpty) {
+              matchedTargetSec = targetSections.where((s) => (s['name'] as String).toUpperCase() == currentSecName.toUpperCase()).firstOrNull;
+            }
+            final finalSec = matchedTargetSec ?? defaultSection;
+            final finalSecId = finalSec != null ? (finalSec['id'] as String) : null;
+            final finalSecName = finalSec != null ? (finalSec['name'] as String) : currentSecName;
+
+            final Map<String, Object?> updates = {
+              'grade_level': mapping.toClass,
+              'updated_at': nowIso,
+            };
+            if (effectiveTargetClassId != null) updates['class_id'] = effectiveTargetClassId;
+            if (finalSecId != null) updates['section_id'] = finalSecId;
+            if (finalSecName != null) updates['section'] = finalSecName;
+
+            await _updateLogged(
+              txn,
+              'students',
+              updates,
+              where: 'id = ?',
+              whereArgs: [studentId],
+            );
+            totalPromotedCount++;
+          }
+        }
+
+        // Arrears Rollover
+        if (rolloverArrears && !mapping.isAlumni && cleanFromYear != cleanToYear) {
+          await txn.rawInsert('''
+            INSERT OR IGNORE INTO fee_heads (id, name, description, is_recurring, frequency)
+            VALUES ('fh-previous-arrears', 'Previous Session Arrears', 'Outstanding fee balance carried forward from previous academic session', 0, 'one_time')
+          ''');
+
+          for (final studentId in mapping.studentIds) {
+            final openRows = await txn.rawQuery('''
+              SELECT id, amount_due, amount_paid, month_label
+              FROM student_fee_ledger
+              WHERE student_id = ? 
+                AND (academic_year = ? OR academic_year = ?)
+                AND status IN ('pending', 'partial', 'overdue')
+                AND (amount_due - amount_paid) > 0.01
+            ''', [studentId, cleanFromYear, ayFromWithPrefix]);
+
+            if (openRows.isEmpty) continue;
+
+            double totalArrears = 0.0;
+            for (final r in openRows) {
+              final due = (r['amount_due'] as num?)?.toDouble() ?? 0.0;
+              final paid = (r['amount_paid'] as num?)?.toDouble() ?? 0.0;
+              totalArrears += (due - paid);
+            }
+
+            if (totalArrears > 0.01) {
+              final existingArrears = await txn.rawQuery('''
+                SELECT id, amount_due, amount_paid FROM student_fee_ledger
+                WHERE student_id = ? 
+                  AND (academic_year = ? OR academic_year = ?) 
+                  AND fee_head_id = 'fh-previous-arrears'
+              ''', [studentId, cleanToYear, ayToWithPrefix]);
+
+              if (existingArrears.isNotEmpty) {
+                final oldDue = (existingArrears.first['amount_due'] as num?)?.toDouble() ?? 0.0;
+                await txn.rawUpdate('''
+                  UPDATE student_fee_ledger
+                  SET amount_due = ?, updated_at = ?
+                  WHERE id = ?
+                ''', [oldDue + totalArrears, nowIso, existingArrears.first['id']]);
+              } else {
+                final newLedgerId = const Uuid().v4();
+                final yearParts = cleanToYear.split('-');
+                final startYear = int.tryParse(yearParts.first) ?? DateTime.now().year;
+                final dueDate = DateTime(startYear, 4, 1).toIso8601String();
+
+                await _insertLogged(txn, 'student_fee_ledger', {
+                  'id': newLedgerId,
+                  'student_id': studentId,
+                  'fee_head_id': 'fh-previous-arrears',
+                  'academic_year': cleanToYear,
+                  'amount_due': totalArrears,
+                  'amount_paid': 0.0,
+                  'due_date': dueDate,
+                  'status': 'pending',
+                  'month_label': 'Arrears ($cleanFromYear)',
+                  'created_at': nowIso,
+                  'updated_at': nowIso,
+                });
+              }
+
+              for (final r in openRows) {
+                final oldId = r['id'] as String;
+                final oldDue = (r['amount_due'] as num?)?.toDouble() ?? 0.0;
+                final oldLabel = r['month_label'] as String? ?? '';
+                final updatedLabel = oldLabel.isNotEmpty
+                    ? '$oldLabel [Rolled over to $cleanToYear]'
+                    : 'Arrears [Rolled over to $cleanToYear]';
+
+                await txn.rawUpdate('''
+                  UPDATE student_fee_ledger
+                  SET amount_paid = ?,
+                      status = 'paid',
+                      month_label = ?,
+                      updated_at = ?
+                  WHERE id = ?
+                ''', [oldDue, updatedLabel, nowIso, oldId]);
+              }
+            }
+          }
+        }
+      }
+    });
+
+    return totalPromotedCount;
   }
 
   // ----------------------------------------------------------------------------

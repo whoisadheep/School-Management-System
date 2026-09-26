@@ -1082,6 +1082,18 @@ class _StudentDirectoryViewState extends ConsumerState<StudentDirectoryView>
                               ),
                               const PopupMenuDivider(),
                               const PopupMenuItem(
+                                value: 'whole_school_promotions',
+                                child: Row(
+                                  children: [
+                                    Icon(Icons.rocket_launch_rounded,
+                                        size: 16,
+                                        color: AppTheme.primaryPurple),
+                                    SizedBox(width: 8),
+                                    Text('Whole-School Promotion (1-Click)'),
+                                  ],
+                                ),
+                              ),
+                              const PopupMenuItem(
                                 value: 'promotions',
                                 child: Row(
                                   children: [
@@ -1089,7 +1101,7 @@ class _StudentDirectoryViewState extends ConsumerState<StudentDirectoryView>
                                         size: 16,
                                         color: AppTheme.primaryPurple),
                                     SizedBox(width: 8),
-                                    Text('Class Promotions'),
+                                    Text('Single Class Promotion'),
                                   ],
                                 ),
                               ),
@@ -1122,6 +1134,8 @@ class _StudentDirectoryViewState extends ConsumerState<StudentDirectoryView>
                                 ref
                                     .read(studentStatusFilterProvider.notifier)
                                     .state = 'All';
+                              } else if (val == 'whole_school_promotions') {
+                                _showWholeSchoolPromotionDialog(context);
                               } else if (val == 'promotions') {
                                 _showClassPromotionDialog(context);
                               } else if (val == 'refresh') {
@@ -3605,6 +3619,787 @@ class _StudentDirectoryViewState extends ConsumerState<StudentDirectoryView>
     );
   }
 
+  // ----------------------------------------------------------------------------
+  // Whole-School 1-Click Mass Promotion & Financial Audit
+  // ----------------------------------------------------------------------------
+
+  Future<void> _showWholeSchoolPromotionDialog(BuildContext context) async {
+    final dbService = ref.read(databaseServiceProvider);
+
+    // 1. Fetch current academic session
+    final currentAy = await dbService.getCurrentAcademicYear();
+    final fromYear = currentAy?.name ?? '2026-2027';
+    final targetYear = _nextAcademicYear(fromYear);
+
+    // 2. Fetch all classes configured in Class & Section setup
+    final fetchedClasses = await dbService.getAllClasses();
+    final allClasses = List<ClassModel>.from(fetchedClasses)
+      ..sort((a, b) => _compareClassNames(a.name, b.name));
+
+    // Also include any class names stored on active students
+    final allStudents = await dbService.getAllStudents(activeOnly: true);
+    final activeStudents = allStudents.where((s) => s.isActive && !s.isAlumni).toList();
+
+    final classNames = allClasses.map((c) => c.name.trim()).where((n) => n.isNotEmpty).toSet().toList();
+    for (final s in activeStudents) {
+      final clean = s.gradeLevel.trim();
+      if (clean.isNotEmpty && !classNames.any((cn) => _matchesGrade(cn, clean))) {
+        classNames.add(clean);
+      }
+    }
+    classNames.sort(_compareClassNames);
+
+    if (classNames.isEmpty) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('No classes or active students found to promote.'),
+            backgroundColor: AppTheme.error,
+          ),
+        );
+      }
+      return;
+    }
+
+    // 3. Build initial route mappings: each class -> next class in list; last class -> 'Alumni / Graduated'
+    final Map<String, String> routeTargets = {};
+    for (int i = 0; i < classNames.length; i++) {
+      final cName = classNames[i];
+      if (i < classNames.length - 1) {
+        routeTargets[cName] = classNames[i + 1];
+      } else {
+        routeTargets[cName] = 'Alumni / Graduated';
+      }
+    }
+
+    // 4. Query fee dues across all active students for financial audit
+    final duesMap = await dbService.getStudentsUnpaidDuesSummary(
+      academicYear: fromYear,
+      allActive: true,
+    );
+
+    final studentsWithDues = duesMap.values.where((s) => s.unpaidBalance > 0.01).toList();
+    final totalUnpaidAmount = studentsWithDues.fold(0.0, (sum, s) => sum + s.unpaidBalance);
+    final unpaidStudentIds = studentsWithDues.map((s) => s.studentId).toSet();
+
+    if (!context.mounted) return;
+
+    bool isExecuting = false;
+
+    await showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogCtx) => StatefulBuilder(
+        builder: (context, setDialogState) {
+          // Compute student counts per fromClass
+          final Map<String, List<Student>> classStudentsMap = {};
+          for (final cName in classNames) {
+            classStudentsMap[cName] = activeStudents.where((s) => _matchesGrade(s.gradeLevel, cName)).toList();
+          }
+
+          final totalStudentsToPromote = activeStudents.length;
+          final hasUnclearedFees = studentsWithDues.isNotEmpty;
+
+          return AlertDialog(
+            backgroundColor: Colors.white,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+            titlePadding: const EdgeInsets.fromLTRB(24, 20, 24, 0),
+            contentPadding: const EdgeInsets.fromLTRB(24, 16, 24, 0),
+            actionsPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+            title: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: AppTheme.primaryPurple.withOpacity(0.12),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: const Icon(Icons.rocket_launch_rounded, color: AppTheme.primaryPurple, size: 24),
+                ),
+                const SizedBox(width: 14),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      'WHOLE-SCHOOL MASS PROMOTION',
+                      style: GoogleFonts.poppins(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 15,
+                        color: AppTheme.textPrimary,
+                        letterSpacing: 0.5,
+                      ),
+                    ),
+                    Text(
+                      '1-Click Session Transition: $fromYear  ➔  $targetYear',
+                      style: GoogleFonts.poppins(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w500,
+                        color: AppTheme.primaryPurple,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+            content: SizedBox(
+              width: 760,
+              child: ConstrainedBox(
+                constraints: BoxConstraints(
+                  maxHeight: MediaQuery.of(context).size.height * 0.72,
+                ),
+                child: SingleChildScrollView(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // Overview summary chips
+                      Container(
+                        padding: const EdgeInsets.all(14),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFF8FAFC),
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(color: const Color(0xFFE2E8F0)),
+                        ),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceAround,
+                          children: [
+                            _buildMassStatItem(
+                              icon: Icons.groups_rounded,
+                              iconColor: AppTheme.primaryPurple,
+                              label: 'Total Active Students',
+                              value: '$totalStudentsToPromote',
+                            ),
+                            Container(width: 1, height: 32, color: const Color(0xFFCBD5E1)),
+                            _buildMassStatItem(
+                              icon: Icons.school_rounded,
+                              iconColor: const Color(0xFF0284C7),
+                              label: 'Active Classes',
+                              value: '${classNames.length}',
+                            ),
+                            Container(width: 1, height: 32, color: const Color(0xFFCBD5E1)),
+                            _buildMassStatItem(
+                              icon: Icons.calendar_today_rounded,
+                              iconColor: const Color(0xFF10B981),
+                              label: 'Session Transition',
+                              value: '$fromYear → $targetYear',
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 14),
+
+                      // Fee Clearance & Financial Audit Banner
+                      if (hasUnclearedFees) ...[
+                        Container(
+                          padding: const EdgeInsets.all(14),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFFFFBEB),
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: const Color(0xFFFDE68A)),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                children: [
+                                  Container(
+                                    padding: const EdgeInsets.all(6),
+                                    decoration: BoxDecoration(
+                                      color: const Color(0xFFFEF3C7),
+                                      borderRadius: BorderRadius.circular(6),
+                                    ),
+                                    child: const Icon(Icons.warning_amber_rounded, color: Color(0xFFD97706), size: 20),
+                                  ),
+                                  const SizedBox(width: 10),
+                                  Expanded(
+                                    child: Text(
+                                      'FINANCIAL AUDIT ALERT: UNPAID FEES DETECTED',
+                                      style: GoogleFonts.poppins(
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.bold,
+                                        color: const Color(0xFF92400E),
+                                        letterSpacing: 0.3,
+                                      ),
+                                    ),
+                                  ),
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                    decoration: BoxDecoration(
+                                      color: const Color(0xFFFEE2E2),
+                                      borderRadius: BorderRadius.circular(20),
+                                      border: Border.all(color: const Color(0xFFFCA5A5)),
+                                    ),
+                                    child: Text(
+                                      'Total Dues: ₹${NumberFormat('#,##,###').format(totalUnpaidAmount)}',
+                                      style: GoogleFonts.poppins(
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.bold,
+                                        color: const Color(0xFFDC2626),
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 8),
+                              Text(
+                                '${studentsWithDues.length} student(s) across the school have uncleared fees totaling ₹${NumberFormat('#,##,###').format(totalUnpaidAmount)} in session $fromYear.',
+                                style: GoogleFonts.poppins(
+                                  fontSize: 12,
+                                  color: const Color(0xFF78350F),
+                                  height: 1.4,
+                                ),
+                              ),
+                              const SizedBox(height: 8),
+                              Container(
+                                padding: const EdgeInsets.all(10),
+                                decoration: BoxDecoration(
+                                  color: Colors.white.withOpacity(0.8),
+                                  borderRadius: BorderRadius.circular(8),
+                                  border: Border.all(color: const Color(0xFFFDE68A)),
+                                ),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      'Available Promotion Policies:',
+                                      style: GoogleFonts.poppins(fontSize: 11, fontWeight: FontWeight.bold, color: const Color(0xFF92400E)),
+                                    ),
+                                    const SizedBox(height: 4),
+                                    Text(
+                                      '• 1-Click Promote All & Rollover: Promotes everyone. Previous unpaid balances are carried forward into $targetYear as opening arrears.',
+                                      style: GoogleFonts.poppins(fontSize: 11, color: const Color(0xFF78350F)),
+                                    ),
+                                    const SizedBox(height: 2),
+                                    Text(
+                                      '• Promote Cleared Only: Advances only the ${totalStudentsToPromote - studentsWithDues.length} fee-cleared students. Students with dues remain in their current class until settled.',
+                                      style: GoogleFonts.poppins(fontSize: 11, color: const Color(0xFF78350F)),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ] else ...[
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFF0FDF4),
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: const Color(0xFFBBF7D0)),
+                          ),
+                          child: Row(
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.all(6),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFFDCFCE7),
+                                  borderRadius: BorderRadius.circular(6),
+                                ),
+                                child: const Icon(Icons.check_circle_rounded, color: Color(0xFF16A34A), size: 20),
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      'FEE CLEARANCE VERIFIED (100%)',
+                                      style: GoogleFonts.poppins(
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.bold,
+                                        color: const Color(0xFF166534),
+                                      ),
+                                    ),
+                                    Text(
+                                      'All active students have 100% cleared their fee dues for session $fromYear. Zero arrears found!',
+                                      style: GoogleFonts.poppins(fontSize: 11, color: const Color(0xFF15803D)),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                      const SizedBox(height: 16),
+
+                      // Class Progression Mapping Table Header
+                      Row(
+                        children: [
+                          const Icon(Icons.alt_route_rounded, color: AppTheme.primaryPurple, size: 18),
+                          const SizedBox(width: 8),
+                          Text(
+                            'Class Promotion Routes (Preview & Customize Targets)',
+                            style: GoogleFonts.poppins(
+                              fontSize: 13,
+                              fontWeight: FontWeight.bold,
+                              color: AppTheme.textPrimary,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        'Review target classes for each grade below. Eduvia has automatically matched each class to the next successive grade, and final class students to Alumni / Graduated.',
+                        style: GoogleFonts.poppins(fontSize: 11, color: AppTheme.textSecondary),
+                      ),
+                      const SizedBox(height: 10),
+
+                      // Promotion routes list
+                      Container(
+                        decoration: BoxDecoration(
+                          color: AppTheme.bgSurface,
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: const Color(0xFFE2E8F0)),
+                        ),
+                        child: ListView.separated(
+                          shrinkWrap: true,
+                          physics: const NeverScrollableScrollPhysics(),
+                          itemCount: classNames.length,
+                          separatorBuilder: (_, __) => const Divider(height: 1, color: Color(0xFFF1F5F9)),
+                          itemBuilder: (context, idx) {
+                            final fromC = classNames[idx];
+                            final stList = classStudentsMap[fromC] ?? [];
+                            final targetC = routeTargets[fromC] ?? 'Alumni / Graduated';
+                            final isTargetAlumni = targetC == 'Alumni / Graduated';
+
+                            // Class-level fee status
+                            final classDuesCount = stList.where((s) => unpaidStudentIds.contains(s.id)).length;
+                            final classDuesAmt = stList
+                                .where((s) => unpaidStudentIds.contains(s.id))
+                                .fold(0.0, (sum, s) => sum + (duesMap[s.id]?.unpaidBalance ?? 0.0));
+
+                            return Padding(
+                              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                              child: Row(
+                                children: [
+                                  // From Class badge & Student count
+                                  Expanded(
+                                    flex: 4,
+                                    child: Row(
+                                      children: [
+                                        Container(
+                                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                                          decoration: BoxDecoration(
+                                            color: AppTheme.primaryPurple.withOpacity(0.08),
+                                            borderRadius: BorderRadius.circular(8),
+                                            border: Border.all(color: AppTheme.primaryPurple.withOpacity(0.2)),
+                                          ),
+                                          child: Text(
+                                            fromC,
+                                            style: GoogleFonts.poppins(
+                                              fontSize: 12,
+                                              fontWeight: FontWeight.bold,
+                                              color: AppTheme.primaryPurple,
+                                            ),
+                                          ),
+                                        ),
+                                        const SizedBox(width: 8),
+                                        Container(
+                                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                          decoration: BoxDecoration(
+                                            color: stList.isEmpty ? const Color(0xFFF1F5F9) : const Color(0xFFEFF6FF),
+                                            borderRadius: BorderRadius.circular(12),
+                                          ),
+                                          child: Text(
+                                            '${stList.length} student${stList.length == 1 ? '' : 's'}',
+                                            style: GoogleFonts.poppins(
+                                              fontSize: 11,
+                                              fontWeight: FontWeight.w600,
+                                              color: stList.isEmpty ? const Color(0xFF94A3B8) : const Color(0xFF1D4ED8),
+                                            ),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+
+                                  // Arrow indicator
+                                  const Padding(
+                                    padding: EdgeInsets.symmetric(horizontal: 10),
+                                    child: Icon(Icons.arrow_forward_rounded, color: Color(0xFF94A3B8), size: 18),
+                                  ),
+
+                                  // Target Class Dropdown
+                                  Expanded(
+                                    flex: 5,
+                                    child: DropdownButtonFormField<String>(
+                                      value: targetC,
+                                      isDense: true,
+                                      decoration: InputDecoration(
+                                        contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                                        filled: true,
+                                        fillColor: isTargetAlumni ? const Color(0xFFFDF2F8) : Colors.white,
+                                      ),
+                                      style: GoogleFonts.poppins(
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.w600,
+                                        color: isTargetAlumni ? const Color(0xFFBE185D) : AppTheme.textPrimary,
+                                      ),
+                                      items: [
+                                        ...classNames.map((c) => DropdownMenuItem(
+                                          value: c,
+                                          child: Row(
+                                            children: [
+                                              const Icon(Icons.school_outlined, size: 14, color: AppTheme.primaryPurple),
+                                              const SizedBox(width: 6),
+                                              Text(c),
+                                            ],
+                                          ),
+                                        )),
+                                        const DropdownMenuItem(
+                                          value: 'Alumni / Graduated',
+                                          child: Row(
+                                            children: [
+                                              Icon(Icons.workspace_premium_rounded, size: 14, color: Color(0xFFBE185D)),
+                                              SizedBox(width: 6),
+                                              Text('Alumni / Graduated (Pass Out)'),
+                                            ],
+                                          ),
+                                        ),
+                                      ],
+                                      onChanged: (newTarget) {
+                                        if (newTarget != null) {
+                                          setDialogState(() {
+                                            routeTargets[fromC] = newTarget;
+                                          });
+                                        }
+                                      },
+                                    ),
+                                  ),
+                                  const SizedBox(width: 12),
+
+                                  // Fee Status Pill for this class
+                                  SizedBox(
+                                    width: 140,
+                                    child: classDuesCount > 0
+                                        ? Container(
+                                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                            decoration: BoxDecoration(
+                                              color: const Color(0xFFFFFBEB),
+                                              borderRadius: BorderRadius.circular(6),
+                                              border: Border.all(color: const Color(0xFFFCD34D)),
+                                            ),
+                                            child: Row(
+                                              mainAxisSize: MainAxisSize.min,
+                                              children: [
+                                                const Icon(Icons.priority_high_rounded, size: 12, color: Color(0xFFD97706)),
+                                                const SizedBox(width: 4),
+                                                Expanded(
+                                                  child: Text(
+                                                    '$classDuesCount with dues (₹${classDuesAmt.toStringAsFixed(0)})',
+                                                    style: GoogleFonts.poppins(fontSize: 10, fontWeight: FontWeight.bold, color: const Color(0xFFB45309)),
+                                                    overflow: TextOverflow.ellipsis,
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                          )
+                                        : Container(
+                                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                            decoration: BoxDecoration(
+                                              color: const Color(0xFFF0FDF4),
+                                              borderRadius: BorderRadius.circular(6),
+                                              border: Border.all(color: const Color(0xFF86EFAC)),
+                                            ),
+                                            child: Row(
+                                              mainAxisSize: MainAxisSize.min,
+                                              children: [
+                                                const Icon(Icons.check_rounded, size: 12, color: Color(0xFF16A34A)),
+                                                const SizedBox(width: 4),
+                                                Text(
+                                                  stList.isEmpty ? 'Empty Class' : 'Fees Cleared',
+                                                  style: GoogleFonts.poppins(fontSize: 10, fontWeight: FontWeight.bold, color: const Color(0xFF166534)),
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+                                  ),
+                                ],
+                              ),
+                            );
+                          },
+                        ),
+                      ),
+                      if (isExecuting) ...[
+                        const SizedBox(height: 16),
+                        const Center(
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2)),
+                              SizedBox(width: 12),
+                              Text('Processing whole-school promotion & ledger rollovers...'),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: isExecuting ? null : () => Navigator.of(dialogCtx).pop(),
+                child: Text('Cancel', style: GoogleFonts.poppins(color: AppTheme.textSecondary, fontWeight: FontWeight.w600)),
+              ),
+              if (hasUnclearedFees) ...[
+                // Option: Promote Cleared Only
+                OutlinedButton.icon(
+                  onPressed: isExecuting || (totalStudentsToPromote - studentsWithDues.length) == 0
+                      ? null
+                      : () async {
+                          setDialogState(() => isExecuting = true);
+                          final mappings = _buildMassPromotionMappings(
+                            classNames: classNames,
+                            routeTargets: routeTargets,
+                            classStudentsMap: classStudentsMap,
+                            allClasses: allClasses,
+                            excludedStudentIds: unpaidStudentIds,
+                          );
+                          await _executeMassPromotion(
+                            dialogContext: dialogCtx,
+                            parentContext: context,
+                            mappings: mappings,
+                            fromAcademicYear: fromYear,
+                            toAcademicYear: targetYear,
+                            rolloverArrears: false,
+                            totalStudents: totalStudentsToPromote - studentsWithDues.length,
+                            totalArrears: 0.0,
+                            unpromotedWithDuesCount: studentsWithDues.length,
+                          );
+                        },
+                  icon: const Icon(Icons.check_circle_outline_rounded, size: 16),
+                  label: Text(
+                    'Promote Cleared Only (${totalStudentsToPromote - studentsWithDues.length})',
+                    style: GoogleFonts.poppins(fontSize: 11, fontWeight: FontWeight.w600),
+                  ),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: AppTheme.primaryPurple,
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                  ),
+                ),
+                // Option: 1-Click Promote All & Rollover Arrears
+                ElevatedButton.icon(
+                  onPressed: isExecuting || totalStudentsToPromote == 0
+                      ? null
+                      : () async {
+                          setDialogState(() => isExecuting = true);
+                          final mappings = _buildMassPromotionMappings(
+                            classNames: classNames,
+                            routeTargets: routeTargets,
+                            classStudentsMap: classStudentsMap,
+                            allClasses: allClasses,
+                            excludedStudentIds: null,
+                          );
+                          await _executeMassPromotion(
+                            dialogContext: dialogCtx,
+                            parentContext: context,
+                            mappings: mappings,
+                            fromAcademicYear: fromYear,
+                            toAcademicYear: targetYear,
+                            rolloverArrears: true,
+                            totalStudents: totalStudentsToPromote,
+                            totalArrears: totalUnpaidAmount,
+                            unpromotedWithDuesCount: 0,
+                          );
+                        },
+                  icon: const Icon(Icons.rocket_launch_rounded, size: 16),
+                  label: Text(
+                    '1-Click Promote All & Rollover ($totalStudentsToPromote)',
+                    style: GoogleFonts.poppins(fontSize: 11, fontWeight: FontWeight.bold),
+                  ),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppTheme.primaryPurple,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                  ),
+                ),
+              ] else ...[
+                // All cleared: 1-Click Mass Promote All
+                ElevatedButton.icon(
+                  onPressed: isExecuting || totalStudentsToPromote == 0
+                      ? null
+                      : () async {
+                          setDialogState(() => isExecuting = true);
+                          final mappings = _buildMassPromotionMappings(
+                            classNames: classNames,
+                            routeTargets: routeTargets,
+                            classStudentsMap: classStudentsMap,
+                            allClasses: allClasses,
+                            excludedStudentIds: null,
+                          );
+                          await _executeMassPromotion(
+                            dialogContext: dialogCtx,
+                            parentContext: context,
+                            mappings: mappings,
+                            fromAcademicYear: fromYear,
+                            toAcademicYear: targetYear,
+                            rolloverArrears: false,
+                            totalStudents: totalStudentsToPromote,
+                            totalArrears: 0.0,
+                            unpromotedWithDuesCount: 0,
+                          );
+                        },
+                  icon: const Icon(Icons.rocket_launch_rounded, size: 16),
+                  label: Text(
+                    '1-Click Mass Promote All ($totalStudentsToPromote Students)',
+                    style: GoogleFonts.poppins(fontSize: 12, fontWeight: FontWeight.bold),
+                  ),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppTheme.primaryPurple,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                  ),
+                ),
+              ],
+            ],
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _buildMassStatItem({
+    required IconData icon,
+    required Color iconColor,
+    required String label,
+    required String value,
+  }) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(icon, color: iconColor, size: 20),
+        const SizedBox(width: 8),
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(value, style: GoogleFonts.poppins(fontSize: 14, fontWeight: FontWeight.bold, color: AppTheme.textPrimary)),
+            Text(label, style: GoogleFonts.poppins(fontSize: 10, color: AppTheme.textSecondary)),
+          ],
+        ),
+      ],
+    );
+  }
+
+  List<MassClassPromotionMapping> _buildMassPromotionMappings({
+    required List<String> classNames,
+    required Map<String, String> routeTargets,
+    required Map<String, List<Student>> classStudentsMap,
+    required List<ClassModel> allClasses,
+    Set<String>? excludedStudentIds,
+  }) {
+    final List<MassClassPromotionMapping> mappings = [];
+
+    for (final fromC in classNames) {
+      final targetC = routeTargets[fromC] ?? 'Alumni / Graduated';
+      final isAlumni = targetC == 'Alumni / Graduated';
+
+      // Find fromClassId if available
+      final fromMatch = allClasses.where((c) => _matchesGrade(c.name, fromC)).firstOrNull;
+      final fromClassId = fromMatch?.id;
+
+      // Find toClassId if not alumni
+      String? toClassId;
+      if (!isAlumni) {
+        final toMatch = allClasses.where((c) => _matchesGrade(c.name, targetC)).firstOrNull;
+        toClassId = toMatch?.id;
+      }
+
+      // Collect eligible student IDs
+      var students = classStudentsMap[fromC] ?? [];
+      if (excludedStudentIds != null && excludedStudentIds.isNotEmpty) {
+        students = students.where((s) => !excludedStudentIds.contains(s.id)).toList();
+      }
+      final studentIds = students.map((s) => s.id).toList();
+
+      mappings.add(MassClassPromotionMapping(
+        fromClass: fromC,
+        fromClassId: fromClassId,
+        toClass: isAlumni ? fromC : targetC,
+        toClassId: toClassId,
+        isAlumni: isAlumni,
+        studentIds: studentIds,
+      ));
+    }
+
+    return mappings;
+  }
+
+  Future<void> _executeMassPromotion({
+    required BuildContext dialogContext,
+    required BuildContext parentContext,
+    required List<MassClassPromotionMapping> mappings,
+    required String fromAcademicYear,
+    required String toAcademicYear,
+    required bool rolloverArrears,
+    required int totalStudents,
+    required double totalArrears,
+    required int unpromotedWithDuesCount,
+  }) async {
+    final dbService = ref.read(databaseServiceProvider);
+
+    try {
+      final promotedCount = await dbService.massPromoteStudentsWithArrearsRollover(
+        mappings: mappings,
+        fromAcademicYear: fromAcademicYear,
+        toAcademicYear: toAcademicYear,
+        rolloverArrears: rolloverArrears,
+      );
+
+      // Invalidate relevant providers to refresh the entire UI
+      ref.invalidate(studentDirectoryProvider);
+      ref.invalidate(studentsListProvider);
+      ref.invalidate(dashboardMetricsProvider);
+      ref.invalidate(sectionStudentCountProvider);
+      ref.invalidate(classListProvider);
+      ref.invalidate(studentDirectoryStatsProvider);
+
+      if (dialogContext.mounted) {
+        Navigator.of(dialogContext).pop();
+      }
+
+      if (parentContext.mounted) {
+        final String message;
+        if (rolloverArrears && totalArrears > 0) {
+          message = '🎉 Whole-School Promotion Successful: Promoted $promotedCount student(s) to session $toAcademicYear! Rolled over ₹${NumberFormat('#,##,###').format(totalArrears)} unpaid fees as Previous Session Arrears.';
+        } else if (unpromotedWithDuesCount > 0) {
+          message = '✅ Promoted $promotedCount fee-cleared student(s) to session $toAcademicYear. $unpromotedWithDuesCount student(s) with uncleared dues were retained in their current classes.';
+        } else {
+          message = '🎉 Whole-School Promotion Successful: Promoted $promotedCount student(s) across all classes to session $toAcademicYear!';
+        }
+
+        ScaffoldMessenger.of(parentContext).showSnackBar(
+          SnackBar(
+            content: Text(
+              message,
+              style: GoogleFonts.poppins(color: Colors.white, fontWeight: FontWeight.w600),
+            ),
+            backgroundColor: AppTheme.primaryPurple,
+            duration: const Duration(seconds: 5),
+          ),
+        );
+      }
+    } catch (e, stackTrace) {
+      AppLogger.instance.error('Whole-School Mass Promotion Failed', e, stackTrace);
+      if (dialogContext.mounted) {
+        Navigator.of(dialogContext).pop();
+      }
+      if (parentContext.mounted) {
+        ScaffoldMessenger.of(parentContext).showSnackBar(
+          SnackBar(
+            content: Text('Failed to execute Whole-School Mass Promotion: $e'),
+            backgroundColor: AppTheme.error,
+          ),
+        );
+      }
+    }
+  }
+
   Future<void> _showClassPromotionDialog(BuildContext context) async {
     final dbService = ref.read(databaseServiceProvider);
 
@@ -3696,7 +4491,50 @@ class _StudentDirectoryViewState extends ConsumerState<StudentDirectoryView>
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text('Promote students to a new academic session and assign them to a class/section.', style: GoogleFonts.poppins(fontSize: 12, color: AppTheme.textSecondary)),
-                    const SizedBox(height: 16),
+                    const SizedBox(height: 10),
+                    Container(
+                      margin: const EdgeInsets.only(bottom: 14),
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                      decoration: BoxDecoration(
+                        color: AppTheme.primaryPurple.withOpacity(0.08),
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(color: AppTheme.primaryPurple.withOpacity(0.2)),
+                      ),
+                      child: Row(
+                        children: [
+                          const Icon(Icons.rocket_launch_rounded, color: AppTheme.primaryPurple, size: 20),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'Want to promote all classes in 1-Click?',
+                                  style: GoogleFonts.poppins(fontSize: 12, fontWeight: FontWeight.bold, color: AppTheme.primaryPurple),
+                                ),
+                                Text(
+                                  'Transition every student across the entire school to their next respective class in 1 click.',
+                                  style: GoogleFonts.poppins(fontSize: 11, color: AppTheme.textSecondary),
+                                ),
+                              ],
+                            ),
+                          ),
+                          TextButton.icon(
+                            onPressed: () {
+                              Navigator.of(dialogCtx).pop();
+                              _showWholeSchoolPromotionDialog(context);
+                            },
+                            icon: const Icon(Icons.arrow_forward_rounded, size: 14),
+                            label: const Text('Whole-School (1-Click)'),
+                            style: TextButton.styleFrom(
+                              foregroundColor: AppTheme.primaryPurple,
+                              textStyle: GoogleFonts.poppins(fontSize: 11, fontWeight: FontWeight.bold),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 6),
                     Row(
                       children: [
                         Expanded(

@@ -1,7 +1,7 @@
 {
-  "latest_version": "1.0.33",
-  "download_url": "https://github.com/whoisadheep/School-Management-System/releases/download/v1.0.33/Eduvia-Installer.exe",
+  "latest_version": "1.0.34",
+  "download_url": "https://github.com/whoisadheep/School-Management-System/releases/download/v1.0.34/Eduvia-Installer.exe",
   "sha256": "",
-  "changelog": "Fix duplicate class chips when renaming classes in Class & Section setup. Cascade class renames to student records, timetable, and attendance, and synchronize Riverpod state caches seamlessly.",
+  "changelog": "Add 1-Click Whole-School Mass Promotion with class-to-class progression routes preview, automated graduating class mapping (Alumni), session financial audit alert with arrears rollover into next academic session, and selective promotion policy for fee-cleared students.",
   "mandatory_update": false
 }

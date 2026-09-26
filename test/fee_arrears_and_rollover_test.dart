@@ -14,7 +14,7 @@ void main() {
   setUpAll(() {
     open.overrideFor(OperatingSystem.linux, () => DynamicLibrary.open('/usr/lib/x86_64-linux-gnu/libsqlite3.so.0'));
     sqfliteFfiInit();
-    databaseFactory = databaseFactoryFfi;
+    databaseFactory = databaseFactoryFfiNoIsolate;
 
     final tempDb = File('/tmp/Eduvia/school_management.db');
     if (tempDb.existsSync()) {
