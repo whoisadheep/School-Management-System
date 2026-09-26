@@ -3091,7 +3091,7 @@ class DatabaseHelper {
   Future<void> syncClassSectionIntegrity(Database db) async {
     try {
       final studentRows = await db.rawQuery(
-        'SELECT DISTINCT grade_level, section FROM students WHERE grade_level IS NOT NULL AND TRIM(grade_level) != ?',
+        'SELECT DISTINCT grade_level, section, class_id FROM students WHERE grade_level IS NOT NULL AND TRIM(grade_level) != ?',
         [''],
       );
       if (studentRows.isEmpty) return;
@@ -3109,7 +3109,8 @@ class DatabaseHelper {
           if (cName == clean ||
               cName == 'class $clean' ||
               cName.replaceFirst('class ', '') == clean ||
-              cName.replaceFirst('grade ', '') == clean) {
+              cName.replaceFirst('grade ', '') == clean ||
+              clean.replaceFirst('class ', '') == cName.replaceFirst('class ', '')) {
             return c;
           }
         }
@@ -3119,16 +3120,30 @@ class DatabaseHelper {
       for (final r in studentRows) {
         final rawGrade = (r['grade_level'] as String?)?.trim();
         final rawSec = (r['section'] as String?)?.trim();
+        final stClassId = (r['class_id'] as String?)?.trim();
         if (rawGrade == null || rawGrade.isEmpty) continue;
         final secName = (rawSec != null && rawSec.isNotEmpty) ? rawSec.toUpperCase() : 'A';
 
         // 1. Find or create Class
-        var matchedClass = findClass(rawGrade);
+        // If student already has a valid class_id, prioritize that class so renamed classes are respected
+        Map<String, dynamic>? matchedClass;
+        if (stClassId != null && stClassId.isNotEmpty) {
+          matchedClass = classList.where((c) => c['id'] == stClassId).firstOrNull;
+        }
+        matchedClass ??= findClass(rawGrade);
+
         String classId;
         String canonicalClassName;
         if (matchedClass != null) {
           classId = matchedClass['id'] as String;
           canonicalClassName = matchedClass['name'] as String;
+          // If student's grade_level has drifted from the authoritative class name, sync it
+          if (rawGrade != canonicalClassName) {
+            await db.execute(
+              'UPDATE students SET grade_level = ? WHERE class_id = ? AND grade_level = ?',
+              [canonicalClassName, classId, rawGrade],
+            );
+          }
         } else {
           if (RegExp(r'^\d+$').hasMatch(rawGrade)) {
             final n = int.tryParse(rawGrade) ?? 1;

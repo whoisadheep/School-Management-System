@@ -127,8 +127,13 @@ final studentDirectoryProvider =
   }
 
   if (grade != 'All') {
+    final classes = await dbService.getAllClasses();
+    final matchedClass = classes.where((c) => c.name.toLowerCase() == grade.toLowerCase() || _matchesGrade(c.name, grade)).firstOrNull;
     list = list
-        .where((s) => _matchesGrade(s.gradeLevel, grade))
+        .where((s) =>
+            (matchedClass != null && s.classId != null && s.classId == matchedClass.id) ||
+            s.gradeLevel.toLowerCase() == grade.toLowerCase() ||
+            _matchesGrade(s.gradeLevel, grade))
         .toList();
   }
 
@@ -345,16 +350,21 @@ class _StudentDirectoryViewState extends ConsumerState<StudentDirectoryView>
     final selectedGrade = ref.watch(studentGradeFilterProvider);
     final classesAsync = ref.watch(classListProvider);
     final classModels = classesAsync.value ?? [];
-    final classNames = classModels
-        .map((c) => c.name.trim())
-        .where((n) => n.isNotEmpty)
-        .toSet()
-        .toList();
-    final allStudentsList = ref.watch(studentsListProvider).value ?? [];
-    for (final s in allStudentsList) {
-      final clean = s.gradeLevel.trim();
-      if (clean.isNotEmpty && !classNames.contains(clean)) {
-        classNames.add(clean);
+    final classNames = <String>[];
+    for (final c in classModels) {
+      final nm = c.name.trim();
+      if (nm.isNotEmpty && !classNames.any((existing) => existing.toLowerCase() == nm.toLowerCase())) {
+        classNames.add(nm);
+      }
+    }
+    // Only if no classes are configured in Class & Section setup, fall back to student records
+    if (classNames.isEmpty) {
+      final allStudentsList = ref.watch(studentsListProvider).value ?? [];
+      for (final s in allStudentsList) {
+        final clean = s.gradeLevel.trim();
+        if (clean.isNotEmpty && !classNames.any((existing) => existing.toLowerCase() == clean.toLowerCase())) {
+          classNames.add(clean);
+        }
       }
     }
     if (classNames.isEmpty) {
@@ -962,7 +972,8 @@ class _StudentDirectoryViewState extends ConsumerState<StudentDirectoryView>
                                             final isSelected = className == 'All'
                                                 ? selectedGrade == 'All'
                                                 : (selectedGrade != 'All' &&
-                                                    _matchesGrade(selectedGrade, className));
+                                                    (selectedGrade.toLowerCase() == className.toLowerCase() ||
+                                                        _matchesGrade(selectedGrade, className)));
                                             return Padding(
                                               padding: const EdgeInsets.only(right: 8),
                                               child: InkWell(

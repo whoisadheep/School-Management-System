@@ -1831,7 +1831,29 @@ class DatabaseService {
   Future<int> updateClass(ClassModel classModel) async {
     final db = await _db;
     try {
-      await db.execute('UPDATE students SET grade_level = ? WHERE class_id = ?', [classModel.name, classModel.id]);
+      final oldRows = await db.query('classes', columns: ['name'], where: 'id = ?', whereArgs: [classModel.id]);
+      final oldName = oldRows.isNotEmpty ? (oldRows.first['name'] as String?)?.trim() : null;
+
+      if (oldName != null && oldName.isNotEmpty && oldName.toLowerCase() != classModel.name.trim().toLowerCase()) {
+        final oldClean = oldName.replaceFirst(RegExp(r'^(class|grade)\s*', caseSensitive: false), '').trim();
+        await db.execute('''
+          UPDATE students 
+          SET grade_level = ?, class_id = ? 
+          WHERE class_id = ? 
+             OR LOWER(TRIM(grade_level)) = LOWER(TRIM(?))
+             OR LOWER(TRIM(grade_level)) = LOWER(TRIM(?))
+             OR LOWER(TRIM(grade_level)) = 'class ' || LOWER(TRIM(?))
+             OR LOWER(TRIM(grade_level)) = 'grade ' || LOWER(TRIM(?))
+        ''', [classModel.name, classModel.id, classModel.id, oldName, oldClean, oldClean, oldClean]);
+
+        // Cascade to student attendance, timetable, teacher assignments, and fee structures
+        await db.execute('UPDATE student_attendance SET class = ? WHERE LOWER(TRIM(class)) = LOWER(TRIM(?))', [classModel.name, oldName]);
+        await db.execute('UPDATE timetable SET class = ? WHERE class_id = ? OR LOWER(TRIM(class)) = LOWER(TRIM(?))', [classModel.name, classModel.id, oldName]);
+        await db.execute('UPDATE class_teacher_assignments SET class = ? WHERE class_id = ? OR LOWER(TRIM(class)) = LOWER(TRIM(?))', [classModel.name, classModel.id, oldName]);
+        await db.execute('UPDATE fee_structures SET class = ? WHERE class_id = ? OR LOWER(TRIM(class)) = LOWER(TRIM(?))', [classModel.name, classModel.id, oldName]);
+      } else {
+        await db.execute('UPDATE students SET grade_level = ? WHERE class_id = ?', [classModel.name, classModel.id]);
+      }
     } catch (_) {}
     return await _updateLogged(db, 'classes', classModel.toMap(), where: 'id = ?', whereArgs: [classModel.id]);
   }

@@ -6,6 +6,7 @@ import '../../../core/theme/app_theme.dart';
 import '../../../models/models.dart';
 import '../../../core/auth/permission_helper.dart';
 import '../../../providers/services_provider.dart';
+import '../students/student_directory_view.dart';
 
 class ClassSectionSetupView extends ConsumerStatefulWidget {
   const ClassSectionSetupView({super.key});
@@ -990,6 +991,8 @@ class _ClassSectionSetupViewState extends ConsumerState<ClassSectionSetupView> {
                 ref.invalidate(allSectionsProvider);
                 ref.invalidate(allClassStudentCountsProvider);
                 ref.invalidate(allSectionStudentCountsProvider);
+                ref.invalidate(studentsListProvider);
+                ref.invalidate(studentDirectoryProvider);
 
                 if (context.mounted) {
                   Navigator.pop(context);
@@ -1073,6 +1076,8 @@ class _ClassSectionSetupViewState extends ConsumerState<ClassSectionSetupView> {
                 ref.invalidate(sectionsForClassProvider(classModel.id));
                 ref.invalidate(classStudentCountProvider(classModel.id));
                 if (section != null) ref.invalidate(sectionStudentCountProvider(section.id));
+                ref.invalidate(studentsListProvider);
+                ref.invalidate(studentDirectoryProvider);
 
                 if (context.mounted) {
                   Navigator.pop(context);
@@ -1193,6 +1198,8 @@ class _ClassSectionSetupViewState extends ConsumerState<ClassSectionSetupView> {
               ref.invalidate(allClassStudentCountsProvider);
               ref.invalidate(allSectionStudentCountsProvider);
               ref.invalidate(allClassSubjectsProvider);
+              ref.invalidate(studentsListProvider);
+              ref.invalidate(studentDirectoryProvider);
 
               if (context.mounted) {
                 Navigator.pop(context);
