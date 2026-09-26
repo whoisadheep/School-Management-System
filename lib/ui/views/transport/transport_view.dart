@@ -638,7 +638,9 @@ class _TransportViewState extends ConsumerState<TransportView> with SingleTicker
           transportsAsync.when(
             data: (transports) {
               final filtered = transports.where((st) {
-                if (_allocationClassFilter != 'All Classes' && st.gradeLevel != _allocationClassFilter && !st.gradeLevel.toLowerCase().contains(_allocationClassFilter.toLowerCase())) {
+                if (_allocationClassFilter != 'All Classes' &&
+                    st.gradeLevel != _allocationClassFilter &&
+                    !(st.gradeLevel ?? '').toLowerCase().contains(_allocationClassFilter.toLowerCase())) {
                   return false;
                 }
                 if (_allocationSearchQuery.isEmpty) return true;
