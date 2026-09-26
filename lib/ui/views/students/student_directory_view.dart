@@ -3676,9 +3676,11 @@ class _StudentDirectoryViewState extends ConsumerState<StudentDirectoryView>
                 Text('STUDENT PROMOTION TOOL', style: GoogleFonts.poppins(fontWeight: FontWeight.bold, fontSize: 14)),
               ],
             ),
-            content: ConstrainedBox(
-              constraints: BoxConstraints(maxWidth: 650, maxHeight: MediaQuery.of(context).size.height * 0.7),
-              child: SingleChildScrollView(
+            content: SizedBox(
+              width: 650,
+              child: ConstrainedBox(
+                constraints: BoxConstraints(maxHeight: MediaQuery.of(context).size.height * 0.7),
+                child: SingleChildScrollView(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
@@ -3871,7 +3873,8 @@ class _StudentDirectoryViewState extends ConsumerState<StudentDirectoryView>
                 ),
               ),
             ),
-            actions: [
+          ),
+          actions: [
               TextButton(
                 onPressed: () => Navigator.of(context).pop(),
                 child: const Text('Cancel'),
@@ -4022,20 +4025,21 @@ class _StudentDirectoryViewState extends ConsumerState<StudentDirectoryView>
                 child: const Icon(Icons.warning_amber_rounded, color: Color(0xFFD97706), size: 24),
               ),
               const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text('Fee Clearance & Arrears Warning', style: GoogleFonts.poppins(fontWeight: FontWeight.bold, fontSize: 14, color: const Color(0xFF92400E))),
-                    Text('Step 2: Session End Financial Audit ($fromYear)', style: GoogleFonts.poppins(fontSize: 11, color: AppTheme.textSecondary)),
-                  ],
-                ),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text('Fee Clearance & Arrears Warning', style: GoogleFonts.poppins(fontWeight: FontWeight.bold, fontSize: 14, color: const Color(0xFF92400E))),
+                  Text('Step 2: Session End Financial Audit ($fromYear)', style: GoogleFonts.poppins(fontSize: 11, color: AppTheme.textSecondary)),
+                ],
               ),
             ],
           ),
-          content: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 620, maxHeight: 450),
-            child: SingleChildScrollView(
+          content: SizedBox(
+            width: 620,
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxHeight: 450),
+              child: SingleChildScrollView(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -4135,7 +4139,8 @@ class _StudentDirectoryViewState extends ConsumerState<StudentDirectoryView>
               ),
             ),
           ),
-          actions: [
+        ),
+        actions: [
             // Action 1: Cancel
             TextButton(
               onPressed: () => Navigator.of(modalCtx).pop(),
@@ -4444,11 +4449,9 @@ class _StudentDirectoryViewState extends ConsumerState<StudentDirectoryView>
                   child: const Icon(Icons.card_giftcard_rounded, color: AppTheme.primaryPurple, size: 20),
                 ),
                 const SizedBox(width: 12),
-                Expanded(
-                  child: Text(
-                    'Apply Discount / Scholarship',
-                    style: GoogleFonts.poppins(fontWeight: FontWeight.bold, fontSize: 16, color: AppTheme.textPrimary),
-                  ),
+                Text(
+                  'Apply Discount / Scholarship',
+                  style: GoogleFonts.poppins(fontWeight: FontWeight.bold, fontSize: 16, color: AppTheme.textPrimary),
                 ),
               ],
             ),
