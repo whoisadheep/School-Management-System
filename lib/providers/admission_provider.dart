@@ -61,7 +61,7 @@ class AdmissionState {
     this.aadhaarNumber = '',
     String? admissionNumber,
     this.rollNumber = '',
-    this.gradeLevel = 'Grade 1',
+    this.gradeLevel = 'Class 1st',
     this.section = 'A',
     DateTime? admissionDate,
     this.fatherName = '',

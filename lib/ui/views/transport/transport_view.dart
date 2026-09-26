@@ -511,6 +511,22 @@ class _TransportViewState extends ConsumerState<TransportView> with SingleTicker
     final currentYear = ref.watch(currentAcademicYearProvider).value?.name;
     final academicYear = currentYear ?? '2026-2027';
     final transportsAsync = ref.watch(allStudentTransportsProvider(academicYear));
+    final classesAsync = ref.watch(classListProvider);
+    final dynamicClasses = classesAsync.value?.map((c) => c.name).toList() ?? [];
+    final classItems = [
+      'All Classes',
+      if (dynamicClasses.isNotEmpty)
+        ...dynamicClasses
+      else ...[
+        'Nursery', 'LKG', 'UKG',
+        'Class 1st', 'Class 2nd', 'Class 3rd', 'Class 4th', 'Class 5th',
+        'Class 6th', 'Class 7th', 'Class 8th', 'Class 9th', 'Class 10th',
+        'Class 11th', 'Class 12th',
+      ],
+    ];
+    if (!classItems.contains(_allocationClassFilter)) {
+      _allocationClassFilter = 'All Classes';
+    }
 
     return SingleChildScrollView(
       padding: const EdgeInsets.all(24),
@@ -571,6 +587,7 @@ class _TransportViewState extends ConsumerState<TransportView> with SingleTicker
           ),
           const SizedBox(height: 20),
 
+
           // Search & Class Filter Row
           Row(
             children: [
@@ -605,13 +622,7 @@ class _TransportViewState extends ConsumerState<TransportView> with SingleTicker
                       value: _allocationClassFilter,
                       isExpanded: true,
                       style: GoogleFonts.poppins(fontSize: 12, color: AppTheme.textPrimary, fontWeight: FontWeight.w600),
-                      items: [
-                        'All Classes',
-                        'Nursery', 'LKG', 'UKG',
-                        'Grade 1', 'Grade 2', 'Grade 3', 'Grade 4', 'Grade 5',
-                        'Grade 6', 'Grade 7', 'Grade 8', 'Grade 9', 'Grade 10',
-                        'Grade 11', 'Grade 12',
-                      ].map((c) => DropdownMenuItem(value: c, child: Text(c))).toList(),
+                      items: classItems.map((c) => DropdownMenuItem(value: c, child: Text(c))).toList(),
                       onChanged: (val) {
                         if (val != null) setState(() => _allocationClassFilter = val);
                       },
@@ -627,7 +638,7 @@ class _TransportViewState extends ConsumerState<TransportView> with SingleTicker
           transportsAsync.when(
             data: (transports) {
               final filtered = transports.where((st) {
-                if (_allocationClassFilter != 'All Classes' && st.gradeLevel != _allocationClassFilter) {
+                if (_allocationClassFilter != 'All Classes' && st.gradeLevel != _allocationClassFilter && !st.gradeLevel.toLowerCase().contains(_allocationClassFilter.toLowerCase())) {
                   return false;
                 }
                 if (_allocationSearchQuery.isEmpty) return true;

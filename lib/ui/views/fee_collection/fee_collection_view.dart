@@ -3622,15 +3622,21 @@ Thank you for your payment!''';
   // ============================================================================
 
   Widget _buildBatchInvoicingTab() {
-    String selectedGrade = 'All Grades';
+    final classesAsync = ref.watch(classListProvider);
+    final dynamicClasses = classesAsync.value?.map((c) => c.name).toList() ?? [];
+    final grades = [
+      'All Classes',
+      if (dynamicClasses.isNotEmpty)
+        ...dynamicClasses
+      else ...[
+        'Nursery', 'LKG', 'UKG',
+        'Class 1st', 'Class 2nd', 'Class 3rd', 'Class 4th', 'Class 5th',
+        'Class 6th', 'Class 7th', 'Class 8th', 'Class 9th', 'Class 10th',
+      ],
+    ];
+    String selectedGrade = 'All Classes';
     final amountController = TextEditingController(text: '1500');
     final titleController = TextEditingController(text: 'Monthly Tuition & Facility Fee');
-
-    final grades = [
-      'All Grades', 'Nursery', 'LKG', 'UKG',
-      'Grade 1', 'Grade 2', 'Grade 3', 'Grade 4', 'Grade 5',
-      'Grade 6', 'Grade 7', 'Grade 8', 'Grade 9', 'Grade 10',
-    ];
 
     return SingleChildScrollView(
       padding: const EdgeInsets.all(28),
@@ -3644,13 +3650,13 @@ Thank you for your payment!''';
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'Generate bulk invoices for all students in a grade or entire school at once.',
+                  'Generate bulk invoices for all students in a class or entire school at once.',
                   style: GoogleFonts.poppins(fontSize: 12, color: AppTheme.textSecondary),
                 ),
                 const SizedBox(height: 16),
                 DropdownButtonFormField<String>(
                   initialValue: selectedGrade,
-                  decoration: const InputDecoration(labelText: 'Target Grade / Class', border: OutlineInputBorder()),
+                  decoration: const InputDecoration(labelText: 'Target Class', border: OutlineInputBorder()),
                   items: grades.map((g) => DropdownMenuItem(value: g, child: Text(g))).toList(),
                   onChanged: (val) {
                     if (val != null) selectedGrade = val;

@@ -384,18 +384,32 @@ class DatabaseService {
     }).toList();
   }
 
-  /// Retrieve active students for a specific grade level
+  /// Retrieve active students for a specific class / grade level
   Future<List<Student>> getStudentsByGrade(String gradeLevel) async {
     final db = await _db;
+    final clean = gradeLevel.trim();
+
+    // Look up class ID if exists
+    final classRows = await db.query('classes', where: 'LOWER(name) = LOWER(?)', whereArgs: [clean]);
+    final classId = classRows.isNotEmpty ? classRows.first['id'] as String : null;
+
+    final aliases = getGradeAliases(clean);
+    final placeholders = List.filled(aliases.length, '?').join(', ');
+
+    final whereClause = classId != null
+        ? '(s.grade_level IN ($placeholders) OR s.class_id = ?) AND s.is_active = 1'
+        : 's.grade_level IN ($placeholders) AND s.is_active = 1';
+    final args = classId != null ? [...aliases, classId] : aliases;
+
     final results = await db.rawQuery('''
       SELECT s.*, 
              COALESCE(SUM(l.amount_due - l.amount_paid), 0.0) as calculated_balance
       FROM students s
       LEFT JOIN student_fee_ledger l ON s.id = l.student_id
-      WHERE s.grade_level = ? AND s.is_active = 1
+      WHERE $whereClause
       GROUP BY s.id
       ORDER BY s.name ASC
-    ''', [gradeLevel]);
+    ''', args);
 
     return results.map((map) {
       final mutableMap = Map<String, dynamic>.from(map);
@@ -2143,17 +2157,36 @@ class DatabaseService {
     return await _deleteLogged(db, 'fee_heads', where: 'id = ?', whereArgs: [id]);
   }
 
-  /// Generates equivalent aliases for class / grade matching (e.g. '10', 'Grade 10', 'Class 10')
+  /// Generates equivalent aliases for class / grade matching (e.g. '1', '1st', 'Grade 1', 'Class 1st')
   List<String> getGradeAliases(String grade) {
     final clean = grade.trim();
     if (clean.isEmpty) return [];
-    final withoutPrefix = clean.replaceAll(RegExp(r'^(Grade|Class)\s*', caseSensitive: false), '').trim();
+    final withoutPrefix = clean.replaceAll(RegExp(r'^(Grade|Class|Standard|Std\.?)\s*', caseSensitive: false), '').trim();
+    final numOnly = withoutPrefix.replaceAll(RegExp(r'(st|nd|rd|th)$', caseSensitive: false), '');
+    final ordinalSuffix = (numOnly == '1')
+        ? '1st'
+        : (numOnly == '2')
+            ? '2nd'
+            : (numOnly == '3')
+                ? '3rd'
+                : (int.tryParse(numOnly) != null)
+                    ? '${numOnly}th'
+                    : withoutPrefix;
+
     final set = <String>{
       clean,
       if (withoutPrefix.isNotEmpty) ...[
         withoutPrefix,
         'Grade $withoutPrefix',
         'Class $withoutPrefix',
+      ],
+      if (numOnly.isNotEmpty) ...[
+        numOnly,
+        'Grade $numOnly',
+        'Class $numOnly',
+        ordinalSuffix,
+        'Grade $ordinalSuffix',
+        'Class $ordinalSuffix',
       ]
     };
     return set.toList();

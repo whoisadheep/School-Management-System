@@ -168,24 +168,23 @@ class _StudentDirectoryViewState extends ConsumerState<StudentDirectoryView>
   int _itemsPerPage = 24;
   String _viewMode = 'grid'; // 'grid' or 'table'
 
-  final List<String> _grades = [
-    'All',
-    'Grade 1',
-    'Grade 2',
-    'Grade 3',
-    'Grade 4',
-    'Grade 5',
-    'Grade 6',
-    'Grade 7',
-    'Grade 8',
-    'Grade 9',
-    'Grade 10',
-    'Grade 11',
-    'Grade 12',
-    'Nursery',
-    'LKG',
-    'UKG',
-  ];
+  int _compareClassNames(String a, String b) {
+    int rank(String name) {
+      final lower = name.toLowerCase().trim();
+      if (lower.contains('nursery') || lower.contains('play')) return 1;
+      if (lower.contains('lkg') || lower.contains('jr')) return 2;
+      if (lower.contains('ukg') || lower.contains('sr') || lower.contains('kg')) return 3;
+      final match = RegExp(r'\d+').firstMatch(lower);
+      if (match != null) {
+        return 10 + (int.tryParse(match.group(0)!) ?? 0);
+      }
+      return 100;
+    }
+    final rA = rank(a);
+    final rB = rank(b);
+    if (rA != rB) return rA.compareTo(rB);
+    return a.compareTo(b);
+  }
 
   Color _initialsColor(String name) {
     final colors = [
@@ -207,11 +206,11 @@ class _StudentDirectoryViewState extends ConsumerState<StudentDirectoryView>
   }
 
   String _formatGradeSection(String grade, String? section) {
-    final cleanGrade = grade.replaceAll(RegExp(r'Grade\s*', caseSensitive: false), '').trim();
+    final clean = grade.trim();
     if (section != null && section.isNotEmpty) {
-      return '$cleanGrade-$section';
+      return '$clean - $section';
     }
-    return cleanGrade.isEmpty ? grade : cleanGrade;
+    return clean;
   }
 
   void _collapseHeader() {
@@ -341,6 +340,38 @@ class _StudentDirectoryViewState extends ConsumerState<StudentDirectoryView>
     });
     final studentsAsync = ref.watch(studentDirectoryProvider);
     final selectedGrade = ref.watch(studentGradeFilterProvider);
+    final classesAsync = ref.watch(classListProvider);
+    final classModels = classesAsync.value ?? [];
+    final classNames = classModels
+        .map((c) => c.name.trim())
+        .where((n) => n.isNotEmpty)
+        .toSet()
+        .toList();
+    final allStudentsList = ref.watch(studentsListProvider).value ?? [];
+    for (final s in allStudentsList) {
+      final clean = s.gradeLevel.trim();
+      if (clean.isNotEmpty && !classNames.contains(clean)) {
+        classNames.add(clean);
+      }
+    }
+    if (classNames.isEmpty) {
+      classNames.addAll([
+        'Class 1st',
+        'Class 2nd',
+        'Class 3rd',
+        'Class 4th',
+        'Class 5th',
+        'Class 6th',
+        'Class 7th',
+        'Class 8th',
+        'Class 9th',
+        'Class 10th',
+        'Class 11th',
+        'Class 12th',
+      ]);
+    }
+    classNames.sort(_compareClassNames);
+    final availableClasses = ['All', ...classNames];
 
     return Stack(
       children: [
@@ -435,7 +466,7 @@ class _StudentDirectoryViewState extends ConsumerState<StudentDirectoryView>
                                     final uniqueGrades = stats['uniqueGrades'] ?? 12;
                                     final numberFormat = NumberFormat('#,###');
                                     return Text(
-                                      '${numberFormat.format(total)} enrolled • $newThisMonth new admissions this month • $uniqueGrades grades',
+                                      '${numberFormat.format(total)} enrolled • $newThisMonth new admissions this month • $uniqueGrades classes',
                                       style: GoogleFonts.poppins(
                                         fontSize: 12,
                                         color: const Color(0xFF64748B),
@@ -865,16 +896,16 @@ class _StudentDirectoryViewState extends ConsumerState<StudentDirectoryView>
                           ),
                           const SizedBox(width: 12),
 
-                          // Scrollable Grade Chips
+                          // Scrollable Class Chips
                           Expanded(
                             child: SingleChildScrollView(
                               scrollDirection: Axis.horizontal,
                               child: Row(
-                                children: _grades.map((grade) {
-                                  final isSelected = grade == 'All'
+                                children: availableClasses.map((className) {
+                                  final isSelected = className == 'All'
                                       ? selectedGrade == 'All'
                                       : (selectedGrade != 'All' &&
-                                          _matchesGrade(selectedGrade, grade));
+                                          _matchesGrade(selectedGrade, className));
                                   return Padding(
                                     padding: const EdgeInsets.only(right: 8),
                                     child: InkWell(
@@ -882,7 +913,7 @@ class _StudentDirectoryViewState extends ConsumerState<StudentDirectoryView>
                                         ref
                                             .read(studentGradeFilterProvider
                                                 .notifier)
-                                            .state = grade;
+                                            .state = className;
                                         if (_currentPage != 0) {
                                           setState(() => _currentPage = 0);
                                         }
@@ -905,7 +936,7 @@ class _StudentDirectoryViewState extends ConsumerState<StudentDirectoryView>
                                           ),
                                         ),
                                         child: Text(
-                                          grade == 'All' ? 'All Grades' : grade,
+                                          className == 'All' ? 'All Classes' : className,
                                           style: GoogleFonts.poppins(
                                             fontSize: 12,
                                             fontWeight: isSelected
@@ -1060,7 +1091,7 @@ class _StudentDirectoryViewState extends ConsumerState<StudentDirectoryView>
                                     ),
                                     const SizedBox(height: 4),
                                     Text(
-                                      'Try adjusting your search terms or grade filter.',
+                                      'Try adjusting your search terms or class filter.',
                                       style: GoogleFonts.poppins(
                                         color: const Color(0xFF64748B),
                                         fontSize: 12,
@@ -1162,7 +1193,7 @@ class _StudentDirectoryViewState extends ConsumerState<StudentDirectoryView>
             iconColor: const Color(0xFF8B5CF6),
             label: 'Total enrolled',
             value: numberFormat.format(total),
-            trend: '$uniqueGrades grades',
+            trend: '$uniqueGrades classes',
             trendColor: const Color(0xFF8B5CF6),
           ),
         ),
@@ -1597,7 +1628,7 @@ class _StudentDirectoryViewState extends ConsumerState<StudentDirectoryView>
                     DataColumn(label: Text('STUDENT')),
                     DataColumn(label: Text('ID')),
                     DataColumn(label: Text('ROLL NO')),
-                    DataColumn(label: Text('GRADE')),
+                    DataColumn(label: Text('CLASS')),
                     DataColumn(label: Text('STATUS')),
                     DataColumn(label: Text('PARENT / PHONE')),
                     DataColumn(label: Text('ACTIONS')),
@@ -2196,7 +2227,7 @@ class _StudentDirectoryViewState extends ConsumerState<StudentDirectoryView>
                               icon: Icons.school_outlined,
                               children: [
                                 _buildDetailRow('Roll Number', student.rollNumber ?? '—'),
-                                _buildDetailRow('Grade', student.gradeLevel),
+                                _buildDetailRow('Class', student.gradeLevel),
                                 _buildDetailRow('Section', student.section ?? '—'),
                               ],
                             ),
@@ -2388,23 +2419,6 @@ class _StudentDirectoryViewState extends ConsumerState<StudentDirectoryView>
     String selectedGrade = student.gradeLevel;
     String selectedGender = student.gender ?? 'Male';
     String selectedBlood = student.bloodGroup ?? 'A+';
-
-    final grades = [
-      'Nursery',
-      'LKG',
-      'UKG',
-      'Grade 1',
-      'Grade 2',
-      'Grade 3',
-      'Grade 4',
-      'Grade 5',
-      'Grade 6',
-      'Grade 7',
-      'Grade 8',
-      'Grade 9',
-      'Grade 10',
-    ];
-    if (!grades.contains(selectedGrade)) grades.add(selectedGrade);
 
     final genders = ['Male', 'Female', 'Other'];
     if (!genders.contains(selectedGender)) genders.add(selectedGender);
@@ -2638,7 +2652,7 @@ class _StudentDirectoryViewState extends ConsumerState<StudentDirectoryView>
                                     value: currentClass?.id,
                                     dropdownColor: Colors.white,
                                     style: GoogleFonts.poppins(color: AppTheme.textPrimary),
-                                    decoration: _buildEditInputDecoration('Class / Grade'),
+                                    decoration: _buildEditInputDecoration('Class *'),
                                     items: classList
                                         .map((c) => DropdownMenuItem(value: c.id, child: Text(c.name)))
                                         .toList(),
@@ -2699,7 +2713,7 @@ class _StudentDirectoryViewState extends ConsumerState<StudentDirectoryView>
                                 child: TextField(
                                   controller: TextEditingController(text: selectedGrade),
                                   style: GoogleFonts.poppins(color: AppTheme.textPrimary),
-                                  decoration: _buildEditInputDecoration('Grade Level'),
+                                  decoration: _buildEditInputDecoration('Class'),
                                 ),
                               ),
                               const SizedBox(width: 12),
@@ -3490,58 +3504,78 @@ class _StudentDirectoryViewState extends ConsumerState<StudentDirectoryView>
     );
   }
 
-  void _showClassPromotionDialog(BuildContext context) {
-    String fromGrade = 'LKG';
-    String toGrade = 'UKG';
-    List<Student> currentStudents = [];
-    Set<String> selectedStudentIds = {};
-    
-    List<ClassModel> allClasses = [];
+  Future<void> _showClassPromotionDialog(BuildContext context) async {
+    final dbService = ref.read(databaseServiceProvider);
+
+    // 1. Fetch all classes configured in Class & Section setup
+    final fetchedClasses = await dbService.getAllClasses();
+    final allClasses = List<ClassModel>.from(fetchedClasses)
+      ..sort((a, b) => _compareClassNames(a.name, b.name));
+
+    // Also include any class names stored on students
+    final classNames = allClasses.map((c) => c.name.trim()).where((n) => n.isNotEmpty).toSet().toList();
+    final allStudentsList = ref.read(studentsListProvider).value ?? [];
+    for (final s in allStudentsList) {
+      final clean = s.gradeLevel.trim();
+      if (clean.isNotEmpty && !classNames.contains(clean)) {
+        classNames.add(clean);
+      }
+    }
+    if (classNames.isEmpty) {
+      classNames.addAll([
+        'Class 1st', 'Class 2nd', 'Class 3rd', 'Class 4th', 'Class 5th',
+        'Class 6th', 'Class 7th', 'Class 8th', 'Class 9th', 'Class 10th',
+        'Class 11th', 'Class 12th',
+      ]);
+    }
+    classNames.sort(_compareClassNames);
+
+    // Initial fromClass: use active filter if specific class, else first class
+    final currentGradeFilter = ref.read(studentGradeFilterProvider);
+    String fromClass = classNames.first;
+    if (currentGradeFilter != 'All' && classNames.any((cn) => _matchesGrade(cn, currentGradeFilter))) {
+      fromClass = classNames.firstWhere((cn) => _matchesGrade(cn, currentGradeFilter));
+    }
+
+    // Initial toClass: next class in sequence or Alumni / Graduated
+    String toClass = 'Alumni / Graduated';
+    final fromIdx = classNames.indexOf(fromClass);
+    if (fromIdx != -1 && fromIdx + 1 < classNames.length) {
+      toClass = classNames[fromIdx + 1];
+    }
+
+    // Preload students for fromClass
+    List<Student> currentStudents = await dbService.getStudentsByGrade(fromClass);
+    Set<String> selectedStudentIds = currentStudents.map((s) => s.id).toSet();
+
+    // Auto-match target class & section for toClass
     List<Section> classSections = [];
     String? targetClassId;
     String? targetSectionId;
     String? targetSectionName;
-    
-    bool isLoading = true;
+
+    if (toClass != 'Alumni / Graduated') {
+      final match = allClasses.where((c) => _matchesGrade(c.name, toClass)).firstOrNull;
+      if (match != null) {
+        targetClassId = match.id;
+        classSections = await dbService.getSectionsForClass(match.id);
+        if (classSections.isNotEmpty) {
+          targetSectionId = classSections.first.id;
+          targetSectionName = classSections.first.name;
+        }
+      }
+    }
+
+    bool isLoading = false;
     bool isLoadingSections = false;
+
+    if (!context.mounted) return;
 
     showDialog(
       context: context,
-      builder: (context) => StatefulBuilder(
+      builder: (dialogCtx) => StatefulBuilder(
         builder: (context, setDialogState) {
-          if (isLoading) {
-            final dbService = ref.read(databaseServiceProvider);
-            Future.wait([
-              dbService.getStudentsByGrade(fromGrade),
-              dbService.getAllClasses(),
-            ]).then((results) {
-              setDialogState(() {
-                currentStudents = results[0] as List<Student>;
-                selectedStudentIds = currentStudents.map((s) => s.id).toSet();
-                allClasses = results[1] as List<ClassModel>;
-                isLoading = false;
-                
-                // Try to auto-match target class based on toGrade
-                try {
-                   final match = allClasses.firstWhere((c) => c.name == toGrade);
-                   targetClassId = match.id;
-                   isLoadingSections = true;
-                   dbService.getSectionsForClass(match.id).then((secs) {
-                     setDialogState(() {
-                       classSections = secs;
-                       isLoadingSections = false;
-                       if (secs.isNotEmpty) {
-                         targetSectionId = secs.first.id;
-                         targetSectionName = secs.first.name;
-                       }
-                     });
-                   });
-                } catch(_) {}
-              });
-            });
-          }
-
-          final isAlumni = toGrade == 'Alumni / Graduated';
+          final isAlumni = toClass == 'Alumni / Graduated';
 
           return AlertDialog(
             backgroundColor: Colors.white,
@@ -3564,15 +3598,21 @@ class _StudentDirectoryViewState extends ConsumerState<StudentDirectoryView>
                       children: [
                         Expanded(
                           child: DropdownButtonFormField<String>(
-                            value: fromGrade,
+                            value: fromClass,
                             style: GoogleFonts.poppins(color: AppTheme.textPrimary),
-                            decoration: const InputDecoration(labelText: 'From Grade (Current)'),
-                            items: _grades.where((g) => g != 'All').map((g) => DropdownMenuItem(value: g, child: Text(g))).toList(),
-                            onChanged: (val) {
-                              if (val != null) {
+                            decoration: const InputDecoration(labelText: 'From Class (Current)'),
+                            items: classNames.map((c) => DropdownMenuItem(value: c, child: Text(c))).toList(),
+                            onChanged: (val) async {
+                              if (val != null && val != fromClass) {
                                 setDialogState(() {
-                                  fromGrade = val;
+                                  fromClass = val;
                                   isLoading = true;
+                                });
+                                final students = await dbService.getStudentsByGrade(val);
+                                setDialogState(() {
+                                  currentStudents = students;
+                                  selectedStudentIds = students.map((s) => s.id).toSet();
+                                  isLoading = false;
                                 });
                               }
                             },
@@ -3581,35 +3621,39 @@ class _StudentDirectoryViewState extends ConsumerState<StudentDirectoryView>
                         const SizedBox(width: 16),
                         Expanded(
                           child: DropdownButtonFormField<String>(
-                            value: toGrade,
+                            value: toClass,
                             style: GoogleFonts.poppins(color: AppTheme.textPrimary),
-                            decoration: const InputDecoration(labelText: 'To Grade (Target)'),
-                            items: [..._grades.where((g) => g != 'All'), 'Alumni / Graduated'].map((g) => DropdownMenuItem(value: g, child: Text(g))).toList(),
-                            onChanged: (val) {
+                            decoration: const InputDecoration(labelText: 'To Class (Target)'),
+                            items: [...classNames, 'Alumni / Graduated'].map((c) => DropdownMenuItem(value: c, child: Text(c))).toList(),
+                            onChanged: (val) async {
                               if (val != null) {
                                 setDialogState(() {
-                                  toGrade = val;
+                                  toClass = val;
                                   targetClassId = null;
                                   targetSectionId = null;
+                                  targetSectionName = null;
                                   classSections.clear();
-                                  
-                                  if (val != 'Alumni / Graduated') {
-                                    try {
-                                       final match = allClasses.firstWhere((c) => c.name == val);
-                                       targetClassId = match.id;
-                                       isLoadingSections = true;
-                                       ref.read(databaseServiceProvider).getSectionsForClass(match.id).then((secs) {
-                                         setDialogState(() {
-                                           classSections = secs;
-                                           isLoadingSections = false;
-                                           if (secs.isNotEmpty) {
-                                             targetSectionId = secs.first.id;
-                                             targetSectionName = secs.first.name;
-                                           }
-                                         });
-                                       });
-                                    } catch(_) {}
+                                  isLoadingSections = true;
+                                });
+
+                                if (val != 'Alumni / Graduated') {
+                                  final match = allClasses.where((c) => _matchesGrade(c.name, val)).firstOrNull;
+                                  if (match != null) {
+                                    final secs = await dbService.getSectionsForClass(match.id);
+                                    setDialogState(() {
+                                      targetClassId = match.id;
+                                      classSections = secs;
+                                      isLoadingSections = false;
+                                      if (secs.isNotEmpty) {
+                                        targetSectionId = secs.first.id;
+                                        targetSectionName = secs.first.name;
+                                      }
+                                    });
+                                    return;
                                   }
+                                }
+                                setDialogState(() {
+                                  isLoadingSections = false;
                                 });
                               }
                             },
@@ -3642,7 +3686,7 @@ class _StudentDirectoryViewState extends ConsumerState<StudentDirectoryView>
                                           targetSectionId = null;
                                           targetSectionName = null;
                                           isLoadingSections = true;
-                                          ref.read(databaseServiceProvider).getSectionsForClass(val).then((secs) {
+                                          dbService.getSectionsForClass(val).then((secs) {
                                             setDialogState(() {
                                               classSections = secs;
                                               isLoadingSections = false;
@@ -3691,13 +3735,13 @@ class _StudentDirectoryViewState extends ConsumerState<StudentDirectoryView>
                     else if (currentStudents.isEmpty)
                       Padding(
                         padding: const EdgeInsets.symmetric(vertical: 24.0),
-                        child: Center(child: Text('No active students found in $fromGrade.', style: GoogleFonts.poppins(color: AppTheme.textHint))),
+                        child: Center(child: Text('No active students found in $fromClass.', style: GoogleFonts.poppins(color: AppTheme.textHint))),
                       )
                     else ...[
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          Text('Students in $fromGrade (${currentStudents.length}):', style: GoogleFonts.poppins(fontWeight: FontWeight.bold, fontSize: 12, color: AppTheme.textPrimary)),
+                          Text('Students in $fromClass (${currentStudents.length}):', style: GoogleFonts.poppins(fontWeight: FontWeight.bold, fontSize: 12, color: AppTheme.textPrimary)),
                           TextButton(
                             onPressed: () {
                               setDialogState(() {
@@ -3748,7 +3792,6 @@ class _StudentDirectoryViewState extends ConsumerState<StudentDirectoryView>
                     : () async {
                         try {
                           setDialogState(() => isLoading = true);
-                          final dbService = ref.read(databaseServiceProvider);
                           final currentAy = await dbService.getCurrentAcademicYear();
                           final fromYear = currentAy?.name ?? '2026-2027';
 
@@ -3777,7 +3820,7 @@ class _StudentDirectoryViewState extends ConsumerState<StudentDirectoryView>
                             // All selected students are fee-cleared! Proceed directly
                             await dbService.promoteStudentsWithArrearsRollover(
                               studentIds: selectedStudentIds.toList(),
-                              targetGrade: isAlumni ? fromGrade : toGrade,
+                              targetGrade: isAlumni ? fromClass : toClass,
                               classId: isAlumni ? null : targetClassId,
                               sectionId: isAlumni ? null : targetSectionId,
                               sectionName: isAlumni ? null : targetSectionName,
@@ -3796,7 +3839,7 @@ class _StudentDirectoryViewState extends ConsumerState<StudentDirectoryView>
                               Navigator.of(context).pop();
                               ScaffoldMessenger.of(context).showSnackBar(
                                 SnackBar(
-                                  content: Text('Fee Clearance Verified: Successfully promoted ${selectedStudentIds.length} student(s) to $toGrade!', style: GoogleFonts.poppins(color: Colors.white, fontWeight: FontWeight.w600)),
+                                  content: Text('Fee Clearance Verified: Successfully promoted ${selectedStudentIds.length} student(s) to $toClass!', style: GoogleFonts.poppins(color: Colors.white, fontWeight: FontWeight.w600)),
                                   backgroundColor: AppTheme.primaryPurple,
                                 ),
                               );
@@ -3809,8 +3852,8 @@ class _StudentDirectoryViewState extends ConsumerState<StudentDirectoryView>
                                 parentContext: context,
                                 studentsWithDues: studentsWithDues,
                                 allSelectedIds: selectedStudentIds,
-                                fromGrade: fromGrade,
-                                toGrade: toGrade,
+                                fromClass: fromClass,
+                                toClass: toClass,
                                 fromYear: fromYear,
                                 targetYear: targetYear,
                                 targetClassId: targetClassId,
@@ -3858,8 +3901,8 @@ class _StudentDirectoryViewState extends ConsumerState<StudentDirectoryView>
     required BuildContext parentContext,
     required List<StudentFeeDuesSummary> studentsWithDues,
     required Set<String> allSelectedIds,
-    required String fromGrade,
-    required String toGrade,
+    required String fromClass,
+    required String toClass,
     required String fromYear,
     required String targetYear,
     required String? targetClassId,
@@ -4019,7 +4062,7 @@ class _StudentDirectoryViewState extends ConsumerState<StudentDirectoryView>
                   try {
                     await dbService.promoteStudentsWithArrearsRollover(
                       studentIds: clearedStudentIds.toList(),
-                      targetGrade: isAlumni ? fromGrade : toGrade,
+                      targetGrade: isAlumni ? fromClass : toClass,
                       classId: isAlumni ? null : targetClassId,
                       sectionId: isAlumni ? null : targetSectionId,
                       sectionName: isAlumni ? null : targetSectionName,
@@ -4038,7 +4081,7 @@ class _StudentDirectoryViewState extends ConsumerState<StudentDirectoryView>
                       ScaffoldMessenger.of(parentContext).showSnackBar(
                         SnackBar(
                           content: Text(
-                            'Promoted ${clearedStudentIds.length} fee-cleared student(s) to $toGrade. ${studentsWithDues.length} student(s) with dues withheld in $fromGrade.',
+                            'Promoted ${clearedStudentIds.length} fee-cleared student(s) to $toClass. ${studentsWithDues.length} student(s) with dues withheld in $fromClass.',
                             style: GoogleFonts.poppins(color: Colors.white, fontWeight: FontWeight.w600),
                           ),
                           backgroundColor: AppTheme.primaryPurple,
@@ -4067,7 +4110,7 @@ class _StudentDirectoryViewState extends ConsumerState<StudentDirectoryView>
                 try {
                   await dbService.promoteStudentsWithArrearsRollover(
                     studentIds: allSelectedIds.toList(),
-                    targetGrade: isAlumni ? fromGrade : toGrade,
+                    targetGrade: isAlumni ? fromClass : toClass,
                     classId: isAlumni ? null : targetClassId,
                     sectionId: isAlumni ? null : targetSectionId,
                     sectionName: isAlumni ? null : targetSectionName,
@@ -4086,8 +4129,7 @@ class _StudentDirectoryViewState extends ConsumerState<StudentDirectoryView>
                     ScaffoldMessenger.of(parentContext).showSnackBar(
                       SnackBar(
                         content: Text(
-                          'Promoted all ${allSelectedIds.length} student(s) to $toGrade! Rolled over ₹${totalUnpaid.toStringAsFixed(0)} dues as Previous Session Arrears into $targetYear.',
-                          style: GoogleFonts.poppins(color: Colors.white, fontWeight: FontWeight.w600),
+                          'Promoted all ${allSelectedIds.length} student(s) to $toClass! Rolled over ₹${totalUnpaid.toStringAsFixed(0)} dues as Previous Session Arrears into $targetYear.',
                         ),
                         backgroundColor: AppTheme.primaryPurple,
                         duration: const Duration(seconds: 4),

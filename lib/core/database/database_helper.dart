@@ -1264,8 +1264,12 @@ class DatabaseHelper {
         } catch (_) {}
 
         if (rawClassNames.isEmpty) {
-          final defaultGrades = ['Grade 1', 'Grade 2', 'Grade 3', 'Grade 4', 'Grade 5', 'Grade 6', 'Grade 7', 'Grade 8', 'Grade 9', 'Grade 10'];
-          for (final g in defaultGrades) {
+          final defaultClasses = [
+            'Class 1st', 'Class 2nd', 'Class 3rd', 'Class 4th', 'Class 5th',
+            'Class 6th', 'Class 7th', 'Class 8th', 'Class 9th', 'Class 10th',
+            'Class 11th', 'Class 12th'
+          ];
+          for (final g in defaultClasses) {
             rawClassNames.add(g);
             classToSections[g] = {'A', 'B'};
           }
@@ -2335,11 +2339,12 @@ class DatabaseHelper {
       final classCountRes = await db.rawQuery('SELECT COUNT(*) as count FROM classes');
       final classCount = (classCountRes.first['count'] as int?) ?? 0;
       if (classCount == 0) {
-        final defaultGrades = [
-          'Grade 1', 'Grade 2', 'Grade 3', 'Grade 4', 'Grade 5',
-          'Grade 6', 'Grade 7', 'Grade 8', 'Grade 9', 'Grade 10'
+        final defaultClasses = [
+          'Class 1st', 'Class 2nd', 'Class 3rd', 'Class 4th', 'Class 5th',
+          'Class 6th', 'Class 7th', 'Class 8th', 'Class 9th', 'Class 10th',
+          'Class 11th', 'Class 12th'
         ];
-        for (final g in defaultGrades) {
+        for (final g in defaultClasses) {
           final cid = 'cls-${g.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '')}';
           await db.execute(
             "INSERT OR IGNORE INTO classes (id, name, academic_year, capacity, created_at) VALUES (?, ?, '2026-2027', 40, datetime('now'))",
@@ -2420,6 +2425,9 @@ class DatabaseHelper {
           await db.execute('ALTER TABLE students ADD COLUMN $col');
         } catch (_) {}
       }
+
+      // Migrate any legacy Grade 1..12 to Class 1st..12th
+      await migrateGradeToClass(db);
 
       // Sync and ensure all student classes and sections exist and students are linked
       await syncClassSectionIntegrity(db);
@@ -3017,6 +3025,67 @@ class DatabaseHelper {
     }
   }
 
+  /// Migrates any legacy "Grade X" naming in classes, students, fee_structures, and exams
+  /// to standard Indian school class naming "Class 1st", "Class 2nd", ..., "Class 12th".
+  Future<void> migrateGradeToClass(Database db) async {
+    try {
+      final legacyGradeMap = {
+        'Grade 1': 'Class 1st',
+        'Grade 2': 'Class 2nd',
+        'Grade 3': 'Class 3rd',
+        'Grade 4': 'Class 4th',
+        'Grade 5': 'Class 5th',
+        'Grade 6': 'Class 6th',
+        'Grade 7': 'Class 7th',
+        'Grade 8': 'Class 8th',
+        'Grade 9': 'Class 9th',
+        'Grade 10': 'Class 10th',
+        'Grade 11': 'Class 11th',
+        'Grade 12': 'Class 12th',
+      };
+
+      for (final entry in legacyGradeMap.entries) {
+        final legacyName = entry.key;
+        final newName = entry.value;
+        final numOnly = legacyName.replaceFirst('Grade ', '');
+
+        // 1. Rename classes table
+        await db.rawUpdate(
+          'UPDATE classes SET name = ? WHERE name = ?',
+          [newName, legacyName],
+        );
+
+        // 2. Update students table
+        await db.rawUpdate(
+          'UPDATE students SET grade_level = ? WHERE grade_level = ? OR grade_level = ?',
+          [newName, legacyName, numOnly],
+        );
+
+        // 3. Update fee_structures table
+        try {
+          await db.rawUpdate(
+            'UPDATE fee_structures SET class = ? WHERE class = ? OR class = ?',
+            [newName, legacyName, numOnly],
+          );
+          await db.rawUpdate(
+            'UPDATE fee_structures SET grade_level = ? WHERE grade_level = ? OR grade_level = ?',
+            [newName, legacyName, numOnly],
+          );
+        } catch (_) {}
+
+        // 4. Update exams table
+        try {
+          await db.rawUpdate(
+            'UPDATE exams SET class_name = ? WHERE class_name = ? OR class_name = ?',
+            [newName, legacyName, numOnly],
+          );
+        } catch (_) {}
+      }
+    } catch (e) {
+      print('DatabaseHelper migrateGradeToClass warning: $e');
+    }
+  }
+
   /// Ensures all classes and sections corresponding to enrolled students exist,
   /// seeds default curriculum for any new classes, and links students to class_id and section_id.
   Future<void> syncClassSectionIntegrity(Database db) async {
@@ -3038,10 +3107,9 @@ class DatabaseHelper {
         for (final c in classList) {
           final cName = (c['name'] as String).trim().toLowerCase();
           if (cName == clean ||
-              cName == 'grade $clean' ||
               cName == 'class $clean' ||
-              cName.replaceFirst('grade ', '') == clean ||
-              cName.replaceFirst('class ', '') == clean) {
+              cName.replaceFirst('class ', '') == clean ||
+              cName.replaceFirst('grade ', '') == clean) {
             return c;
           }
         }
@@ -3062,7 +3130,15 @@ class DatabaseHelper {
           classId = matchedClass['id'] as String;
           canonicalClassName = matchedClass['name'] as String;
         } else {
-          canonicalClassName = RegExp(r'^\d+$').hasMatch(rawGrade) ? 'Grade $rawGrade' : rawGrade;
+          if (RegExp(r'^\d+$').hasMatch(rawGrade)) {
+            final n = int.tryParse(rawGrade) ?? 1;
+            final suffix = (n == 1) ? '1st' : (n == 2) ? '2nd' : (n == 3) ? '3rd' : '${n}th';
+            canonicalClassName = 'Class $suffix';
+          } else if (rawGrade.toLowerCase().startsWith('grade ')) {
+            canonicalClassName = rawGrade.replaceFirst(RegExp(r'^grade\s*', caseSensitive: false), 'Class ');
+          } else {
+            canonicalClassName = rawGrade;
+          }
           classId = 'cls-${canonicalClassName.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '')}';
           await db.execute(
             "INSERT OR IGNORE INTO classes (id, name, academic_year, capacity, created_at) VALUES (?, ?, '2026-2027', 40, datetime('now'))",

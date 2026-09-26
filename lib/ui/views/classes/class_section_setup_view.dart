@@ -894,7 +894,7 @@ class _ClassSectionSetupViewState extends ConsumerState<ClassSectionSetupView> {
   }
 
   void _showAddEditClassDialog(BuildContext context, {ClassModel? classModel}) {
-    final nameController = TextEditingController(text: classModel?.name ?? 'Grade 11');
+    final nameController = TextEditingController(text: classModel?.name ?? '');
     final yearController = TextEditingController(text: classModel?.academicYear ?? '2026-2027');
     final capacityController = TextEditingController(text: (classModel?.capacity ?? 40).toString());
 
@@ -911,7 +911,7 @@ class _ClassSectionSetupViewState extends ConsumerState<ClassSectionSetupView> {
               TextField(
                 controller: nameController,
                 style: GoogleFonts.poppins(color: AppTheme.textPrimary),
-                decoration: const InputDecoration(labelText: 'Class Name (e.g. Grade 10, Class 8) *'),
+                decoration: const InputDecoration(labelText: 'Class Name (e.g. Class 1st, Class 2nd) *', hintText: 'e.g. Class 1st'),
               ),
               const SizedBox(height: 12),
               TextField(

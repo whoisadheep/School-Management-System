@@ -1099,15 +1099,15 @@ class _AdmissionViewState extends ConsumerState<AdmissionView> {
                     final classesAsync = ref.watch(classListProvider);
                     final classItems = classesAsync.value?.map((c) => c.name).toList() ?? [
                       'Nursery', 'LKG', 'UKG',
-                      'Grade 1', 'Grade 2', 'Grade 3', 'Grade 4', 'Grade 5',
-                      'Grade 6', 'Grade 7', 'Grade 8', 'Grade 9', 'Grade 10',
-                      'Grade 11', 'Grade 12'
+                      'Class 1st', 'Class 2nd', 'Class 3rd', 'Class 4th', 'Class 5th',
+                      'Class 6th', 'Class 7th', 'Class 8th', 'Class 9th', 'Class 10th',
+                      'Class 11th', 'Class 12th'
                     ];
                     if (!classItems.contains(state.gradeLevel)) {
                       classItems.add(state.gradeLevel);
                     }
                     return _buildDropdownField(
-                      label: 'Grade Level / Class *',
+                      label: 'Class *',
                       value: state.gradeLevel,
                       items: classItems,
                       focusNode: _fnGrade,

@@ -17,18 +17,17 @@ class _StudentAttendanceViewState extends ConsumerState<StudentAttendanceView> w
   late TabController _tabController;
 
   // Daily Attendance State
-  String _selectedClass = 'Grade 1';
+  String _selectedClass = 'Class 1st';
   String _selectedSection = 'A';
   DateTime _selectedDate = DateTime.now();
   Map<String, StudentAttendance> _editedAttendance = {};
 
   // Report State
-  String _reportClass = 'Grade 1';
+  String _reportClass = 'Class 1st';
   String _reportSection = 'A';
   String _reportYear = '2026-2027';
   bool _generateReport = false;
 
-  final List<String> _classes = ['Grade 1', 'Grade 2', 'Grade 3', 'Grade 4', 'Grade 5', 'Grade 6', 'Grade 7', 'Grade 8', 'Grade 9', 'Grade 10'];
   final List<String> _sections = ['A', 'B', 'C'];
   final List<String> _years = ['2026-2027'];
 
@@ -130,6 +129,13 @@ class _StudentAttendanceViewState extends ConsumerState<StudentAttendanceView> w
   }
 
   Widget _buildDailyAttendanceTab() {
+    final classesAsync = ref.watch(classListProvider);
+    final dynamicClasses = classesAsync.value?.map((c) => c.name).toList() ?? [];
+    final classOptions = dynamicClasses.isNotEmpty ? dynamicClasses : ['Class 1st', 'Class 2nd'];
+    if (!classOptions.contains(_selectedClass)) {
+      _selectedClass = classOptions.first;
+    }
+
     final dateStr = "${_selectedDate.year}-${_selectedDate.month.toString().padLeft(2, '0')}-${_selectedDate.day.toString().padLeft(2, '0')}";
     final params = "$_selectedClass|$_selectedSection|$dateStr";
     final attendanceAsync = ref.watch(classAttendanceProvider(params));
@@ -147,7 +153,7 @@ class _StudentAttendanceViewState extends ConsumerState<StudentAttendanceView> w
               runSpacing: AppTheme.spacingMd,
               crossAxisAlignment: WrapCrossAlignment.center,
               children: [
-                _buildDropdown('Class', _selectedClass, _classes, (val) {
+                _buildDropdown('Class', _selectedClass, classOptions, (val) {
                   setState(() {
                     _selectedClass = val!;
                     _editedAttendance.clear();
@@ -296,6 +302,13 @@ class _StudentAttendanceViewState extends ConsumerState<StudentAttendanceView> w
   }
 
   Widget _buildReportTab() {
+    final classesAsync = ref.watch(classListProvider);
+    final dynamicClasses = classesAsync.value?.map((c) => c.name).toList() ?? [];
+    final classOptions = dynamicClasses.isNotEmpty ? dynamicClasses : ['Class 1st', 'Class 2nd'];
+    if (!classOptions.contains(_reportClass)) {
+      _reportClass = classOptions.first;
+    }
+
     return Padding(
       padding: const EdgeInsets.all(AppTheme.spacingMd),
       child: Column(
@@ -309,7 +322,7 @@ class _StudentAttendanceViewState extends ConsumerState<StudentAttendanceView> w
               runSpacing: AppTheme.spacingMd,
               crossAxisAlignment: WrapCrossAlignment.center,
               children: [
-                _buildDropdown('Class', _reportClass, _classes, (val) {
+                _buildDropdown('Class', _reportClass, classOptions, (val) {
                   setState(() {
                     _reportClass = val!;
                     _generateReport = false;
