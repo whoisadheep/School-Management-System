@@ -174,6 +174,7 @@ class _StudentDirectoryViewState extends ConsumerState<StudentDirectoryView>
   int _currentPage = 0;
   int _itemsPerPage = 24;
   String _viewMode = 'grid'; // 'grid' or 'table'
+  bool _isOperationInProgress = false;
 
   int _compareClassNames(String a, String b) {
     int rank(String name) {
@@ -297,7 +298,7 @@ class _StudentDirectoryViewState extends ConsumerState<StudentDirectoryView>
   }
 
   Future<void> _checkForDataChanges({bool force = false}) async {
-    if (!mounted) return;
+    if (!mounted || _isOperationInProgress) return;
     try {
       final db = await ref.read(databaseServiceProvider).rawDb;
       final res = await db.rawQuery('SELECT COUNT(*) as count, MAX(updated_at) as last_updated FROM students');
@@ -1061,6 +1062,7 @@ class _StudentDirectoryViewState extends ConsumerState<StudentDirectoryView>
                           // More Filters Menu
                           PopupMenuButton<String>(
                             tooltip: 'More filters',
+                            constraints: const BoxConstraints(minWidth: 260, maxWidth: 320),
                             shape: RoundedRectangleBorder(
                                 borderRadius: BorderRadius.circular(12)),
                             itemBuilder: (context) => [
@@ -1089,7 +1091,12 @@ class _StudentDirectoryViewState extends ConsumerState<StudentDirectoryView>
                                         size: 16,
                                         color: AppTheme.primaryPurple),
                                     SizedBox(width: 8),
-                                    Text('Whole-School Promotion (1-Click)'),
+                                    Expanded(
+                                      child: Text(
+                                        'Mass Promotion (1-Click)',
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ),
                                   ],
                                 ),
                               ),
@@ -1101,7 +1108,12 @@ class _StudentDirectoryViewState extends ConsumerState<StudentDirectoryView>
                                         size: 16,
                                         color: AppTheme.primaryPurple),
                                     SizedBox(width: 8),
-                                    Text('Single Class Promotion'),
+                                    Expanded(
+                                      child: Text(
+                                        'Single Class Promotion',
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ),
                                   ],
                                 ),
                               ),
@@ -3709,36 +3721,38 @@ class _StudentDirectoryViewState extends ConsumerState<StudentDirectoryView>
             title: Row(
               children: [
                 Container(
-                  padding: const EdgeInsets.all(10),
+                  padding: const EdgeInsets.all(8),
                   decoration: BoxDecoration(
                     color: AppTheme.primaryPurple.withOpacity(0.12),
                     borderRadius: BorderRadius.circular(10),
                   ),
-                  child: const Icon(Icons.rocket_launch_rounded, color: AppTheme.primaryPurple, size: 24),
+                  child: const Icon(Icons.rocket_launch_rounded, color: AppTheme.primaryPurple, size: 22),
                 ),
-                const SizedBox(width: 14),
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      'WHOLE-SCHOOL MASS PROMOTION',
-                      style: GoogleFonts.poppins(
-                        fontWeight: FontWeight.bold,
-                        fontSize: 15,
-                        color: AppTheme.textPrimary,
-                        letterSpacing: 0.5,
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        'WHOLE-SCHOOL MASS PROMOTION',
+                        style: GoogleFonts.poppins(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 14,
+                          color: AppTheme.textPrimary,
+                          letterSpacing: 0.5,
+                        ),
                       ),
-                    ),
-                    Text(
-                      '1-Click Session Transition: $fromYear  ➔  $targetYear',
-                      style: GoogleFonts.poppins(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w500,
-                        color: AppTheme.primaryPurple,
+                      Text(
+                        '1-Click Session Transition: $fromYear  ➔  $targetYear',
+                        style: GoogleFonts.poppins(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w500,
+                          color: AppTheme.primaryPurple,
+                        ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
               ],
             ),
@@ -3746,7 +3760,7 @@ class _StudentDirectoryViewState extends ConsumerState<StudentDirectoryView>
               width: 760,
               child: ConstrainedBox(
                 constraints: BoxConstraints(
-                  maxHeight: MediaQuery.of(context).size.height * 0.72,
+                  maxHeight: MediaQuery.of(context).size.height * 0.52,
                 ),
                 child: SingleChildScrollView(
                   child: Column(
@@ -3754,7 +3768,7 @@ class _StudentDirectoryViewState extends ConsumerState<StudentDirectoryView>
                     children: [
                       // Overview summary chips
                       Container(
-                        padding: const EdgeInsets.all(14),
+                        padding: const EdgeInsets.all(12),
                         decoration: BoxDecoration(
                           color: const Color(0xFFF8FAFC),
                           borderRadius: BorderRadius.circular(10),
@@ -3763,25 +3777,31 @@ class _StudentDirectoryViewState extends ConsumerState<StudentDirectoryView>
                         child: Row(
                           mainAxisAlignment: MainAxisAlignment.spaceAround,
                           children: [
-                            _buildMassStatItem(
-                              icon: Icons.groups_rounded,
-                              iconColor: AppTheme.primaryPurple,
-                              label: 'Total Active Students',
-                              value: '$totalStudentsToPromote',
+                            Flexible(
+                              child: _buildMassStatItem(
+                                icon: Icons.groups_rounded,
+                                iconColor: AppTheme.primaryPurple,
+                                label: 'Total Active Students',
+                                value: '$totalStudentsToPromote',
+                              ),
                             ),
                             Container(width: 1, height: 32, color: const Color(0xFFCBD5E1)),
-                            _buildMassStatItem(
-                              icon: Icons.school_rounded,
-                              iconColor: const Color(0xFF0284C7),
-                              label: 'Active Classes',
-                              value: '${classNames.length}',
+                            Flexible(
+                              child: _buildMassStatItem(
+                                icon: Icons.school_rounded,
+                                iconColor: const Color(0xFF0284C7),
+                                label: 'Active Classes',
+                                value: '${classNames.length}',
+                              ),
                             ),
                             Container(width: 1, height: 32, color: const Color(0xFFCBD5E1)),
-                            _buildMassStatItem(
-                              icon: Icons.calendar_today_rounded,
-                              iconColor: const Color(0xFF10B981),
-                              label: 'Session Transition',
-                              value: '$fromYear → $targetYear',
+                            Flexible(
+                              child: _buildMassStatItem(
+                                icon: Icons.calendar_today_rounded,
+                                iconColor: const Color(0xFF10B981),
+                                label: 'Session Transition',
+                                value: '$fromYear → $targetYear',
+                              ),
                             ),
                           ],
                         ),
@@ -3971,7 +3991,7 @@ class _StudentDirectoryViewState extends ConsumerState<StudentDirectoryView>
                                 .fold(0.0, (sum, s) => sum + (duesMap[s.id]?.unpaidBalance ?? 0.0));
 
                             return Padding(
-                              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
                               child: Row(
                                 children: [
                                   // From Class badge & Student count
@@ -4017,7 +4037,7 @@ class _StudentDirectoryViewState extends ConsumerState<StudentDirectoryView>
 
                                   // Arrow indicator
                                   const Padding(
-                                    padding: EdgeInsets.symmetric(horizontal: 10),
+                                    padding: EdgeInsets.symmetric(horizontal: 8),
                                     child: Icon(Icons.arrow_forward_rounded, color: Color(0xFF94A3B8), size: 18),
                                   ),
 
@@ -4026,7 +4046,7 @@ class _StudentDirectoryViewState extends ConsumerState<StudentDirectoryView>
                                     flex: 5,
                                     child: DropdownButtonFormField<String>(
                                       value: targetC,
-                                      isDense: true,
+                                      isExpanded: true,
                                       decoration: InputDecoration(
                                         contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
                                         border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
@@ -4041,22 +4061,14 @@ class _StudentDirectoryViewState extends ConsumerState<StudentDirectoryView>
                                       items: [
                                         ...classNames.map((c) => DropdownMenuItem(
                                           value: c,
-                                          child: Row(
-                                            children: [
-                                              const Icon(Icons.school_outlined, size: 14, color: AppTheme.primaryPurple),
-                                              const SizedBox(width: 6),
-                                              Text(c),
-                                            ],
-                                          ),
+                                          child: Text(c, overflow: TextOverflow.ellipsis),
                                         )),
                                         const DropdownMenuItem(
                                           value: 'Alumni / Graduated',
-                                          child: Row(
-                                            children: [
-                                              Icon(Icons.workspace_premium_rounded, size: 14, color: Color(0xFFBE185D)),
-                                              SizedBox(width: 6),
-                                              Text('Alumni / Graduated (Pass Out)'),
-                                            ],
+                                          child: Text(
+                                            'Alumni / Graduated (Pass Out)',
+                                            style: TextStyle(color: Color(0xFFBE185D)),
+                                            overflow: TextOverflow.ellipsis,
                                           ),
                                         ),
                                       ],
@@ -4069,11 +4081,11 @@ class _StudentDirectoryViewState extends ConsumerState<StudentDirectoryView>
                                       },
                                     ),
                                   ),
-                                  const SizedBox(width: 12),
+                                  const SizedBox(width: 10),
 
                                   // Fee Status Pill for this class
                                   SizedBox(
-                                    width: 140,
+                                    width: 130,
                                     child: classDuesCount > 0
                                         ? Container(
                                             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
@@ -4142,120 +4154,128 @@ class _StudentDirectoryViewState extends ConsumerState<StudentDirectoryView>
               ),
             ),
             actions: [
-              TextButton(
-                onPressed: isExecuting ? null : () => Navigator.of(dialogCtx).pop(),
-                child: Text('Cancel', style: GoogleFonts.poppins(color: AppTheme.textSecondary, fontWeight: FontWeight.w600)),
+              Wrap(
+                alignment: WrapAlignment.end,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                spacing: 10,
+                runSpacing: 8,
+                children: [
+                  TextButton(
+                    onPressed: isExecuting ? null : () => Navigator.of(dialogCtx).pop(),
+                    child: Text('Cancel', style: GoogleFonts.poppins(color: AppTheme.textSecondary, fontWeight: FontWeight.w600)),
+                  ),
+                  if (hasUnclearedFees) ...[
+                    // Option: Promote Cleared Only
+                    OutlinedButton.icon(
+                      onPressed: isExecuting || (totalStudentsToPromote - studentsWithDues.length) == 0
+                          ? null
+                          : () async {
+                              setDialogState(() => isExecuting = true);
+                              final mappings = _buildMassPromotionMappings(
+                                classNames: classNames,
+                                routeTargets: routeTargets,
+                                classStudentsMap: classStudentsMap,
+                                allClasses: allClasses,
+                                excludedStudentIds: unpaidStudentIds,
+                              );
+                              await _executeMassPromotion(
+                                dialogContext: dialogCtx,
+                                parentContext: context,
+                                mappings: mappings,
+                                fromAcademicYear: fromYear,
+                                toAcademicYear: targetYear,
+                                rolloverArrears: false,
+                                totalStudents: totalStudentsToPromote - studentsWithDues.length,
+                                totalArrears: 0.0,
+                                unpromotedWithDuesCount: studentsWithDues.length,
+                              );
+                            },
+                      icon: const Icon(Icons.check_circle_outline_rounded, size: 16),
+                      label: Text(
+                        'Promote Cleared Only (${totalStudentsToPromote - studentsWithDues.length})',
+                        style: GoogleFonts.poppins(fontSize: 11, fontWeight: FontWeight.w600),
+                      ),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: AppTheme.primaryPurple,
+                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                      ),
+                    ),
+                    // Option: 1-Click Promote All & Rollover Arrears
+                    ElevatedButton.icon(
+                      onPressed: isExecuting || totalStudentsToPromote == 0
+                          ? null
+                          : () async {
+                              setDialogState(() => isExecuting = true);
+                              final mappings = _buildMassPromotionMappings(
+                                classNames: classNames,
+                                routeTargets: routeTargets,
+                                classStudentsMap: classStudentsMap,
+                                allClasses: allClasses,
+                                excludedStudentIds: null,
+                              );
+                              await _executeMassPromotion(
+                                dialogContext: dialogCtx,
+                                parentContext: context,
+                                mappings: mappings,
+                                fromAcademicYear: fromYear,
+                                toAcademicYear: targetYear,
+                                rolloverArrears: true,
+                                totalStudents: totalStudentsToPromote,
+                                totalArrears: totalUnpaidAmount,
+                                unpromotedWithDuesCount: 0,
+                              );
+                            },
+                      icon: const Icon(Icons.rocket_launch_rounded, size: 16),
+                      label: Text(
+                        '1-Click Promote All & Rollover ($totalStudentsToPromote)',
+                        style: GoogleFonts.poppins(fontSize: 11, fontWeight: FontWeight.bold),
+                      ),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppTheme.primaryPurple,
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                      ),
+                    ),
+                  ] else ...[
+                    // All cleared: 1-Click Mass Promote All
+                    ElevatedButton.icon(
+                      onPressed: isExecuting || totalStudentsToPromote == 0
+                          ? null
+                          : () async {
+                              setDialogState(() => isExecuting = true);
+                              final mappings = _buildMassPromotionMappings(
+                                classNames: classNames,
+                                routeTargets: routeTargets,
+                                classStudentsMap: classStudentsMap,
+                                allClasses: allClasses,
+                                excludedStudentIds: null,
+                              );
+                              await _executeMassPromotion(
+                                dialogContext: dialogCtx,
+                                parentContext: context,
+                                mappings: mappings,
+                                fromAcademicYear: fromYear,
+                                toAcademicYear: targetYear,
+                                rolloverArrears: false,
+                                totalStudents: totalStudentsToPromote,
+                                totalArrears: 0.0,
+                                unpromotedWithDuesCount: 0,
+                              );
+                            },
+                      icon: const Icon(Icons.rocket_launch_rounded, size: 16),
+                      label: Text(
+                        '1-Click Mass Promote All ($totalStudentsToPromote Students)',
+                        style: GoogleFonts.poppins(fontSize: 12, fontWeight: FontWeight.bold),
+                      ),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppTheme.primaryPurple,
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                      ),
+                    ),
+                  ],
+                ],
               ),
-              if (hasUnclearedFees) ...[
-                // Option: Promote Cleared Only
-                OutlinedButton.icon(
-                  onPressed: isExecuting || (totalStudentsToPromote - studentsWithDues.length) == 0
-                      ? null
-                      : () async {
-                          setDialogState(() => isExecuting = true);
-                          final mappings = _buildMassPromotionMappings(
-                            classNames: classNames,
-                            routeTargets: routeTargets,
-                            classStudentsMap: classStudentsMap,
-                            allClasses: allClasses,
-                            excludedStudentIds: unpaidStudentIds,
-                          );
-                          await _executeMassPromotion(
-                            dialogContext: dialogCtx,
-                            parentContext: context,
-                            mappings: mappings,
-                            fromAcademicYear: fromYear,
-                            toAcademicYear: targetYear,
-                            rolloverArrears: false,
-                            totalStudents: totalStudentsToPromote - studentsWithDues.length,
-                            totalArrears: 0.0,
-                            unpromotedWithDuesCount: studentsWithDues.length,
-                          );
-                        },
-                  icon: const Icon(Icons.check_circle_outline_rounded, size: 16),
-                  label: Text(
-                    'Promote Cleared Only (${totalStudentsToPromote - studentsWithDues.length})',
-                    style: GoogleFonts.poppins(fontSize: 11, fontWeight: FontWeight.w600),
-                  ),
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: AppTheme.primaryPurple,
-                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                  ),
-                ),
-                // Option: 1-Click Promote All & Rollover Arrears
-                ElevatedButton.icon(
-                  onPressed: isExecuting || totalStudentsToPromote == 0
-                      ? null
-                      : () async {
-                          setDialogState(() => isExecuting = true);
-                          final mappings = _buildMassPromotionMappings(
-                            classNames: classNames,
-                            routeTargets: routeTargets,
-                            classStudentsMap: classStudentsMap,
-                            allClasses: allClasses,
-                            excludedStudentIds: null,
-                          );
-                          await _executeMassPromotion(
-                            dialogContext: dialogCtx,
-                            parentContext: context,
-                            mappings: mappings,
-                            fromAcademicYear: fromYear,
-                            toAcademicYear: targetYear,
-                            rolloverArrears: true,
-                            totalStudents: totalStudentsToPromote,
-                            totalArrears: totalUnpaidAmount,
-                            unpromotedWithDuesCount: 0,
-                          );
-                        },
-                  icon: const Icon(Icons.rocket_launch_rounded, size: 16),
-                  label: Text(
-                    '1-Click Promote All & Rollover ($totalStudentsToPromote)',
-                    style: GoogleFonts.poppins(fontSize: 11, fontWeight: FontWeight.bold),
-                  ),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppTheme.primaryPurple,
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                  ),
-                ),
-              ] else ...[
-                // All cleared: 1-Click Mass Promote All
-                ElevatedButton.icon(
-                  onPressed: isExecuting || totalStudentsToPromote == 0
-                      ? null
-                      : () async {
-                          setDialogState(() => isExecuting = true);
-                          final mappings = _buildMassPromotionMappings(
-                            classNames: classNames,
-                            routeTargets: routeTargets,
-                            classStudentsMap: classStudentsMap,
-                            allClasses: allClasses,
-                            excludedStudentIds: null,
-                          );
-                          await _executeMassPromotion(
-                            dialogContext: dialogCtx,
-                            parentContext: context,
-                            mappings: mappings,
-                            fromAcademicYear: fromYear,
-                            toAcademicYear: targetYear,
-                            rolloverArrears: false,
-                            totalStudents: totalStudentsToPromote,
-                            totalArrears: 0.0,
-                            unpromotedWithDuesCount: 0,
-                          );
-                        },
-                  icon: const Icon(Icons.rocket_launch_rounded, size: 16),
-                  label: Text(
-                    '1-Click Mass Promote All ($totalStudentsToPromote Students)',
-                    style: GoogleFonts.poppins(fontSize: 12, fontWeight: FontWeight.bold),
-                  ),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppTheme.primaryPurple,
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-                  ),
-                ),
-              ],
             ],
           );
         },
@@ -4341,6 +4361,8 @@ class _StudentDirectoryViewState extends ConsumerState<StudentDirectoryView>
     required double totalArrears,
     required int unpromotedWithDuesCount,
   }) async {
+    _isOperationInProgress = true;
+    _autoRefreshTimer?.cancel();
     final dbService = ref.read(databaseServiceProvider);
 
     try {
@@ -4397,6 +4419,9 @@ class _StudentDirectoryViewState extends ConsumerState<StudentDirectoryView>
           ),
         );
       }
+    } finally {
+      _isOperationInProgress = false;
+      _startAutoRefreshTimer();
     }
   }
 
@@ -4485,7 +4510,7 @@ class _StudentDirectoryViewState extends ConsumerState<StudentDirectoryView>
             content: SizedBox(
               width: 650,
               child: ConstrainedBox(
-                constraints: BoxConstraints(maxHeight: MediaQuery.of(context).size.height * 0.7),
+                constraints: BoxConstraints(maxHeight: MediaQuery.of(context).size.height * 0.52),
                 child: SingleChildScrollView(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -4724,103 +4749,116 @@ class _StudentDirectoryViewState extends ConsumerState<StudentDirectoryView>
             ),
           ),
           actions: [
-              TextButton(
-                onPressed: () => Navigator.of(context).pop(),
-                child: const Text('Cancel'),
-              ),
-              ElevatedButton.icon(
-                onPressed: selectedStudentIds.isEmpty || (isLoading || isLoadingSections)
-                    ? null
-                    : () async {
-                        try {
-                          setDialogState(() => isLoading = true);
-                          final currentAy = await dbService.getCurrentAcademicYear();
-                          final fromYear = currentAy?.name ?? '2026-2027';
+            Wrap(
+              alignment: WrapAlignment.end,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              spacing: 10,
+              runSpacing: 8,
+              children: [
+                TextButton(
+                  onPressed: () => Navigator.of(context).pop(),
+                  child: const Text('Cancel'),
+                ),
+                ElevatedButton.icon(
+                  onPressed: selectedStudentIds.isEmpty || (isLoading || isLoadingSections)
+                      ? null
+                      : () async {
+                          _isOperationInProgress = true;
+                          _autoRefreshTimer?.cancel();
+                          try {
+                            setDialogState(() => isLoading = true);
+                            final currentAy = await dbService.getCurrentAcademicYear();
+                            final fromYear = currentAy?.name ?? '2026-2027';
 
-                          // Determine target academic year
-                          String targetYear;
-                          if (targetClassId != null) {
-                            try {
-                              final match = allClasses.firstWhere((c) => c.id == targetClassId);
-                              targetYear = match.academicYear ?? _nextAcademicYear(fromYear);
-                            } catch (_) {
+                            // Determine target academic year
+                            String targetYear;
+                            if (targetClassId != null) {
+                              try {
+                                final match = allClasses.firstWhere((c) => c.id == targetClassId);
+                                targetYear = match.academicYear ?? _nextAcademicYear(fromYear);
+                              } catch (_) {
+                                targetYear = _nextAcademicYear(fromYear);
+                              }
+                            } else {
                               targetYear = _nextAcademicYear(fromYear);
                             }
-                          } else {
-                            targetYear = _nextAcademicYear(fromYear);
-                          }
 
-                          // Query unpaid fee dues summary for all selected students
-                          final duesMap = await dbService.getStudentsUnpaidDuesSummary(
-                            studentIds: selectedStudentIds.toList(),
-                            academicYear: fromYear,
-                          );
-
-                          final studentsWithDues = duesMap.values.where((s) => s.unpaidBalance > 0.01).toList();
-
-                          if (studentsWithDues.isEmpty) {
-                            // All selected students are fee-cleared! Proceed directly
-                            await dbService.promoteStudentsWithArrearsRollover(
+                            // Query unpaid fee dues summary for all selected students
+                            final duesMap = await dbService.getStudentsUnpaidDuesSummary(
                               studentIds: selectedStudentIds.toList(),
-                              targetGrade: isAlumni ? fromClass : toClass,
-                              classId: isAlumni ? null : targetClassId,
-                              sectionId: isAlumni ? null : targetSectionId,
-                              sectionName: isAlumni ? null : targetSectionName,
-                              markAsAlumni: isAlumni,
-                              fromAcademicYear: fromYear,
-                              toAcademicYear: targetYear,
-                              rolloverArrears: false,
+                              academicYear: fromYear,
                             );
 
-                            ref.invalidate(studentDirectoryProvider);
-                            ref.invalidate(studentsListProvider);
-                            ref.invalidate(dashboardMetricsProvider);
-                            ref.invalidate(sectionStudentCountProvider);
+                            final studentsWithDues = duesMap.values.where((s) => s.unpaidBalance > 0.01).toList();
 
-                            if (context.mounted) {
-                              Navigator.of(context).pop();
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(
-                                  content: Text('Fee Clearance Verified: Successfully promoted ${selectedStudentIds.length} student(s) to $toClass!', style: GoogleFonts.poppins(color: Colors.white, fontWeight: FontWeight.w600)),
-                                  backgroundColor: AppTheme.primaryPurple,
-                                ),
+                            if (studentsWithDues.isEmpty) {
+                              // All selected students are fee-cleared! Proceed directly
+                              await dbService.promoteStudentsWithArrearsRollover(
+                                studentIds: selectedStudentIds.toList(),
+                                targetGrade: isAlumni ? fromClass : toClass,
+                                classId: isAlumni ? null : targetClassId,
+                                sectionId: isAlumni ? null : targetSectionId,
+                                sectionName: isAlumni ? null : targetSectionName,
+                                markAsAlumni: isAlumni,
+                                fromAcademicYear: fromYear,
+                                toAcademicYear: targetYear,
+                                rolloverArrears: false,
                               );
+
+                              ref.invalidate(studentDirectoryProvider);
+                              ref.invalidate(studentsListProvider);
+                              ref.invalidate(dashboardMetricsProvider);
+                              ref.invalidate(sectionStudentCountProvider);
+
+                              if (context.mounted) {
+                                Navigator.of(context).pop();
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(
+                                    content: Text('Fee Clearance Verified: Successfully promoted ${selectedStudentIds.length} student(s) to $toClass!', style: GoogleFonts.poppins(color: Colors.white, fontWeight: FontWeight.w600)),
+                                    backgroundColor: AppTheme.primaryPurple,
+                                  ),
+                                );
+                              }
+                            } else {
+                              // Uncleared dues detected: trigger Step 2 Warning Modal
+                              setDialogState(() => isLoading = false);
+                              if (context.mounted) {
+                                _showFeeClearanceWarningDialog(
+                                  parentContext: context,
+                                  studentsWithDues: studentsWithDues,
+                                  allSelectedIds: selectedStudentIds,
+                                  fromClass: fromClass,
+                                  toClass: toClass,
+                                  fromYear: fromYear,
+                                  targetYear: targetYear,
+                                  targetClassId: targetClassId,
+                                  targetSectionId: targetSectionId,
+                                  targetSectionName: targetSectionName,
+                                  isAlumni: isAlumni,
+                                );
+                              }
                             }
-                          } else {
-                            // Uncleared dues detected: trigger Step 2 Warning Modal
+                          } catch (e, stackTrace) {
                             setDialogState(() => isLoading = false);
+                            AppLogger.instance.error('Failed to promote students', e, stackTrace);
                             if (context.mounted) {
-                              _showFeeClearanceWarningDialog(
-                                parentContext: context,
-                                studentsWithDues: studentsWithDues,
-                                allSelectedIds: selectedStudentIds,
-                                fromClass: fromClass,
-                                toClass: toClass,
-                                fromYear: fromYear,
-                                targetYear: targetYear,
-                                targetClassId: targetClassId,
-                                targetSectionId: targetSectionId,
-                                targetSectionName: targetSectionName,
-                                isAlumni: isAlumni,
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(content: Text('Error promoting students: $e'), backgroundColor: AppTheme.error),
                               );
                             }
+                          } finally {
+                            _isOperationInProgress = false;
+                            _startAutoRefreshTimer();
                           }
-                        } catch (e, stackTrace) {
-                          setDialogState(() => isLoading = false);
-                          AppLogger.instance.error('Failed to promote students', e, stackTrace);
-                          if (context.mounted) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(content: Text('Error promoting students: $e'), backgroundColor: AppTheme.error),
-                            );
-                          }
-                        }
-                      },
-                icon: const Icon(Icons.arrow_upward_rounded, size: 16),
-                label: Text('PROMOTE ${selectedStudentIds.length} STUDENT(S)'),
-                style: ElevatedButton.styleFrom(backgroundColor: AppTheme.primaryPurple, foregroundColor: Colors.white),
-              ),
-            ],
-          );
+                        },
+                  icon: const Icon(Icons.arrow_upward_rounded, size: 16),
+                  label: Text('PROMOTE ${selectedStudentIds.length} STUDENT(S)'),
+                  style: ElevatedButton.styleFrom(backgroundColor: AppTheme.primaryPurple, foregroundColor: Colors.white),
+                ),
+              ],
+            ),
+          ],
+        );
         },
       ),
     );
@@ -4887,7 +4925,7 @@ class _StudentDirectoryViewState extends ConsumerState<StudentDirectoryView>
           content: SizedBox(
             width: 620,
             child: ConstrainedBox(
-              constraints: const BoxConstraints(maxHeight: 450),
+              constraints: BoxConstraints(maxHeight: MediaQuery.of(parentContext).size.height * 0.50),
               child: SingleChildScrollView(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -4990,22 +5028,83 @@ class _StudentDirectoryViewState extends ConsumerState<StudentDirectoryView>
           ),
         ),
         actions: [
-            // Action 1: Cancel
-            TextButton(
-              onPressed: () => Navigator.of(modalCtx).pop(),
-              child: Text('Cancel & Collect Dues', style: GoogleFonts.poppins(color: AppTheme.textSecondary, fontWeight: FontWeight.w600)),
-            ),
-            // Action 2: Promote Cleared Only
-            if (clearedStudentIds.isNotEmpty)
-              OutlinedButton.icon(
+          Wrap(
+            alignment: WrapAlignment.end,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            spacing: 10,
+            runSpacing: 8,
+            children: [
+              // Action 1: Cancel
+              TextButton(
+                onPressed: () => Navigator.of(modalCtx).pop(),
+                child: Text('Cancel & Collect Dues', style: GoogleFonts.poppins(color: AppTheme.textSecondary, fontWeight: FontWeight.w600)),
+              ),
+              // Action 2: Promote Cleared Only
+              if (clearedStudentIds.isNotEmpty)
+                OutlinedButton.icon(
+                  onPressed: () async {
+                    _isOperationInProgress = true;
+                    _autoRefreshTimer?.cancel();
+                    final dbService = ref.read(databaseServiceProvider);
+                    Navigator.of(modalCtx).pop(); // close warning
+                    Navigator.of(parentContext).pop(); // close promotion tool
+
+                    try {
+                      await dbService.promoteStudentsWithArrearsRollover(
+                        studentIds: clearedStudentIds.toList(),
+                        targetGrade: isAlumni ? fromClass : toClass,
+                        classId: isAlumni ? null : targetClassId,
+                        sectionId: isAlumni ? null : targetSectionId,
+                        sectionName: isAlumni ? null : targetSectionName,
+                        markAsAlumni: isAlumni,
+                        fromAcademicYear: fromYear,
+                        toAcademicYear: targetYear,
+                        rolloverArrears: false,
+                      );
+
+                      ref.invalidate(studentDirectoryProvider);
+                      ref.invalidate(studentsListProvider);
+                      ref.invalidate(dashboardMetricsProvider);
+                      ref.invalidate(sectionStudentCountProvider);
+
+                      if (parentContext.mounted) {
+                        ScaffoldMessenger.of(parentContext).showSnackBar(
+                          SnackBar(
+                            content: Text(
+                              'Promoted ${clearedStudentIds.length} fee-cleared student(s) to $toClass. ${studentsWithDues.length} student(s) with dues withheld in $fromClass.',
+                              style: GoogleFonts.poppins(color: Colors.white, fontWeight: FontWeight.w600),
+                            ),
+                            backgroundColor: AppTheme.primaryPurple,
+                          ),
+                        );
+                      }
+                    } catch (e) {
+                      if (parentContext.mounted) {
+                        ScaffoldMessenger.of(parentContext).showSnackBar(
+                          SnackBar(content: Text('Error: $e'), backgroundColor: AppTheme.error),
+                        );
+                      }
+                    } finally {
+                      _isOperationInProgress = false;
+                      _startAutoRefreshTimer();
+                    }
+                  },
+                  icon: const Icon(Icons.check_circle_outline, size: 16),
+                  label: Text('Promote Cleared Only (${clearedStudentIds.length})', style: GoogleFonts.poppins(fontSize: 11, fontWeight: FontWeight.w600)),
+                  style: OutlinedButton.styleFrom(foregroundColor: AppTheme.primaryPurple),
+                ),
+              // Action 3: Promote All with Rollover
+              ElevatedButton.icon(
                 onPressed: () async {
+                  _isOperationInProgress = true;
+                  _autoRefreshTimer?.cancel();
                   final dbService = ref.read(databaseServiceProvider);
                   Navigator.of(modalCtx).pop(); // close warning
                   Navigator.of(parentContext).pop(); // close promotion tool
 
                   try {
                     await dbService.promoteStudentsWithArrearsRollover(
-                      studentIds: clearedStudentIds.toList(),
+                      studentIds: allSelectedIds.toList(),
                       targetGrade: isAlumni ? fromClass : toClass,
                       classId: isAlumni ? null : targetClassId,
                       sectionId: isAlumni ? null : targetSectionId,
@@ -5013,7 +5112,7 @@ class _StudentDirectoryViewState extends ConsumerState<StudentDirectoryView>
                       markAsAlumni: isAlumni,
                       fromAcademicYear: fromYear,
                       toAcademicYear: targetYear,
-                      rolloverArrears: false,
+                      rolloverArrears: true,
                     );
 
                     ref.invalidate(studentDirectoryProvider);
@@ -5025,10 +5124,10 @@ class _StudentDirectoryViewState extends ConsumerState<StudentDirectoryView>
                       ScaffoldMessenger.of(parentContext).showSnackBar(
                         SnackBar(
                           content: Text(
-                            'Promoted ${clearedStudentIds.length} fee-cleared student(s) to $toClass. ${studentsWithDues.length} student(s) with dues withheld in $fromClass.',
-                            style: GoogleFonts.poppins(color: Colors.white, fontWeight: FontWeight.w600),
+                            'Promoted all ${allSelectedIds.length} student(s) to $toClass! Rolled over ₹${totalUnpaid.toStringAsFixed(0)} dues as Previous Session Arrears into $targetYear.',
                           ),
                           backgroundColor: AppTheme.primaryPurple,
+                          duration: const Duration(seconds: 4),
                         ),
                       );
                     }
@@ -5038,61 +5137,18 @@ class _StudentDirectoryViewState extends ConsumerState<StudentDirectoryView>
                         SnackBar(content: Text('Error: $e'), backgroundColor: AppTheme.error),
                       );
                     }
+                  } finally {
+                    _isOperationInProgress = false;
+                    _startAutoRefreshTimer();
                   }
                 },
-                icon: const Icon(Icons.check_circle_outline, size: 16),
-                label: Text('Promote Cleared Only (${clearedStudentIds.length})', style: GoogleFonts.poppins(fontSize: 11, fontWeight: FontWeight.w600)),
-                style: OutlinedButton.styleFrom(foregroundColor: AppTheme.primaryPurple),
+                icon: const Icon(Icons.swap_horiz_rounded, size: 16),
+                label: Text('Promote & Rollover Arrears', style: GoogleFonts.poppins(fontSize: 11, fontWeight: FontWeight.bold)),
+                style: ElevatedButton.styleFrom(backgroundColor: AppTheme.primaryPurple, foregroundColor: Colors.white),
               ),
-            // Action 3: Promote All with Rollover
-            ElevatedButton.icon(
-              onPressed: () async {
-                final dbService = ref.read(databaseServiceProvider);
-                Navigator.of(modalCtx).pop(); // close warning
-                Navigator.of(parentContext).pop(); // close promotion tool
-
-                try {
-                  await dbService.promoteStudentsWithArrearsRollover(
-                    studentIds: allSelectedIds.toList(),
-                    targetGrade: isAlumni ? fromClass : toClass,
-                    classId: isAlumni ? null : targetClassId,
-                    sectionId: isAlumni ? null : targetSectionId,
-                    sectionName: isAlumni ? null : targetSectionName,
-                    markAsAlumni: isAlumni,
-                    fromAcademicYear: fromYear,
-                    toAcademicYear: targetYear,
-                    rolloverArrears: true,
-                  );
-
-                  ref.invalidate(studentDirectoryProvider);
-                  ref.invalidate(studentsListProvider);
-                  ref.invalidate(dashboardMetricsProvider);
-                  ref.invalidate(sectionStudentCountProvider);
-
-                  if (parentContext.mounted) {
-                    ScaffoldMessenger.of(parentContext).showSnackBar(
-                      SnackBar(
-                        content: Text(
-                          'Promoted all ${allSelectedIds.length} student(s) to $toClass! Rolled over ₹${totalUnpaid.toStringAsFixed(0)} dues as Previous Session Arrears into $targetYear.',
-                        ),
-                        backgroundColor: AppTheme.primaryPurple,
-                        duration: const Duration(seconds: 4),
-                      ),
-                    );
-                  }
-                } catch (e) {
-                  if (parentContext.mounted) {
-                    ScaffoldMessenger.of(parentContext).showSnackBar(
-                      SnackBar(content: Text('Error: $e'), backgroundColor: AppTheme.error),
-                    );
-                  }
-                }
-              },
-              icon: const Icon(Icons.swap_horiz_rounded, size: 16),
-              label: Text('Promote & Rollover Arrears', style: GoogleFonts.poppins(fontSize: 11, fontWeight: FontWeight.bold)),
-              style: ElevatedButton.styleFrom(backgroundColor: AppTheme.primaryPurple, foregroundColor: Colors.white),
-            ),
-          ],
+            ],
+          ),
+        ],
         );
       },
     );
