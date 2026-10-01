@@ -219,13 +219,15 @@ class _PaymentReceiptDialogState extends State<PaymentReceiptDialog> {
   Widget build(BuildContext context) {
     final currencyFormatter = NumberFormat.currency(symbol: '₹', decimalDigits: 2);
     final dateFormatter = DateFormat('dd MMM yyyy, hh:mm a');
+    final screenHeight = MediaQuery.of(context).size.height;
+    final dialogMaxHeight = (screenHeight * 0.88).clamp(380.0, 720.0);
 
     return Dialog(
       backgroundColor: Colors.white,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       child: Container(
         width: 580,
-        constraints: const BoxConstraints(maxHeight: 720),
+        constraints: BoxConstraints(maxHeight: dialogMaxHeight),
         padding: const EdgeInsets.all(24),
         child: Column(
           mainAxisSize: MainAxisSize.min,

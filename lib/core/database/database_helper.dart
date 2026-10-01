@@ -2931,6 +2931,9 @@ class DatabaseHelper {
       try {
         await db.execute("ALTER TABLE student_discounts ADD COLUMN custom_name TEXT");
       } catch (_) {}
+      try {
+        await db.execute("ALTER TABLE student_transport ADD COLUMN created_at TEXT DEFAULT (datetime('now'))");
+      } catch (_) {}
 
       // 8. Default App Settings (only insert if key does not exist yet)
       await db.execute('''

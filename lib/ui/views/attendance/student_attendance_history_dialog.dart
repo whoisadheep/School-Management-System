@@ -146,12 +146,15 @@ class _StudentAttendanceHistoryDialogState extends ConsumerState<StudentAttendan
 
   @override
   Widget build(BuildContext context) {
+    final screenHeight = MediaQuery.of(context).size.height;
+    final dialogHeight = (screenHeight * 0.85).clamp(380.0, 700.0);
+
     return Dialog(
       backgroundColor: AppTheme.bgSurface,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       child: Container(
         width: 600,
-        height: 700,
+        height: dialogHeight,
         padding: const EdgeInsets.all(24),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,

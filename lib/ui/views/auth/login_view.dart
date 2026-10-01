@@ -4,6 +4,7 @@ import 'package:google_fonts/google_fonts.dart';
 import '../../../providers/auth_provider.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../widgets/blobatar.dart';
+import '../../widgets/interactive_login_mascot.dart';
 import 'forgot_password_view.dart';
 
 class AdminLoginView extends ConsumerStatefulWidget {
@@ -16,25 +17,71 @@ class AdminLoginView extends ConsumerStatefulWidget {
 class _AdminLoginViewState extends ConsumerState<AdminLoginView> {
   final _usernameController = TextEditingController();
   final _passwordController = TextEditingController();
+  final _mascotController = InteractiveLoginMascotController();
+  final _usernameFocus = FocusNode();
+  final _passwordFocus = FocusNode();
   final _formKey = GlobalKey<FormState>();
 
   bool _obscurePassword = true;
 
+  @override
+  void initState() {
+    super.initState();
+    _usernameFocus.addListener(_onFocusChange);
+    _passwordFocus.addListener(_onFocusChange);
+    _usernameController.addListener(_onUsernameChange);
+  }
+
+  void _onFocusChange() {
+    if (_passwordFocus.hasFocus) {
+      _mascotController.setHandsUp(true);
+      _mascotController.setPeeking(!_obscurePassword);
+    } else if (_usernameFocus.hasFocus) {
+      _mascotController.setHandsUp(false);
+      _mascotController.setPeeking(false);
+      _mascotController.setChecking(true);
+      _mascotController.setLook((_usernameController.text.length * 2.5).clamp(0.0, 100.0));
+    } else {
+      _mascotController.setHandsUp(false);
+      _mascotController.setPeeking(false);
+      _mascotController.setChecking(false);
+    }
+  }
+
+  void _onUsernameChange() {
+    if (_usernameFocus.hasFocus) {
+      _mascotController.setLook((_usernameController.text.length * 2.5).clamp(0.0, 100.0));
+    }
+  }
+
   Future<void> _submitLogin() async {
     if (_formKey.currentState!.validate()) {
+      _mascotController.setHandsUp(false);
+      _mascotController.setChecking(false);
+
       final success = await ref.read(authProvider.notifier).login(
         _usernameController.text.trim(),
         _passwordController.text,
       );
 
-      if (!success && mounted) {
-        _passwordController.clear();
+      if (success) {
+        _mascotController.triggerSuccess();
+      } else {
+        _mascotController.triggerFail();
+        if (mounted) {
+          _passwordController.clear();
+        }
       }
     }
   }
 
   @override
   void dispose() {
+    _usernameFocus.removeListener(_onFocusChange);
+    _passwordFocus.removeListener(_onFocusChange);
+    _usernameController.removeListener(_onUsernameChange);
+    _usernameFocus.dispose();
+    _passwordFocus.dispose();
     _usernameController.dispose();
     _passwordController.dispose();
     super.dispose();
@@ -47,99 +94,118 @@ class _AdminLoginViewState extends ConsumerState<AdminLoginView> {
     final isWide = screenWidth > 900;
 
     return Scaffold(
-      body: Row(
-        children: [
+      body: MouseRegion(
+        hitTestBehavior: HitTestBehavior.translucent,
+        onHover: (event) {
+          _mascotController.setGlobalMousePosition(event.position);
+        },
+        onExit: (_) {
+          _mascotController.resetGaze();
+        },
+        child: Row(
+          children: [
           // ── Left Branding Panel (hidden on narrow screens) ──
           if (isWide)
             Expanded(
               flex: 5,
               child: Container(
                 color: AppTheme.primaryPurple,
-                padding: const EdgeInsets.symmetric(horizontal: 60, vertical: 48),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    // Logo
-                    Row(
-                      children: [
-                        Container(
-                          width: 40,
-                          height: 40,
-                          decoration: BoxDecoration(
-                            color: Colors.white.withValues(alpha: 0.15),
-                            borderRadius: BorderRadius.circular(10),
-                          ),
-                          clipBehavior: Clip.antiAlias,
-                          child: Image.asset(
-                            'assets/icons/app_icon.png',
-                            width: 40,
-                            height: 40,
-                            fit: BoxFit.contain,
-                            errorBuilder: (_, __, ___) => const Icon(
-                              Icons.school_rounded,
-                              color: Colors.white,
-                              size: 24,
-                            ),
+                padding: const EdgeInsets.symmetric(horizontal: 48, vertical: 32),
+                child: LayoutBuilder(
+                  builder: (context, constraints) {
+                    return SingleChildScrollView(
+                      child: ConstrainedBox(
+                        constraints: BoxConstraints(minHeight: constraints.maxHeight),
+                        child: IntrinsicHeight(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              // Logo
+                              Row(
+                                children: [
+                                  Container(
+                                    width: 40,
+                                    height: 40,
+                                    decoration: BoxDecoration(
+                                      color: Colors.white.withValues(alpha: 0.15),
+                                      borderRadius: BorderRadius.circular(10),
+                                    ),
+                                    clipBehavior: Clip.antiAlias,
+                                    child: Image.asset(
+                                      'assets/icons/app_icon.png',
+                                      width: 40,
+                                      height: 40,
+                                      fit: BoxFit.contain,
+                                      errorBuilder: (_, __, ___) => const Icon(
+                                        Icons.school_rounded,
+                                        color: Colors.white,
+                                        size: 24,
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 12),
+                                  Text(
+                                    'Eduvia',
+                                    style: GoogleFonts.poppins(
+                                      color: Colors.white,
+                                      fontSize: 22,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const Spacer(),
+
+                              // Cute Blob Cartoon Trio
+                              const Center(
+                                child: Row(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    Blobatar(seed: 'eduvia-student', size: 72, borderRadius: 36),
+                                    SizedBox(width: 16),
+                                    Blobatar(seed: 'eduvia-teacher', size: 96, borderRadius: 48),
+                                    SizedBox(width: 16),
+                                    Blobatar(seed: 'eduvia-admin', size: 72, borderRadius: 36),
+                                  ],
+                                ),
+                              ),
+
+                              const SizedBox(height: 32),
+
+                              // Tagline
+                              Text(
+                                'School\nManagement,\nSimplified.',
+                                style: GoogleFonts.poppins(
+                                  color: Colors.white,
+                                  fontSize: 36,
+                                  fontWeight: FontWeight.w700,
+                                  height: 1.2,
+                                ),
+                              ),
+                              const SizedBox(height: 16),
+                              Text(
+                                'Everything your institution needs — admissions,\nfees, attendance, exams — all in one place.',
+                                style: GoogleFonts.poppins(
+                                  color: Colors.white.withValues(alpha: 0.7),
+                                  fontSize: 14,
+                                  height: 1.6,
+                                ),
+                              ),
+                              const Spacer(),
+                              // Footer
+                              Text(
+                                '🔒  All data stored locally & securely on this machine.',
+                                style: GoogleFonts.poppins(
+                                  color: Colors.white.withValues(alpha: 0.5),
+                                  fontSize: 12,
+                                ),
+                              ),
+                            ],
                           ),
                         ),
-                        const SizedBox(width: 12),
-                        Text(
-                          'Eduvia',
-                          style: GoogleFonts.poppins(
-                            color: Colors.white,
-                            fontSize: 22,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                      ],
-                    ),
-                    const Spacer(),
-
-                    // Cute Blob Cartoon Trio
-                    const Center(
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Blobatar(seed: 'eduvia-student', size: 72, borderRadius: 36),
-                          SizedBox(width: 16),
-                          Blobatar(seed: 'eduvia-teacher', size: 96, borderRadius: 48),
-                          SizedBox(width: 16),
-                          Blobatar(seed: 'eduvia-admin', size: 72, borderRadius: 36),
-                        ],
                       ),
-                    ),
-
-                    const SizedBox(height: 40),
-
-                    // Tagline
-                    Text(
-                      'School\nManagement,\nSimplified.',
-                      style: GoogleFonts.poppins(
-                        color: Colors.white,
-                        fontSize: 40,
-                        fontWeight: FontWeight.w700,
-                        height: 1.2,
-                      ),
-                    ),
-                    const SizedBox(height: 20),
-                    Text(
-                      'Everything your institution needs — admissions,\nfees, attendance, exams — all in one place.',
-                      style: GoogleFonts.poppins(
-                        color: Colors.white.withValues(alpha: 0.7),
-                        fontSize: 15,
-                        height: 1.6,
-                      ),
-                    ),
-                    const Spacer(),
-                    // Footer
-                    Text(
-                      '🔒  All data stored locally & securely on this machine.',
-                      style: GoogleFonts.poppins(
-                        color: Colors.white.withValues(alpha: 0.5),
-                        fontSize: 12,
-                      ),
-                    ),
-                  ],
+                    );
+                  },
                 ),
               ),
             ),
@@ -177,6 +243,15 @@ class _AdminLoginViewState extends ConsumerState<AdminLoginView> {
                             ),
                             const SizedBox(height: 24),
                           ],
+
+                          // Interactive Mascot
+                          Center(
+                            child: InteractiveLoginMascot(
+                              controller: _mascotController,
+                              size: 160,
+                            ),
+                          ),
+                          const SizedBox(height: 16),
 
                           Text(
                             'Welcome back',
@@ -233,6 +308,7 @@ class _AdminLoginViewState extends ConsumerState<AdminLoginView> {
                           const SizedBox(height: 8),
                           TextFormField(
                             controller: _usernameController,
+                            focusNode: _usernameFocus,
                             style: GoogleFonts.poppins(fontSize: 14),
                             decoration: _inputDecoration(
                               hint: 'Enter your username',
@@ -255,6 +331,7 @@ class _AdminLoginViewState extends ConsumerState<AdminLoginView> {
                           const SizedBox(height: 8),
                           TextFormField(
                             controller: _passwordController,
+                            focusNode: _passwordFocus,
                             obscureText: _obscurePassword,
                             style: GoogleFonts.poppins(fontSize: 14),
                             decoration: _inputDecoration(
@@ -266,7 +343,15 @@ class _AdminLoginViewState extends ConsumerState<AdminLoginView> {
                                   size: 20,
                                   color: AppTheme.textSecondary,
                                 ),
-                                onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
+                                onPressed: () {
+                                  setState(() {
+                                    _obscurePassword = !_obscurePassword;
+                                    if (_passwordFocus.hasFocus) {
+                                      _mascotController.setHandsUp(true);
+                                      _mascotController.setPeeking(!_obscurePassword);
+                                    }
+                                  });
+                                },
                               ),
                             ),
                             validator: (v) => v == null || v.isEmpty ? 'Required' : null,
@@ -357,6 +442,7 @@ class _AdminLoginViewState extends ConsumerState<AdminLoginView> {
             ),
           ),
         ],
+      ),
       ),
     );
   }

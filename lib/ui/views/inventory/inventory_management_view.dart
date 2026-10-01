@@ -8,6 +8,7 @@ import '../../../models/inventory.dart';
 import '../../../providers/inventory_provider.dart';
 import '../../../providers/services_provider.dart';
 import '../../../providers/auth_provider.dart';
+import '../../widgets/cute_animal_empty_state.dart';
 
 class InventoryManagementView extends ConsumerStatefulWidget {
   const InventoryManagementView({super.key});
@@ -190,8 +191,11 @@ class _CatalogTabState extends ConsumerState<_CatalogTab> {
                 final filtered = items.where((i) => i.name.toLowerCase().contains(query)).toList();
 
                 if (filtered.isEmpty) {
-                  return Center(
-                    child: Text('No items found.', style: GoogleFonts.poppins(color: AppTheme.textSecondary)),
+                  return const CuteAnimalEmptyState(
+                    character: EmptyStateCharacter.detectivePuppy,
+                    title: 'No inventory items found',
+                    subtitle: 'Try adjusting your search query or add new items to the catalog.',
+                    size: 130,
                   );
                 }
 

@@ -18,6 +18,8 @@ import '../../../services/app_logger.dart';
 import 'staff_detail_view.dart';
 import '../../widgets/blobatar.dart';
 import '../../widgets/thinking_orb_widget.dart';
+import '../../widgets/motion_effects.dart';
+import '../../widgets/cute_animal_empty_state.dart';
 
 class StaffFilter {
   final String? role;
@@ -1131,23 +1133,11 @@ class _StaffDirectoryViewState extends ConsumerState<StaffDirectoryView> {
                       child: paginatedAsync.when(
                         data: (staffList) {
                           if (staffList.isEmpty) {
-                            return Center(
-                              child: Column(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  const Icon(Icons.people_outline_rounded,
-                                      size: 56, color: AppTheme.textHint),
-                                  const SizedBox(height: 12),
-                                  Text(
-                                    'No staff found matching criteria',
-                                    style: GoogleFonts.poppins(
-                                      fontSize: 15,
-                                      fontWeight: FontWeight.w600,
-                                      color: AppTheme.textSecondary,
-                                    ),
-                                  ),
-                                ],
-                              ),
+                            return const CuteAnimalEmptyState(
+                              character: EmptyStateCharacter.detectivePuppy,
+                              title: 'No staff found matching criteria',
+                              subtitle: 'Try adjusting your search query, role, or department filter.',
+                              size: 130,
                             );
                           }
 
@@ -1177,7 +1167,11 @@ class _StaffDirectoryViewState extends ConsumerState<StaffDirectoryView> {
                                         final isSelected =
                                             activeStaff.id == staff.id;
                                         return _buildStaffCard(
-                                            staff, isSelected, departments);
+                                                staff, isSelected, departments)
+                                            .motionEntrance(
+                                          index: index.clamp(0, 8),
+                                          stagger: const Duration(milliseconds: 35),
+                                        );
                                       },
                                     );
                                   },

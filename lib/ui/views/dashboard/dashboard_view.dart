@@ -14,6 +14,7 @@ import '../../../core/theme/app_theme.dart';
 import '../../layout/widgets/hover_scale.dart';
 import '../../widgets/thinking_orb_widget.dart';
 import '../../widgets/motion_effects.dart';
+import '../../widgets/cute_animal_empty_state.dart';
 import '../../widgets/satisfying_button.dart';
 
 class DashboardView extends ConsumerStatefulWidget {
@@ -928,26 +929,17 @@ class _DashboardViewState extends ConsumerState<DashboardView> {
           if (overdueList.isEmpty)
             Container(
               width: double.infinity,
-              padding: const EdgeInsets.all(36),
               decoration: BoxDecoration(
                 color: const Color(0xFFF0FDF4),
                 borderRadius: BorderRadius.circular(12),
                 border: Border.all(color: const Color(0xFFBBF7D0)),
               ),
-              child: Column(
-                children: [
-                  const Icon(Icons.check_circle_rounded, color: Color(0xFF16A34A), size: 40),
-                  const SizedBox(height: 10),
-                  Text(
-                    'All Caught Up! 🎉',
-                    style: GoogleFonts.poppins(fontWeight: FontWeight.bold, fontSize: 14, color: const Color(0xFF15803D)),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    'There are no overdue fee payments pending right now.',
-                    style: GoogleFonts.poppins(fontSize: 12, color: const Color(0xFF166534)),
-                  ),
-                ],
+              child: const CuteAnimalEmptyState(
+                character: EmptyStateCharacter.sleepingCat,
+                title: 'All Caught Up! 🎉',
+                subtitle: 'There are no overdue fee payments pending right now. Great job!',
+                size: 110,
+                padding: EdgeInsets.symmetric(horizontal: 20, vertical: 24),
               ),
             )
           else
@@ -1025,7 +1017,7 @@ class _DashboardViewState extends ConsumerState<DashboardView> {
                       },
                     ),
                   ],
-                );
+                ).motionEntrance(index: idx, stagger: const Duration(milliseconds: 40));
               },
             ),
         ],
@@ -1089,7 +1081,7 @@ class _DashboardViewState extends ConsumerState<DashboardView> {
             onTap: () {
               ref.read(selectedTabProvider.notifier).state = NavigationTab.feeCollection;
             },
-          ),
+          ).motionEntrance(index: 0, stagger: const Duration(milliseconds: 50)),
           const SizedBox(height: 12),
 
           SatisfyingActionCard(
@@ -1100,7 +1092,7 @@ class _DashboardViewState extends ConsumerState<DashboardView> {
             onTap: () {
               ref.read(selectedTabProvider.notifier).state = NavigationTab.students;
             },
-          ),
+          ).motionEntrance(index: 1, stagger: const Duration(milliseconds: 50)),
           const SizedBox(height: 12),
 
           SatisfyingActionCard(
@@ -1111,7 +1103,7 @@ class _DashboardViewState extends ConsumerState<DashboardView> {
             onTap: () {
               ref.read(selectedTabProvider.notifier).state = NavigationTab.attendance;
             },
-          ),
+          ).motionEntrance(index: 2, stagger: const Duration(milliseconds: 50)),
           const SizedBox(height: 12),
 
           SatisfyingActionCard(
@@ -1122,7 +1114,7 @@ class _DashboardViewState extends ConsumerState<DashboardView> {
             onTap: () {
               ref.read(selectedTabProvider.notifier).state = NavigationTab.assistant;
             },
-          ),
+          ).motionEntrance(index: 3, stagger: const Duration(milliseconds: 50)),
         ],
       ),
     );

@@ -4309,7 +4309,7 @@ class DatabaseService {
         JOIN routes r ON st.route_id = r.id
         JOIN route_stops rs ON st.stop_id = rs.id
         WHERE st.student_id = ? AND st.is_active = 1
-        ORDER BY st.created_at DESC
+        ORDER BY st.academic_year DESC, st.rowid DESC
         LIMIT 1
       ''', [studentId]);
     }

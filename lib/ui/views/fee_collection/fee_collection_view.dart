@@ -12,6 +12,7 @@ import '../../../providers/navigation_provider.dart';
 import '../../../providers/services_provider.dart';
 import '../../../services/bulk_invoice_service.dart';
 import '../../widgets/payment_receipt_dialog.dart';
+import '../../widgets/cute_animal_empty_state.dart';
 import '../../../services/app_logger.dart';
 import '../../../services/sound_service.dart';
 import '../../../services/telemetry_service.dart';
@@ -2665,23 +2666,17 @@ Thank you for your payment!''';
 
         if (unpaid.isEmpty) {
           return Container(
-            padding: const EdgeInsets.all(32),
             decoration: BoxDecoration(
               color: Colors.white,
               borderRadius: BorderRadius.circular(12),
               border: Border.all(color: AppTheme.divider),
             ),
-            child: Center(
-              child: Column(
-                children: [
-                  const Icon(Icons.check_circle_rounded, color: AppTheme.success, size: 48),
-                  const SizedBox(height: 12),
-                  Text('All fees for session $academicYear are completely paid!',
-                      style: GoogleFonts.poppins(fontSize: 15, fontWeight: FontWeight.bold, color: AppTheme.success)),
-                  const SizedBox(height: 4),
-                  Text('This student has no pending fee obligations.', style: GoogleFonts.poppins(fontSize: 12, color: AppTheme.textSecondary)),
-                ],
-              ),
+            child: CuteAnimalEmptyState(
+              character: EmptyStateCharacter.sleepingCat,
+              title: 'All Fees Fully Paid! 🎉',
+              subtitle: 'This student has no pending fee obligations for session $academicYear. Everything is settled!',
+              size: 130,
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 28),
             ),
           );
         }
@@ -3754,14 +3749,17 @@ Thank you for your payment!''';
   Widget _buildEmptyCard(String msg) {
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.all(32),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(12),
         border: Border.all(color: AppTheme.divider),
       ),
-      child: Center(
-        child: Text(msg, style: GoogleFonts.poppins(color: AppTheme.textSecondary, fontSize: 13)),
+      child: CuteAnimalEmptyState(
+        character: EmptyStateCharacter.detectivePuppy,
+        title: msg,
+        subtitle: 'No records found matching the current criteria.',
+        size: 130,
+        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 28),
       ),
     );
   }

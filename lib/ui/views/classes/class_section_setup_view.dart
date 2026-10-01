@@ -6,6 +6,8 @@ import '../../../core/theme/app_theme.dart';
 import '../../../models/models.dart';
 import '../../../core/auth/permission_helper.dart';
 import '../../../providers/services_provider.dart';
+import '../../widgets/motion_effects.dart';
+import '../../widgets/cute_animal_empty_state.dart';
 import '../students/student_directory_view.dart';
 
 class ClassSectionSetupView extends ConsumerStatefulWidget {
@@ -503,56 +505,57 @@ class _ClassSectionSetupViewState extends ConsumerState<ClassSectionSetupView> {
               padding: const EdgeInsets.all(32),
               child: classesAsync.when(
                 data: (classes) {
-                  if (classes.isEmpty) {
+                  final filteredClasses = classes
+                    .where((c) =>
+                        _selectedAcademicYear == 'All' ||
+                        c.academicYear == _selectedAcademicYear)
+                    .toList();
+
+                if (filteredClasses.isEmpty) {
+                  return CuteAnimalEmptyState(
+                    character: EmptyStateCharacter.scholarOwl,
+                    title: 'No Classes Found',
+                    subtitle: classes.isEmpty
+                        ? 'No classes configured yet. Start by creating the first classroom!'
+                        : 'No classes match the selected session: "$_selectedAcademicYear".',
+                    action: ElevatedButton(
+                      onPressed: () => _showAddEditClassDialog(context),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppTheme.primaryPurple,
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                      ),
+                      child: const Text('Add First Class'),
+                    ),
+                  );
+                }
+
+                final allSections = sectionsAsync.value ?? [];
+                final allSubjects = subjectsAsync.value ?? [];
+                final sectionCounts = sectionCountsAsync.value ?? {};
+                final classCounts = classCountsAsync.value ?? {};
+                final staffList = staffAsync.value ?? [];
+
+                final Map<String, List<Section>> sectionsByClass = {};
+                for (final sec in allSections) {
+                  sectionsByClass.putIfAbsent(sec.classId, () => []).add(sec);
+                }
+
+                final Map<String, List<ClassSubject>> subjectsByClass = {};
+                for (final sub in allSubjects) {
+                  subjectsByClass.putIfAbsent(sub.classId, () => []).add(sub);
+                }
+
+                return Column(
+                  children: List.generate(filteredClasses.length, (index) {
+                    final classModel = filteredClasses[index];
+                    final isExpanded = _expandedClasses[classModel.id] ?? true;
+                    final sections = sectionsByClass[classModel.id] ?? [];
+                    final subjects = subjectsByClass[classModel.id] ?? [];
+                    final enrolledClassCount = classCounts[classModel.id] ?? 0;
+
                     return Container(
-                      padding: const EdgeInsets.all(48),
-                      alignment: Alignment.center,
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(16),
-                        border: Border.all(color: AppTheme.divider),
-                      ),
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          const Icon(Icons.class_rounded, size: 48, color: AppTheme.textHint),
-                          const SizedBox(height: 16),
-                          Text('No classes configured yet.', style: GoogleFonts.poppins(fontSize: 16, color: AppTheme.textSecondary)),
-                          const SizedBox(height: 12),
-                          ElevatedButton(
-                            onPressed: () => _showAddEditClassDialog(context),
-                            style: ElevatedButton.styleFrom(backgroundColor: AppTheme.primaryPurple, foregroundColor: Colors.white),
-                            child: const Text('Add First Class'),
-                          ),
-                        ],
-                      ),
-                    );
-                  }
-
-                  final allSections = sectionsAsync.value ?? [];
-                  final allSubjects = subjectsAsync.value ?? [];
-                  final sectionCounts = sectionCountsAsync.value ?? {};
-                  final classCounts = classCountsAsync.value ?? {};
-                  final staffList = staffAsync.value ?? [];
-
-                  final Map<String, List<Section>> sectionsByClass = {};
-                  for (final sec in allSections) {
-                    sectionsByClass.putIfAbsent(sec.classId, () => []).add(sec);
-                  }
-
-                  final Map<String, List<ClassSubject>> subjectsByClass = {};
-                  for (final sub in allSubjects) {
-                    subjectsByClass.putIfAbsent(sub.classId, () => []).add(sub);
-                  }
-
-                  return Column(
-                    children: classes.where((c) => _selectedAcademicYear == 'All' || c.academicYear == _selectedAcademicYear).map((classModel) {
-                      final isExpanded = _expandedClasses[classModel.id] ?? true;
-                      final sections = sectionsByClass[classModel.id] ?? [];
-                      final subjects = subjectsByClass[classModel.id] ?? [];
-                      final enrolledClassCount = classCounts[classModel.id] ?? 0;
-
-                      return Container(
                         margin: const EdgeInsets.only(bottom: 16),
                         decoration: BoxDecoration(
                           color: Colors.white,
@@ -880,8 +883,11 @@ class _ClassSectionSetupViewState extends ConsumerState<ClassSectionSetupView> {
                             ],
                           ],
                         ),
+                      ).motionEntrance(
+                        index: index.clamp(0, 8),
+                        stagger: const Duration(milliseconds: 35),
                       );
-                    }).toList(),
+                    }),
                   );
                 },
                 loading: () => const Center(child: CircularProgressIndicator()),

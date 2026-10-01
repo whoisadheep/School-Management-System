@@ -838,12 +838,18 @@ class _StudentFeeLedgerViewState extends ConsumerState<StudentFeeLedgerView> wit
               ),
             ],
           ),
-          content: SizedBox(
-            width: 420,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
+          content: ConstrainedBox(
+            constraints: BoxConstraints(
+              maxWidth: 420,
+              maxHeight: MediaQuery.of(ctx).size.height * 0.60,
+            ),
+            child: SizedBox(
+              width: 420,
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
                 // Info row
                 Container(
                   padding: const EdgeInsets.all(12),
@@ -929,9 +935,11 @@ class _StudentFeeLedgerViewState extends ConsumerState<StudentFeeLedgerView> wit
                     contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                   ),
                 ),
-              ],
+                ],
+              ),
             ),
           ),
+        ),
           actions: [
             TextButton(
               onPressed: () => Navigator.of(ctx).pop(),
@@ -1049,12 +1057,18 @@ class _StudentFeeLedgerViewState extends ConsumerState<StudentFeeLedgerView> wit
               ),
             ],
           ),
-          content: SizedBox(
-            width: 420,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
+          content: ConstrainedBox(
+            constraints: BoxConstraints(
+              maxWidth: 420,
+              maxHeight: MediaQuery.of(ctx).size.height * 0.60,
+            ),
+            child: SizedBox(
+              width: 420,
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
                 Container(
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
@@ -1122,9 +1136,11 @@ class _StudentFeeLedgerViewState extends ConsumerState<StudentFeeLedgerView> wit
                     contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                   ),
                 ),
-              ],
+                ],
+              ),
             ),
           ),
+        ),
           actions: [
             TextButton(
               onPressed: () => Navigator.of(ctx).pop(),
@@ -1179,12 +1195,18 @@ class _StudentFeeLedgerViewState extends ConsumerState<StudentFeeLedgerView> wit
                   ),
                 ],
               ),
-              content: SizedBox(
-                width: 400,
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
+              content: ConstrainedBox(
+                constraints: BoxConstraints(
+                  maxWidth: 400,
+                  maxHeight: MediaQuery.of(ctx).size.height * 0.60,
+                ),
+                child: SizedBox(
+                  width: 400,
+                  child: SingleChildScrollView(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
                     Container(
                       padding: const EdgeInsets.all(12),
                       decoration: BoxDecoration(
@@ -1232,9 +1254,11 @@ class _StudentFeeLedgerViewState extends ConsumerState<StudentFeeLedgerView> wit
                         border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
                       ),
                     ),
-                  ],
+                    ],
+                  ),
                 ),
               ),
+            ),
               actions: [
                 TextButton(
                   onPressed: () => Navigator.pop(ctx),

@@ -18,6 +18,8 @@ import '../../../services/settings_service.dart';
 import '../../widgets/pdf_preview_dialog.dart';
 import '../../widgets/blobatar.dart';
 import '../../widgets/thinking_orb_widget.dart';
+import '../../widgets/cute_animal_empty_state.dart';
+import '../../widgets/motion_effects.dart';
 import '../../../services/app_logger.dart';
 import '../fees/student_fee_ledger_view.dart';
 import '../attendance/student_attendance_history_dialog.dart';
@@ -1191,75 +1193,43 @@ class _StudentDirectoryViewState extends ConsumerState<StudentDirectoryView>
                         child: studentsAsync.when(
                           data: (students) {
                             if (students.isEmpty) {
-                              return Center(
-                                child: Column(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
-                                    Container(
-                                      padding: const EdgeInsets.all(20),
-                                      decoration: const BoxDecoration(
-                                        color: AppTheme.primarySoft,
-                                        shape: BoxShape.circle,
-                                      ),
-                                      child: const Icon(
-                                        Icons.search_off_rounded,
-                                        size: 40,
-                                        color: AppTheme.primaryPurple,
-                                      ),
-                                    ),
-                                    const SizedBox(height: 16),
-                                    Text(
-                                      'No students found',
+                              return CuteAnimalEmptyState(
+                                character: EmptyStateCharacter.detectivePuppy,
+                                title: 'No students found',
+                                subtitle: 'Try adjusting your search terms or class filter.',
+                                action: OutlinedButton.icon(
+                                  onPressed: () {
+                                    _searchController.clear();
+                                    ref
+                                        .read(studentSearchQueryProvider
+                                            .notifier)
+                                        .state = '';
+                                    ref
+                                        .read(studentGradeFilterProvider
+                                            .notifier)
+                                        .state = 'All';
+                                    ref
+                                        .read(studentStatusFilterProvider
+                                            .notifier)
+                                        .state = 'Active';
+                                    setState(() => _currentPage = 0);
+                                  },
+                                  icon: const Icon(Icons.restart_alt_rounded,
+                                      size: 14),
+                                  label: Text('Reset Filters',
                                       style: GoogleFonts.poppins(
-                                        color: const Color(0xFF0F172A),
-                                        fontSize: 16,
-                                        fontWeight: FontWeight.w600,
-                                      ),
-                                    ),
-                                    const SizedBox(height: 4),
-                                    Text(
-                                      'Try adjusting your search terms or class filter.',
-                                      style: GoogleFonts.poppins(
-                                        color: const Color(0xFF64748B),
-                                        fontSize: 12,
-                                      ),
-                                    ),
-                                    const SizedBox(height: 14),
-                                    OutlinedButton.icon(
-                                      onPressed: () {
-                                        _searchController.clear();
-                                        ref
-                                            .read(studentSearchQueryProvider
-                                                .notifier)
-                                            .state = '';
-                                        ref
-                                            .read(studentGradeFilterProvider
-                                                .notifier)
-                                            .state = 'All';
-                                        ref
-                                            .read(studentStatusFilterProvider
-                                                .notifier)
-                                            .state = 'Active';
-                                        setState(() => _currentPage = 0);
-                                      },
-                                      icon: const Icon(Icons.restart_alt_rounded,
-                                          size: 14),
-                                      label: Text('Reset Filters',
-                                          style: GoogleFonts.poppins(
-                                              fontSize: 11,
-                                              fontWeight: FontWeight.w600)),
-                                      style: OutlinedButton.styleFrom(
-                                        foregroundColor: AppTheme.primaryPurple,
-                                        side: const BorderSide(
-                                            color: AppTheme.primaryPurple),
-                                        padding: const EdgeInsets.symmetric(
-                                            horizontal: 14, vertical: 8),
-                                        shape: RoundedRectangleBorder(
-                                            borderRadius:
-                                                BorderRadius.circular(8)),
-                                      ),
-                                    ),
-                                  ],
+                                          fontSize: 11,
+                                          fontWeight: FontWeight.w600)),
+                                  style: OutlinedButton.styleFrom(
+                                    foregroundColor: AppTheme.primaryPurple,
+                                    side: const BorderSide(
+                                        color: AppTheme.primaryPurple),
+                                    padding: const EdgeInsets.symmetric(
+                                        horizontal: 14, vertical: 8),
+                                    shape: RoundedRectangleBorder(
+                                        borderRadius:
+                                            BorderRadius.circular(8)),
+                                  ),
                                 ),
                               );
                             }
@@ -1322,7 +1292,7 @@ class _StudentDirectoryViewState extends ConsumerState<StudentDirectoryView>
             value: numberFormat.format(total),
             trend: '$uniqueGrades classes',
             trendColor: const Color(0xFF8B5CF6),
-          ),
+          ).motionEntrance(index: 0, stagger: const Duration(milliseconds: 50)),
         ),
         const SizedBox(width: 14),
 
@@ -1336,7 +1306,7 @@ class _StudentDirectoryViewState extends ConsumerState<StudentDirectoryView>
             value: numberFormat.format(newThisMonth),
             trend: 'Recent admissions',
             trendColor: const Color(0xFFD97706),
-          ),
+          ).motionEntrance(index: 1, stagger: const Duration(milliseconds: 50)),
         ),
         const SizedBox(width: 14),
 
@@ -1350,7 +1320,7 @@ class _StudentDirectoryViewState extends ConsumerState<StudentDirectoryView>
             value: '${numberFormat.format(boys)} / ${numberFormat.format(girls)}',
             trend: '$boysPct% • $girlsPct%',
             trendColor: const Color(0xFF06B6D4),
-          ),
+          ).motionEntrance(index: 2, stagger: const Duration(milliseconds: 50)),
         ),
         const SizedBox(width: 14),
 
@@ -1364,7 +1334,7 @@ class _StudentDirectoryViewState extends ConsumerState<StudentDirectoryView>
             value: numberFormat.format(active),
             trend: '$activePct% active',
             trendColor: const Color(0xFF16A34A),
-          ),
+          ).motionEntrance(index: 3, stagger: const Duration(milliseconds: 50)),
         ),
       ],
     );
@@ -1478,7 +1448,10 @@ class _StudentDirectoryViewState extends ConsumerState<StudentDirectoryView>
             itemCount: pagedStudents.length,
             itemBuilder: (context, index) {
               final student = pagedStudents[index];
-              return _buildStudentCard(context, student);
+              return _buildStudentCard(context, student).motionEntrance(
+                index: index.clamp(0, 8),
+                stagger: const Duration(milliseconds: 35),
+              );
             },
           ),
         ),
@@ -2580,7 +2553,7 @@ class _StudentDirectoryViewState extends ConsumerState<StudentDirectoryView>
             content: ConstrainedBox(
               constraints: BoxConstraints(
                 maxWidth: 650,
-                maxHeight: MediaQuery.of(context).size.height * 0.8,
+                maxHeight: MediaQuery.of(context).size.height * 0.55,
               ),
               child: SizedBox(
                 width: 650,
@@ -3477,25 +3450,33 @@ class _StudentDirectoryViewState extends ConsumerState<StudentDirectoryView>
         builder: (context, setDialogState) => AlertDialog(
           backgroundColor: Colors.white,
           title: Text('UPLOAD STUDENT DOCUMENT', style: GoogleFonts.poppins(fontWeight: FontWeight.bold, fontSize: 14)),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(
-                controller: titleController,
-                style: GoogleFonts.poppins(color: AppTheme.textPrimary),
-                decoration: const InputDecoration(labelText: 'Document Title *'),
+          content: ConstrainedBox(
+            constraints: BoxConstraints(
+              maxWidth: 420,
+              maxHeight: MediaQuery.of(context).size.height * 0.50,
+            ),
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  TextField(
+                    controller: titleController,
+                    style: GoogleFonts.poppins(color: AppTheme.textPrimary),
+                    decoration: const InputDecoration(labelText: 'Document Title *'),
+                  ),
+                  const SizedBox(height: 12),
+                  DropdownButtonFormField<String>(
+                    value: selectedType,
+                    style: GoogleFonts.poppins(color: AppTheme.textPrimary),
+                    decoration: const InputDecoration(labelText: 'Document Type'),
+                    items: types.map((t) => DropdownMenuItem(value: t, child: Text(t))).toList(),
+                    onChanged: (val) {
+                      if (val != null) setDialogState(() => selectedType = val);
+                    },
+                  ),
+                ],
               ),
-              const SizedBox(height: 12),
-              DropdownButtonFormField<String>(
-                value: selectedType,
-                style: GoogleFonts.poppins(color: AppTheme.textPrimary),
-                decoration: const InputDecoration(labelText: 'Document Type'),
-                items: types.map((t) => DropdownMenuItem(value: t, child: Text(t))).toList(),
-                onChanged: (val) {
-                  if (val != null) setDialogState(() => selectedType = val);
-                },
-              ),
-            ],
+            ),
           ),
           actions: [
             TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('Cancel')),
@@ -5360,9 +5341,14 @@ class _StudentDirectoryViewState extends ConsumerState<StudentDirectoryView>
                 ),
               ],
             ),
-            content: SizedBox(
-              width: 440,
-              child: SingleChildScrollView(
+            content: ConstrainedBox(
+              constraints: BoxConstraints(
+                maxWidth: 440,
+                maxHeight: MediaQuery.of(context).size.height * 0.55,
+              ),
+              child: SizedBox(
+                width: 440,
+                child: SingleChildScrollView(
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -5570,6 +5556,7 @@ class _StudentDirectoryViewState extends ConsumerState<StudentDirectoryView>
                 ),
               ),
             ),
+          ),
             actions: [
               TextButton(
                 onPressed: () => Navigator.pop(context),

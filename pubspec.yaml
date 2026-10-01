@@ -1,7 +1,7 @@
 name: school_management_system
 description: Eduvia - Admin & Accounting Module
 publish_to: 'none'
-version: 1.0.35+1
+version: 1.0.36+1
 
 environment:
   sdk: '>=3.0.0 <4.0.0'
@@ -53,4 +53,5 @@ flutter:
     - assets/icons/
     - assets/knowledge_base/
     - assets/sounds/
+    - assets/animations/
     - .env

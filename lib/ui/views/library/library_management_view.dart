@@ -4,6 +4,7 @@ import '../../../core/theme/app_theme.dart';
 import '../../../models/book.dart';
 import '../../../providers/library_provider.dart';
 import '../../../providers/services_provider.dart';
+import '../../widgets/cute_animal_empty_state.dart';
 
 class LibraryManagementView extends ConsumerStatefulWidget {
   const LibraryManagementView({super.key});
@@ -123,7 +124,12 @@ class _CatalogTabState extends ConsumerState<_CatalogTab> {
               }).toList();
 
               if (filtered.isEmpty) {
-                return const Center(child: Text('No books found.', style: TextStyle(color: AppTheme.textSecondary)));
+                return const CuteAnimalEmptyState(
+                  character: EmptyStateCharacter.scholarOwl,
+                  title: 'No books found',
+                  subtitle: 'Try searching by a different title or author, or add new books to the catalog.',
+                  size: 135,
+                );
               }
 
               return ListView.builder(
@@ -354,7 +360,12 @@ class _ReturnsAndFinesTab extends ConsumerWidget {
       error: (err, stack) => Center(child: Text('Error: $err', style: const TextStyle(color: AppTheme.error))),
       data: (issues) {
         if (issues.isEmpty) {
-          return const Center(child: Text('No active book issues.', style: TextStyle(color: AppTheme.textSecondary)));
+          return const CuteAnimalEmptyState(
+            character: EmptyStateCharacter.detectivePuppy,
+            title: 'No active book issues',
+            subtitle: 'All borrowed library books are currently checked in.',
+            size: 130,
+          );
         }
 
         return ListView.builder(
@@ -451,7 +462,12 @@ class _OverdueBooksTab extends ConsumerWidget {
       error: (err, stack) => Center(child: Text('Error: $err', style: const TextStyle(color: AppTheme.error))),
       data: (issues) {
         if (issues.isEmpty) {
-          return const Center(child: Text('No overdue books! 🎉', style: TextStyle(color: AppTheme.success, fontSize: 18)));
+          return const CuteAnimalEmptyState(
+            character: EmptyStateCharacter.sleepingCat,
+            title: 'No overdue books! 🎉',
+            subtitle: 'All borrowed books are returned on time or within schedule.',
+            size: 130,
+          );
         }
 
         return ListView.builder(

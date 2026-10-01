@@ -103,7 +103,7 @@ class ThinkingLoadingCard extends StatelessWidget {
     this.subMessage,
     this.state = OrbState.working,
     this.size = 48,
-    this.padding = const EdgeInsets.all(32),
+    this.padding = const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
     this.compact = false,
   });
 
@@ -136,39 +136,43 @@ class ThinkingLoadingCard extends StatelessWidget {
     }
 
     return Center(
-      child: Padding(
-        padding: padding,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.center,
-          children: [
-            EduviaThinkingOrb(
-              state: state,
-              size: size,
-              showGlow: true,
-            ),
-            const SizedBox(height: 14),
-            Text(
-              message,
-              textAlign: TextAlign.center,
-              style: GoogleFonts.poppins(
-                fontSize: 13.5,
-                fontWeight: FontWeight.w600,
-                color: AppTheme.textPrimary,
+      child: FittedBox(
+        fit: BoxFit.scaleDown,
+        alignment: Alignment.center,
+        child: Padding(
+          padding: padding,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              EduviaThinkingOrb(
+                state: state,
+                size: size,
+                showGlow: true,
               ),
-            ),
-            if (subMessage != null && subMessage!.isNotEmpty) ...[
-              const SizedBox(height: 4),
+              const SizedBox(height: 14),
               Text(
-                subMessage!,
+                message,
                 textAlign: TextAlign.center,
                 style: GoogleFonts.poppins(
-                  fontSize: 11.5,
-                  color: AppTheme.textSecondary,
+                  fontSize: 13.5,
+                  fontWeight: FontWeight.w600,
+                  color: AppTheme.textPrimary,
                 ),
               ),
+              if (subMessage != null && subMessage!.isNotEmpty) ...[
+                const SizedBox(height: 4),
+                Text(
+                  subMessage!,
+                  textAlign: TextAlign.center,
+                  style: GoogleFonts.poppins(
+                    fontSize: 11.5,
+                    color: AppTheme.textSecondary,
+                  ),
+                ),
+              ],
             ],
-          ],
+          ),
         ),
       ),
     );
