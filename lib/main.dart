@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:school_management_system/app.dart';
@@ -8,7 +9,18 @@ import 'package:school_management_system/services/crash_reporting_service.dart';
 import 'package:school_management_system/services/telemetry_service.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 
+/// Custom HttpOverrides to prevent CERTIFICATE_VERIFY_FAILED errors on client
+/// machines that lack updated Windows root CA certificates or run behind SSL-inspecting proxies/antivirus.
+class AppHttpOverrides extends HttpOverrides {
+  @override
+  HttpClient createHttpClient(SecurityContext? context) {
+    return super.createHttpClient(context)
+      ..badCertificateCallback = (X509Certificate cert, String host, int port) => true;
+  }
+}
+
 void main() {
+  HttpOverrides.global = AppHttpOverrides();
   runZonedGuarded(
     () async {
       WidgetsFlutterBinding.ensureInitialized();
