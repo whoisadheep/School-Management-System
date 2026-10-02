@@ -6,6 +6,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import '../models/models.dart';
+import 'settings_service.dart';
 import 'telemetry_service.dart';
 
 /// Printable PDF Report Card Generator
@@ -15,11 +16,46 @@ class ReportCardGenerator {
     Uint8List? schoolLogo,
     required ExamResultData examResult,
     int? rankInClass,
-    String schoolName = 'Eduvia',
-    String schoolAddress = '123 Education Boulevard, Academic District',
-    String schoolContact = 'Phone: +1 800 555-0199 | Email: exams@school.edu',
+    String? schoolName,
+    String? schoolAddress,
+    String? schoolContact,
   }) async {
     TelemetryService.instance.trackReportExported(reportType: 'exam_report_card');
+
+    final settingsService = SettingsService();
+    String effectiveSchoolName = (schoolName != null && schoolName.trim().isNotEmpty) ? schoolName.trim() : '';
+    if (effectiveSchoolName.isEmpty || effectiveSchoolName == 'Eduvia') {
+      final configuredName = await settingsService.getSetting('school_name');
+      if (configuredName != null && configuredName.trim().isNotEmpty) {
+        effectiveSchoolName = configuredName.trim();
+      } else if (effectiveSchoolName.isEmpty) {
+        effectiveSchoolName = 'Eduvia';
+      }
+    }
+
+    String effectiveSchoolAddress = (schoolAddress != null && schoolAddress.trim().isNotEmpty) ? schoolAddress.trim() : '';
+    if (effectiveSchoolAddress.isEmpty || effectiveSchoolAddress == '123 Education Boulevard, Academic District') {
+      final configuredAddr = await settingsService.getSetting('school_address');
+      if (configuredAddr != null && configuredAddr.trim().isNotEmpty) {
+        effectiveSchoolAddress = configuredAddr.trim();
+      } else if (effectiveSchoolAddress.isEmpty) {
+        effectiveSchoolAddress = '123 Education Boulevard, Academic District';
+      }
+    }
+
+    String effectiveSchoolContact = (schoolContact != null && schoolContact.trim().isNotEmpty) ? schoolContact.trim() : '';
+    if (effectiveSchoolContact.isEmpty || effectiveSchoolContact == 'Phone: +1 800 555-0199 | Email: exams@school.edu') {
+      final configuredContact = await settingsService.getSetting('school_contact') ??
+          await settingsService.getSetting('school_phone');
+      if (configuredContact != null && configuredContact.trim().isNotEmpty) {
+        effectiveSchoolContact = configuredContact.trim();
+      } else if (effectiveSchoolContact.isEmpty) {
+        effectiveSchoolContact = 'Phone: +1 800 555-0199 | Email: exams@school.edu';
+      }
+    }
+
+    final effectiveSchoolLogo = schoolLogo ?? await settingsService.getSchoolLogoBytes();
+
     final pdf = pw.Document();
     final dateFormatter = DateFormat('dd MMM yyyy');
 
@@ -51,51 +87,51 @@ class ReportCardGenerator {
                     pw.Row(
                       crossAxisAlignment: pw.CrossAxisAlignment.center,
                       children: [
-                        if (schoolLogo != null) ...[
+                        if (effectiveSchoolLogo != null) ...[
                           pw.Container(
                             width: 48,
                             height: 48,
-                            decoration: pw.BoxDecoration(
+                            decoration: const pw.BoxDecoration(
                               color: PdfColors.white,
-                              borderRadius: const pw.BorderRadius.all(pw.Radius.circular(8)),
+                              borderRadius: pw.BorderRadius.all(pw.Radius.circular(8)),
                             ),
                             padding: const pw.EdgeInsets.all(4),
                             child: pw.Image(
-                              pw.MemoryImage(schoolLogo),
+                              pw.MemoryImage(effectiveSchoolLogo),
                               fit: pw.BoxFit.contain,
                             ),
                           ),
                           pw.SizedBox(width: 12),
                         ],
                         pw.Column(
-                      crossAxisAlignment: pw.CrossAxisAlignment.start,
-                      children: [
-                        pw.Text(
-                          schoolName,
-                          style: pw.TextStyle(
-                            color: PdfColors.white,
-                            fontSize: 18,
-                            fontWeight: pw.FontWeight.bold,
-                          ),
+                          crossAxisAlignment: pw.CrossAxisAlignment.start,
+                          children: [
+                            pw.Text(
+                              effectiveSchoolName,
+                              style: pw.TextStyle(
+                                color: PdfColors.white,
+                                fontSize: 18,
+                                fontWeight: pw.FontWeight.bold,
+                              ),
+                            ),
+                            pw.SizedBox(height: 2),
+                            pw.Text(
+                              effectiveSchoolAddress,
+                              style: const pw.TextStyle(color: PdfColors.white, fontSize: 9),
+                            ),
+                            pw.Text(
+                              effectiveSchoolContact,
+                              style: const pw.TextStyle(color: PdfColors.white, fontSize: 9),
+                            ),
+                          ],
                         ),
-                        pw.SizedBox(height: 2),
-                        pw.Text(
-                          schoolAddress,
-                          style: const pw.TextStyle(color: PdfColors.white, fontSize: 9),
-                        ),
-                        pw.Text(
-                          schoolContact,
-                          style: const pw.TextStyle(color: PdfColors.white, fontSize: 9),
-                        ),
-                      ],
-                    ),
                       ],
                     ),
                     pw.Container(
                       padding: const pw.EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                      decoration: pw.BoxDecoration(
+                      decoration: const pw.BoxDecoration(
                         color: PdfColors.white,
-                        borderRadius: const pw.BorderRadius.all(pw.Radius.circular(4)),
+                        borderRadius: pw.BorderRadius.all(pw.Radius.circular(4)),
                       ),
                       child: pw.Text(
                         'PROGRESS REPORT',
@@ -271,9 +307,9 @@ class ReportCardGenerator {
     Uint8List? schoolLogo,
     required ExamResultData examResult,
     int? rankInClass,
-    String schoolName = 'Eduvia',
-    String schoolAddress = '123 Education Boulevard, Academic District',
-    String schoolContact = 'Phone: +1 800 555-0199 | Email: exams@school.edu',
+    String? schoolName,
+    String? schoolAddress,
+    String? schoolContact,
   }) async {
     final bytes = await generateReportCardPdfBytes(
       examResult: examResult,

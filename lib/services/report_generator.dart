@@ -6,6 +6,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import '../models/models.dart';
+import 'settings_service.dart';
 import 'telemetry_service.dart';
 
 /// PDF Report Generator utility to generate A4-sized fee payment receipts
@@ -22,11 +23,60 @@ class ReportGenerator {
     required Student student,
     String? receiptNumber,
     String? feeHeadName,
-    String schoolName = 'Eduvia',
-    String schoolAddress = '123 Education Boulevard, Academic District',
-    String schoolContact = 'Phone: +1 800 555-0199 | Email: finance@school.edu',
+    String? schoolName,
+    String? schoolAddress,
+    String? schoolContact,
   }) async {
     TelemetryService.instance.trackReportExported(reportType: 'payment_receipt');
+
+    final settingsService = SettingsService();
+    String effectiveSchoolName = (schoolName != null && schoolName.trim().isNotEmpty) ? schoolName.trim() : '';
+    if (effectiveSchoolName.isEmpty || effectiveSchoolName == 'Eduvia') {
+      try {
+        final configuredName = await settingsService.getSetting('school_name');
+        if (configuredName != null && configuredName.trim().isNotEmpty) {
+          effectiveSchoolName = configuredName.trim();
+        }
+      } catch (_) {}
+      if (effectiveSchoolName.isEmpty) {
+        effectiveSchoolName = 'Eduvia';
+      }
+    }
+
+    String effectiveSchoolAddress = (schoolAddress != null && schoolAddress.trim().isNotEmpty) ? schoolAddress.trim() : '';
+    if (effectiveSchoolAddress.isEmpty || effectiveSchoolAddress == '123 Education Boulevard, Academic District') {
+      try {
+        final configuredAddr = await settingsService.getSetting('school_address');
+        if (configuredAddr != null && configuredAddr.trim().isNotEmpty) {
+          effectiveSchoolAddress = configuredAddr.trim();
+        }
+      } catch (_) {}
+      if (effectiveSchoolAddress.isEmpty) {
+        effectiveSchoolAddress = '123 Education Boulevard, Academic District';
+      }
+    }
+
+    String effectiveSchoolContact = (schoolContact != null && schoolContact.trim().isNotEmpty) ? schoolContact.trim() : '';
+    if (effectiveSchoolContact.isEmpty || effectiveSchoolContact == 'Phone: +1 800 555-0199 | Email: finance@school.edu') {
+      try {
+        final configuredContact = await settingsService.getSetting('school_contact') ??
+            await settingsService.getSetting('school_phone');
+        if (configuredContact != null && configuredContact.trim().isNotEmpty) {
+          effectiveSchoolContact = configuredContact.trim();
+        }
+      } catch (_) {}
+      if (effectiveSchoolContact.isEmpty) {
+        effectiveSchoolContact = 'Phone: +1 800 555-0199 | Email: finance@school.edu';
+      }
+    }
+
+    Uint8List? effectiveSchoolLogo = schoolLogo;
+    if (effectiveSchoolLogo == null) {
+      try {
+        effectiveSchoolLogo = await settingsService.getSchoolLogoBytes();
+      } catch (_) {}
+    }
+
     final pdf = pw.Document();
 
     final formattedReceiptNumber = receiptNumber ?? 'RCT-${transaction.timestamp.year}-${transaction.id.substring(0, 4).toUpperCase()}';
@@ -52,10 +102,10 @@ class ReportGenerator {
                   pw.Expanded(
                     child: _buildQuadrantSingleReceiptCard(
                       copyTitle: 'STUDENT / PARENT (1/4)',
-                      schoolLogo: schoolLogo,
-                      schoolName: schoolName,
-                      schoolAddress: schoolAddress,
-                      schoolContact: schoolContact,
+                      schoolLogo: effectiveSchoolLogo,
+                      schoolName: effectiveSchoolName,
+                      schoolAddress: effectiveSchoolAddress,
+                      schoolContact: effectiveSchoolContact,
                       transaction: transaction,
                       invoice: invoice,
                       student: student,
@@ -73,10 +123,10 @@ class ReportGenerator {
                   pw.Expanded(
                     child: _buildQuadrantSingleReceiptCard(
                       copyTitle: 'OFFICE RECORD (2/4)',
-                      schoolLogo: schoolLogo,
-                      schoolName: schoolName,
-                      schoolAddress: schoolAddress,
-                      schoolContact: schoolContact,
+                      schoolLogo: effectiveSchoolLogo,
+                      schoolName: effectiveSchoolName,
+                      schoolAddress: effectiveSchoolAddress,
+                      schoolContact: effectiveSchoolContact,
                       transaction: transaction,
                       invoice: invoice,
                       student: student,
@@ -725,11 +775,60 @@ class ReportGenerator {
     String? referenceNumber,
     String? receiptNumber,
     String? academicYear,
-    String schoolName = 'Eduvia Public School',
-    String schoolAddress = '123 Education Boulevard, Academic District',
-    String schoolContact = 'Phone: +91 9876543210 | Email: finance@school.edu',
+    String? schoolName,
+    String? schoolAddress,
+    String? schoolContact,
   }) async {
     TelemetryService.instance.trackReportExported(reportType: 'batch_payment_receipt');
+
+    final settingsService = SettingsService();
+    String effectiveSchoolName = (schoolName != null && schoolName.trim().isNotEmpty) ? schoolName.trim() : '';
+    if (effectiveSchoolName.isEmpty || effectiveSchoolName == 'Eduvia Public School' || effectiveSchoolName == 'Eduvia') {
+      try {
+        final configuredName = await settingsService.getSetting('school_name');
+        if (configuredName != null && configuredName.trim().isNotEmpty) {
+          effectiveSchoolName = configuredName.trim();
+        }
+      } catch (_) {}
+      if (effectiveSchoolName.isEmpty) {
+        effectiveSchoolName = 'Eduvia Public School';
+      }
+    }
+
+    String effectiveSchoolAddress = (schoolAddress != null && schoolAddress.trim().isNotEmpty) ? schoolAddress.trim() : '';
+    if (effectiveSchoolAddress.isEmpty || effectiveSchoolAddress == '123 Education Boulevard, Academic District') {
+      try {
+        final configuredAddr = await settingsService.getSetting('school_address');
+        if (configuredAddr != null && configuredAddr.trim().isNotEmpty) {
+          effectiveSchoolAddress = configuredAddr.trim();
+        }
+      } catch (_) {}
+      if (effectiveSchoolAddress.isEmpty) {
+        effectiveSchoolAddress = '123 Education Boulevard, Academic District';
+      }
+    }
+
+    String effectiveSchoolContact = (schoolContact != null && schoolContact.trim().isNotEmpty) ? schoolContact.trim() : '';
+    if (effectiveSchoolContact.isEmpty || effectiveSchoolContact == 'Phone: +91 9876543210 | Email: finance@school.edu') {
+      try {
+        final configuredContact = await settingsService.getSetting('school_contact') ??
+            await settingsService.getSetting('school_phone');
+        if (configuredContact != null && configuredContact.trim().isNotEmpty) {
+          effectiveSchoolContact = configuredContact.trim();
+        }
+      } catch (_) {}
+      if (effectiveSchoolContact.isEmpty) {
+        effectiveSchoolContact = 'Phone: +91 9876543210 | Email: finance@school.edu';
+      }
+    }
+
+    Uint8List? effectiveSchoolLogo = schoolLogo;
+    if (effectiveSchoolLogo == null) {
+      try {
+        effectiveSchoolLogo = await settingsService.getSchoolLogoBytes();
+      } catch (_) {}
+    }
+
     final pdf = pw.Document();
 
     final formattedReceiptNumber = receiptNumber ?? 'RCT-${DateTime.now().year}-${DateTime.now().millisecondsSinceEpoch.toString().substring(7)}';
@@ -755,10 +854,10 @@ class ReportGenerator {
                   pw.Expanded(
                     child: _buildQuadrantBatchReceiptCard(
                       copyTitle: 'STUDENT / PARENT (1/4)',
-                      schoolLogo: schoolLogo,
-                      schoolName: schoolName,
-                      schoolAddress: schoolAddress,
-                      schoolContact: schoolContact,
+                      schoolLogo: effectiveSchoolLogo,
+                      schoolName: effectiveSchoolName,
+                      schoolAddress: effectiveSchoolAddress,
+                      schoolContact: effectiveSchoolContact,
                       academicYear: academicYear,
                       student: student,
                       formattedReceiptNumber: formattedReceiptNumber,
@@ -778,10 +877,10 @@ class ReportGenerator {
                   pw.Expanded(
                     child: _buildQuadrantBatchReceiptCard(
                       copyTitle: 'OFFICE RECORD (2/4)',
-                      schoolLogo: schoolLogo,
-                      schoolName: schoolName,
-                      schoolAddress: schoolAddress,
-                      schoolContact: schoolContact,
+                      schoolLogo: effectiveSchoolLogo,
+                      schoolName: effectiveSchoolName,
+                      schoolAddress: effectiveSchoolAddress,
+                      schoolContact: effectiveSchoolContact,
                       academicYear: academicYear,
                       student: student,
                       formattedReceiptNumber: formattedReceiptNumber,
@@ -1428,11 +1527,60 @@ class ReportGenerator {
   static Future<Uint8List> buildStudentIdCardPdfBytes({
     Uint8List? schoolLogo,
     required Student student,
-    String schoolName = 'Eduvia',
-    String schoolAddress = '123 Education Boulevard, Academic District',
-    String schoolContact = 'Phone: +1 800 555-0199',
+    String? schoolName,
+    String? schoolAddress,
+    String? schoolContact,
   }) async {
     TelemetryService.instance.trackReportExported(reportType: 'student_id_card');
+
+    final settingsService = SettingsService();
+    String effectiveSchoolName = (schoolName != null && schoolName.trim().isNotEmpty) ? schoolName.trim() : '';
+    if (effectiveSchoolName.isEmpty || effectiveSchoolName == 'Eduvia') {
+      try {
+        final configuredName = await settingsService.getSetting('school_name');
+        if (configuredName != null && configuredName.trim().isNotEmpty) {
+          effectiveSchoolName = configuredName.trim();
+        }
+      } catch (_) {}
+      if (effectiveSchoolName.isEmpty) {
+        effectiveSchoolName = 'Eduvia';
+      }
+    }
+
+    String effectiveSchoolAddress = (schoolAddress != null && schoolAddress.trim().isNotEmpty) ? schoolAddress.trim() : '';
+    if (effectiveSchoolAddress.isEmpty || effectiveSchoolAddress == '123 Education Boulevard, Academic District') {
+      try {
+        final configuredAddr = await settingsService.getSetting('school_address');
+        if (configuredAddr != null && configuredAddr.trim().isNotEmpty) {
+          effectiveSchoolAddress = configuredAddr.trim();
+        }
+      } catch (_) {}
+      if (effectiveSchoolAddress.isEmpty) {
+        effectiveSchoolAddress = '123 Education Boulevard, Academic District';
+      }
+    }
+
+    String effectiveSchoolContact = (schoolContact != null && schoolContact.trim().isNotEmpty) ? schoolContact.trim() : '';
+    if (effectiveSchoolContact.isEmpty || effectiveSchoolContact == 'Phone: +1 800 555-0199') {
+      try {
+        final configuredContact = await settingsService.getSetting('school_contact') ??
+            await settingsService.getSetting('school_phone');
+        if (configuredContact != null && configuredContact.trim().isNotEmpty) {
+          effectiveSchoolContact = configuredContact.trim();
+        }
+      } catch (_) {}
+      if (effectiveSchoolContact.isEmpty) {
+        effectiveSchoolContact = 'Phone: +1 800 555-0199';
+      }
+    }
+
+    Uint8List? effectiveSchoolLogo = schoolLogo;
+    if (effectiveSchoolLogo == null) {
+      try {
+        effectiveSchoolLogo = await settingsService.getSchoolLogoBytes();
+      } catch (_) {}
+    }
+
     final pdf = pw.Document();
 
     final primaryColor = PdfColor.fromHex('#1A73E8');
@@ -1468,7 +1616,7 @@ class ReportGenerator {
                     ),
                     child: pw.Column(
                       children: [
-                        if (schoolLogo != null) ...[
+                        if (effectiveSchoolLogo != null) ...[
                           pw.Container(
                             width: 32,
                             height: 32,
@@ -1478,14 +1626,14 @@ class ReportGenerator {
                             ),
                             padding: const pw.EdgeInsets.all(2),
                             child: pw.Image(
-                              pw.MemoryImage(schoolLogo),
+                              pw.MemoryImage(effectiveSchoolLogo),
                               fit: pw.BoxFit.contain,
                             ),
                           ),
                           pw.SizedBox(height: 6),
                         ],
                         pw.Text(
-                          schoolName,
+                          effectiveSchoolName,
                           style: pw.TextStyle(color: PdfColors.white, fontSize: 11, fontWeight: pw.FontWeight.bold),
                           textAlign: pw.TextAlign.center,
                         ),
@@ -1570,7 +1718,7 @@ class ReportGenerator {
                           style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold, letterSpacing: 2),
                         ),
                         pw.Text(
-                          schoolContact,
+                          effectiveSchoolContact,
                           style: pw.TextStyle(fontSize: 6, color: greyColor),
                         ),
                       ],
@@ -1591,9 +1739,9 @@ class ReportGenerator {
   static Future<File> generateStudentIdCard({
     Uint8List? schoolLogo,
     required Student student,
-    String schoolName = 'Eduvia',
-    String schoolAddress = '123 Education Boulevard, Academic District',
-    String schoolContact = 'Phone: +1 800 555-0199',
+    String? schoolName,
+    String? schoolAddress,
+    String? schoolContact,
   }) async {
     final bytes = await buildStudentIdCardPdfBytes(
       student: student,
@@ -1637,11 +1785,46 @@ class ReportGenerator {
     required String tcNumber,
     required String tcDate,
     required String reasonForLeaving,
-    String schoolName = 'Eduvia',
-    String schoolAddress = '123 Education Boulevard, Academic District',
+    String? schoolName,
+    String? schoolAddress,
     String affiliationNo = 'AFF-CBSE-2024-99881',
   }) async {
     TelemetryService.instance.trackReportExported(reportType: 'transfer_certificate');
+
+    final settingsService = SettingsService();
+    String effectiveSchoolName = (schoolName != null && schoolName.trim().isNotEmpty) ? schoolName.trim() : '';
+    if (effectiveSchoolName.isEmpty || effectiveSchoolName == 'Eduvia') {
+      try {
+        final configuredName = await settingsService.getSetting('school_name');
+        if (configuredName != null && configuredName.trim().isNotEmpty) {
+          effectiveSchoolName = configuredName.trim();
+        }
+      } catch (_) {}
+      if (effectiveSchoolName.isEmpty) {
+        effectiveSchoolName = 'Eduvia';
+      }
+    }
+
+    String effectiveSchoolAddress = (schoolAddress != null && schoolAddress.trim().isNotEmpty) ? schoolAddress.trim() : '';
+    if (effectiveSchoolAddress.isEmpty || effectiveSchoolAddress == '123 Education Boulevard, Academic District') {
+      try {
+        final configuredAddr = await settingsService.getSetting('school_address');
+        if (configuredAddr != null && configuredAddr.trim().isNotEmpty) {
+          effectiveSchoolAddress = configuredAddr.trim();
+        }
+      } catch (_) {}
+      if (effectiveSchoolAddress.isEmpty) {
+        effectiveSchoolAddress = '123 Education Boulevard, Academic District';
+      }
+    }
+
+    Uint8List? effectiveSchoolLogo = schoolLogo;
+    if (effectiveSchoolLogo == null) {
+      try {
+        effectiveSchoolLogo = await settingsService.getSchoolLogoBytes();
+      } catch (_) {}
+    }
+
     final pdf = pw.Document();
 
     final primaryColor = PdfColor.fromHex('#1A73E8');
@@ -1667,25 +1850,25 @@ class ReportGenerator {
                 ),
                 child: pw.Column(
                   children: [
-                    if (schoolLogo != null) ...[
+                    if (effectiveSchoolLogo != null) ...[
                       pw.Container(
                         width: 48,
                         height: 48,
                         child: pw.Image(
-                          pw.MemoryImage(schoolLogo),
+                          pw.MemoryImage(effectiveSchoolLogo),
                           fit: pw.BoxFit.contain,
                         ),
                       ),
                       pw.SizedBox(height: 8),
                     ],
                     pw.Text(
-                      schoolName,
+                      effectiveSchoolName,
                       style: pw.TextStyle(fontSize: 22, fontWeight: pw.FontWeight.bold, color: primaryColor),
                       textAlign: pw.TextAlign.center,
                     ),
                     pw.SizedBox(height: 4),
                     pw.Text(
-                      schoolAddress,
+                      effectiveSchoolAddress,
                       style: const pw.TextStyle(fontSize: 9, color: PdfColors.grey700),
                       textAlign: pw.TextAlign.center,
                     ),
@@ -1802,8 +1985,8 @@ class ReportGenerator {
     required String tcNumber,
     required String tcDate,
     required String reasonForLeaving,
-    String schoolName = 'Eduvia',
-    String schoolAddress = '123 Education Boulevard, Academic District',
+    String? schoolName,
+    String? schoolAddress,
     String affiliationNo = 'AFF-CBSE-2024-99881',
   }) async {
     final bytes = await buildTransferCertificatePdfBytes(

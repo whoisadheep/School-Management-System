@@ -896,11 +896,19 @@ class _ExamManagementViewState extends ConsumerState<ExamManagementView> with Si
                                   ElevatedButton.icon(
                                     onPressed: () async {
                                       try {
-                                        final logoBytes = await SettingsService().getSchoolLogoBytes();
+                                        final settingsService = SettingsService();
+                                        final schoolName = await settingsService.getSetting('school_name');
+                                        final schoolAddress = await settingsService.getSetting('school_address');
+                                        final schoolContact = await settingsService.getSetting('school_contact') ??
+                                            await settingsService.getSetting('school_phone');
+                                        final logoBytes = await settingsService.getSchoolLogoBytes();
                                         final bytes = await ReportCardGenerator.generateReportCardPdfBytes(
                                           schoolLogo: logoBytes,
                                           examResult: examRes,
                                           rankInClass: rank,
+                                          schoolName: schoolName,
+                                          schoolAddress: schoolAddress,
+                                          schoolContact: schoolContact,
                                         );
                                         final fileName = ReportCardGenerator.getReportCardFileName(examRes);
 

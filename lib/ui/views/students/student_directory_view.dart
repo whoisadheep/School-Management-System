@@ -3291,8 +3291,19 @@ class _StudentDirectoryViewState extends ConsumerState<StudentDirectoryView>
   }
   Future<void> _generateStudentIdCard(BuildContext context, Student student) async {
     try {
-      final logoBytes = await SettingsService().getSchoolLogoBytes();
-      final pdfBytes = await ReportGenerator.buildStudentIdCardPdfBytes(schoolLogo: logoBytes, student: student);
+      final settingsService = SettingsService();
+      final schoolName = await settingsService.getSetting('school_name');
+      final schoolAddress = await settingsService.getSetting('school_address');
+      final schoolContact = await settingsService.getSetting('school_contact') ??
+          await settingsService.getSetting('school_phone');
+      final logoBytes = await settingsService.getSchoolLogoBytes();
+      final pdfBytes = await ReportGenerator.buildStudentIdCardPdfBytes(
+        schoolLogo: logoBytes,
+        student: student,
+        schoolName: schoolName,
+        schoolAddress: schoolAddress,
+        schoolContact: schoolContact,
+      );
       if (context.mounted) {
         final savedFile = await PdfPreviewDialog.show(
           context: context,
@@ -3381,13 +3392,18 @@ class _StudentDirectoryViewState extends ConsumerState<StudentDirectoryView>
                   tcDate: tcDate,
                 );
 
-                final logoBytes = await SettingsService().getSchoolLogoBytes();
+                final settingsService = SettingsService();
+                final schoolName = await settingsService.getSetting('school_name');
+                final schoolAddress = await settingsService.getSetting('school_address');
+                final logoBytes = await settingsService.getSchoolLogoBytes();
                 final pdfBytes = await ReportGenerator.buildTransferCertificatePdfBytes(
                   schoolLogo: logoBytes,
                   student: student,
                   tcNumber: tcNum,
                   tcDate: tcDate,
                   reasonForLeaving: reason,
+                  schoolName: schoolName,
+                  schoolAddress: schoolAddress,
                 );
 
                 ref.invalidate(studentDirectoryProvider);
