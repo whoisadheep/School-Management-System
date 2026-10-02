@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../providers/auth_provider.dart';
+import '../../../providers/auto_update_provider.dart';
 import '../../../providers/navigation_provider.dart';
 import '../../widgets/command_palette_dialog.dart';
 import '../../widgets/blobatar.dart';
@@ -98,7 +99,85 @@ class DesktopTopBar extends ConsumerWidget {
 
           const Spacer(),
 
-          const SizedBox(width: 24),
+          // Auto Update Indicator Chip
+          Consumer(
+            builder: (context, ref, _) {
+              final updateState = ref.watch(autoUpdateProvider);
+              if (updateState.status == AutoUpdateStatus.downloading) {
+                return Tooltip(
+                  message: 'Downloading update (${(updateState.progress * 100).toInt()}%) • Click to view',
+                  child: InkWell(
+                    onTap: () => ref.read(autoUpdateProvider.notifier).reopen(),
+                    borderRadius: BorderRadius.circular(10),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                      margin: const EdgeInsets.only(right: 16),
+                      decoration: BoxDecoration(
+                        color: AppTheme.primarySoft,
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(color: AppTheme.primaryPurple.withValues(alpha: 0.2)),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const SizedBox(
+                            width: 13,
+                            height: 13,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              valueColor: AlwaysStoppedAnimation<Color>(AppTheme.primaryPurple),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Text(
+                            'Updating ${(updateState.progress * 100).toInt()}%',
+                            style: GoogleFonts.poppins(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w600,
+                              color: AppTheme.primaryPurple,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                );
+              } else if (updateState.status == AutoUpdateStatus.readyToInstall) {
+                return Tooltip(
+                  message: 'Update v${updateState.updateInfo?.latestVersion} ready to install • Click to restart',
+                  child: InkWell(
+                    onTap: () => ref.read(autoUpdateProvider.notifier).reopen(),
+                    borderRadius: BorderRadius.circular(10),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                      margin: const EdgeInsets.only(right: 16),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFDCFCE7),
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(color: const Color(0xFF10B981).withValues(alpha: 0.3)),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(Icons.check_circle_rounded, color: Color(0xFF16A34A), size: 15),
+                          const SizedBox(width: 6),
+                          Text(
+                            'Update Ready',
+                            style: GoogleFonts.poppins(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w600,
+                              color: const Color(0xFF065F46),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                );
+              }
+              return const SizedBox.shrink();
+            },
+          ),
 
           // User Profile
           Row(

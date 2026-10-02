@@ -30,10 +30,10 @@ import '../views/inventory/inventory_management_view.dart';
 import '../views/settings/admin_users_view.dart';
 import '../views/settings/activity_log_view.dart';
 import '../views/settings/settings_view.dart';
-import '../views/update/update_dialog.dart';
 import '../views/onboarding/onboarding_wizard_view.dart';
+import '../../providers/auto_update_provider.dart';
 import '../../providers/onboarding_provider.dart';
-import '../../services/update_service.dart';
+import '../widgets/auto_update_banner.dart';
 import '../widgets/command_palette_dialog.dart';
 import 'widgets/sidebar.dart';
 import 'widgets/top_bar.dart';
@@ -53,7 +53,7 @@ class _MainLayoutState extends ConsumerState<MainLayout> {
     super.initState();
     HardwareKeyboard.instance.addHandler(_handleGlobalKey);
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      _checkUpdates();
+      ref.read(autoUpdateProvider.notifier).checkForUpdateAndAutoDownload();
     });
   }
 
@@ -77,17 +77,6 @@ class _MainLayoutState extends ConsumerState<MainLayout> {
       }
     }
     return false;
-  }
-
-  Future<void> _checkUpdates() async {
-    final updateInfo = await UpdateService.instance.checkForUpdate();
-    if (updateInfo != null && mounted) {
-      showDialog(
-        context: context,
-        barrierDismissible: !updateInfo.isMandatory,
-        builder: (context) => UpdateDialog(updateInfo: updateInfo),
-      );
-    }
   }
 
   void _openCommandPalette(BuildContext context) {
@@ -197,12 +186,20 @@ class _MainLayoutState extends ConsumerState<MainLayout> {
                       child: Column(
                         children: [
                           const DesktopTopBar(),
+                          const AutoUpdateTopProgressBar(),
                           Expanded(
-                            child: AnimatedSwitcher(
-                              duration: const Duration(milliseconds: 200),
-                              switchInCurve: Curves.easeOutCubic,
-                              switchOutCurve: Curves.easeInCubic,
-                              child: _getTabWidget(selectedTab, authState),
+                            child: Stack(
+                              children: [
+                                Positioned.fill(
+                                  child: AnimatedSwitcher(
+                                    duration: const Duration(milliseconds: 200),
+                                    switchInCurve: Curves.easeOutCubic,
+                                    switchOutCurve: Curves.easeInCubic,
+                                    child: _getTabWidget(selectedTab, authState),
+                                  ),
+                                ),
+                                const AutoUpdateFloatingBanner(),
+                              ],
                             ),
                           ),
                         ],
