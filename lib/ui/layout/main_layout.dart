@@ -198,7 +198,13 @@ class _MainLayoutState extends ConsumerState<MainLayout> {
                                     child: _getTabWidget(selectedTab, authState),
                                   ),
                                 ),
-                                const AutoUpdateFloatingBanner(),
+                                const Align(
+                                  alignment: Alignment.bottomRight,
+                                  child: Padding(
+                                    padding: EdgeInsets.only(bottom: 24, right: 28),
+                                    child: AutoUpdateFloatingBanner(),
+                                  ),
+                                ),
                               ],
                             ),
                           ),

@@ -37,7 +37,14 @@ class CrashReportingService {
 
   /// Automatically report an error if a webhook URL is configured
   Future<void> reportError(String message, [Object? error, StackTrace? stackTrace]) async {
-    final url = _webhookUrl ?? dotenv.env['CRASH_REPORT_WEBHOOK_URL'];
+    String? url = _webhookUrl;
+    if (url == null) {
+      try {
+        if (dotenv.isInitialized) {
+          url = dotenv.env['CRASH_REPORT_WEBHOOK_URL'];
+        }
+      } catch (_) {}
+    }
     if (url == null || url.trim().isEmpty) return;
 
     // Debounce duplicate error messages within 2 minutes to prevent spam
@@ -78,7 +85,7 @@ class CrashReportingService {
               'fields': [
                 {
                   'name': 'Stack Trace',
-                  'value': '```dart\n${stackSnippet.length > 950 ? stackSnippet.substring(0, 950) + "..." : stackSnippet}\n```',
+                  'value': '```dart\n${stackSnippet.length > 950 ? "${stackSnippet.substring(0, 950)}..." : stackSnippet}\n```',
                 }
               ],
               'footer': {

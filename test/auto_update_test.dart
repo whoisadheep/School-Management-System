@@ -67,7 +67,7 @@ void main() {
         ),
       );
 
-      expect(find.byType(FractionallySizedBox), findsNothing);
+      expect(find.byType(LinearProgressIndicator), findsNothing);
 
       // Now set to downloading
       notifier.state = const AutoUpdateState(
@@ -77,7 +77,7 @@ void main() {
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 350));
 
-      expect(find.byType(FractionallySizedBox), findsOneWidget);
+      expect(find.byType(LinearProgressIndicator), findsOneWidget);
     });
 
     testWidgets('AutoUpdateFloatingBanner renders download progress and handles collapse', (WidgetTester tester) async {

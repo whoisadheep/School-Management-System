@@ -18,45 +18,13 @@ class AutoUpdateTopProgressBar extends ConsumerWidget {
       return const SizedBox.shrink();
     }
 
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        return Container(
-          width: constraints.maxWidth,
-          height: 3,
-          color: AppTheme.primaryPurple.withValues(alpha: 0.12),
-          child: Align(
-            alignment: Alignment.centerLeft,
-            child: TweenAnimationBuilder<double>(
-              tween: Tween<double>(begin: 0, end: updateState.progress),
-              duration: const Duration(milliseconds: 300),
-              curve: Curves.easeOutCubic,
-              builder: (context, value, _) {
-                return FractionallySizedBox(
-                  widthFactor: value.clamp(0.01, 1.0),
-                  child: Container(
-                    decoration: const BoxDecoration(
-                      gradient: LinearGradient(
-                        colors: [
-                          Color(0xFF4C3BCF),
-                          Color(0xFF7B68EE),
-                          Color(0xFF9D7BFF),
-                        ],
-                      ),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Color(0x664C3BCF),
-                          blurRadius: 4,
-                          spreadRadius: 1,
-                        ),
-                      ],
-                    ),
-                  ),
-                );
-              },
-            ),
-          ),
-        );
-      },
+    return SizedBox(
+      height: 3,
+      child: LinearProgressIndicator(
+        value: updateState.progress > 0 ? updateState.progress : null,
+        backgroundColor: AppTheme.primaryPurple.withValues(alpha: 0.12),
+        valueColor: const AlwaysStoppedAnimation<Color>(AppTheme.primaryPurple),
+      ),
     );
   }
 }
@@ -76,29 +44,26 @@ class AutoUpdateFloatingBanner extends ConsumerWidget {
       return const SizedBox.shrink();
     }
 
-    return Positioned(
-      bottom: 24,
-      right: 28,
-      child: AnimatedSwitcher(
-        duration: const Duration(milliseconds: 280),
-        switchInCurve: Curves.easeOutCubic,
-        switchOutCurve: Curves.easeInCubic,
-        transitionBuilder: (child, animation) {
-          return FadeTransition(
-            opacity: animation,
-            child: SlideTransition(
-              position: Tween<Offset>(
-                begin: const Offset(0, 0.2),
-                end: Offset.zero,
-              ).animate(animation),
-              child: child,
-            ),
-          );
-        },
-        child: updateState.isCollapsed
-            ? _buildCollapsedPill(context, ref, updateState)
-            : _buildExpandedCard(context, ref, updateState),
-      ),
+    return AnimatedSwitcher(
+      key: const ValueKey('auto_update_banner_switcher'),
+      duration: const Duration(milliseconds: 280),
+      switchInCurve: Curves.easeOutCubic,
+      switchOutCurve: Curves.easeInCubic,
+      transitionBuilder: (child, animation) {
+        return FadeTransition(
+          opacity: animation,
+          child: SlideTransition(
+            position: Tween<Offset>(
+              begin: const Offset(0, 0.2),
+              end: Offset.zero,
+            ).animate(animation),
+            child: child,
+          ),
+        );
+      },
+      child: updateState.isCollapsed
+          ? _buildCollapsedPill(context, ref, updateState)
+          : _buildExpandedCard(context, ref, updateState),
     );
   }
 
@@ -112,6 +77,7 @@ class AutoUpdateFloatingBanner extends ConsumerWidget {
     final isReady = updateState.status == AutoUpdateStatus.readyToInstall;
 
     return Material(
+      key: const ValueKey('auto_update_collapsed_pill'),
       color: Colors.transparent,
       child: InkWell(
         onTap: () => ref.read(autoUpdateProvider.notifier).toggleCollapsed(),
@@ -196,6 +162,7 @@ class AutoUpdateFloatingBanner extends ConsumerWidget {
     final version = updateState.updateInfo?.latestVersion ?? '';
 
     return ClipRRect(
+      key: const ValueKey('auto_update_expanded_card'),
       borderRadius: BorderRadius.circular(18),
       child: BackdropFilter(
         filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
