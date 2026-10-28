@@ -854,7 +854,7 @@ class _LicenseActivationViewState extends ConsumerState<LicenseActivationView> {
       if (!PermissionHelper.requireAdminRole(context, ref, RiskyAction.licenseManagement)) return;
     }
 
-    final keyText = _keyController.text.trim();
+    final keyText = _keyController.text.replaceAll(RegExp(r'\s+'), '');
     if (keyText.isEmpty) {
       setState(() {
         _shakeCounter++;

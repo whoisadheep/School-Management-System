@@ -6,6 +6,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import '../models/models.dart';
+import 'database_service.dart';
 import 'settings_service.dart';
 import 'telemetry_service.dart';
 
@@ -56,8 +57,43 @@ class ReportCardGenerator {
 
     final effectiveSchoolLogo = schoolLogo ?? await settingsService.getSchoolLogoBytes();
 
-    final pdf = pw.Document();
+    // Fetch and format student details (DOB, Father's Name, Mother's Name)
+    String? studentDob = examResult.dob;
+    String? studentFatherName = examResult.fatherName;
+    String? studentMotherName = examResult.motherName;
+
+    if (studentDob == null && studentFatherName == null && studentMotherName == null) {
+      try {
+        final db = DatabaseService();
+        final s = await db.getStudentById(examResult.studentId);
+        if (s != null) {
+          studentDob = s.dob;
+          studentFatherName = s.fatherName;
+          studentMotherName = s.motherName;
+        }
+      } catch (_) {}
+    }
+
     final dateFormatter = DateFormat('dd MMM yyyy');
+
+    String formattedDob = 'N/A';
+    if (studentDob != null && studentDob.trim().isNotEmpty) {
+      final parsed = DateTime.tryParse(studentDob.trim());
+      if (parsed != null) {
+        formattedDob = dateFormatter.format(parsed);
+      } else {
+        formattedDob = studentDob.trim();
+      }
+    }
+
+    final String formattedFatherName = (studentFatherName != null && studentFatherName.trim().isNotEmpty)
+        ? studentFatherName.trim()
+        : 'N/A';
+    final String formattedMotherName = (studentMotherName != null && studentMotherName.trim().isNotEmpty)
+        ? studentMotherName.trim()
+        : 'N/A';
+
+    final pdf = pw.Document();
 
     final primaryColor = PdfColor.fromHex('#4C3BCF');
     final darkColor = PdfColor.fromHex('#1A1A2E');
@@ -156,6 +192,7 @@ class ReportCardGenerator {
                   border: pw.Border.all(color: PdfColor.fromHex('#E0E0E0')),
                 ),
                 child: pw.Row(
+                  crossAxisAlignment: pw.CrossAxisAlignment.start,
                   children: [
                     pw.Expanded(
                       child: pw.Column(
@@ -163,21 +200,24 @@ class ReportCardGenerator {
                         children: [
                           _pdfInfoRow('Student Name:', examResult.studentName, darkColor, true),
                           pw.SizedBox(height: 4),
-                          _pdfInfoRow('Roll Number:', examResult.rollNumber, darkColor),
+                          _pdfInfoRow("Father's Name:", formattedFatherName, darkColor),
                           pw.SizedBox(height: 4),
-                          _pdfInfoRow('Class & Section:', '${examResult.className} - ${examResult.section ?? "A"}', darkColor),
+                          _pdfInfoRow("Mother's Name:", formattedMotherName, darkColor),
+                          pw.SizedBox(height: 4),
+                          _pdfInfoRow('Date of Birth:', formattedDob, darkColor),
                         ],
                       ),
                     ),
+                    pw.SizedBox(width: 16),
                     pw.Expanded(
                       child: pw.Column(
                         crossAxisAlignment: pw.CrossAxisAlignment.start,
                         children: [
-                          _pdfInfoRow('Exam Title:', examResult.examName, darkColor, true),
+                          _pdfInfoRow('Class & Section:', '${examResult.className} - ${examResult.section ?? "A"}', darkColor),
+                          pw.SizedBox(height: 4),
+                          _pdfInfoRow('Roll Number:', examResult.rollNumber, darkColor),
                           pw.SizedBox(height: 4),
                           _pdfInfoRow('Academic Year:', examResult.academicYear, darkColor),
-                          pw.SizedBox(height: 4),
-                          _pdfInfoRow('Date Issued:', dateFormatter.format(DateTime.now()), darkColor),
                         ],
                       ),
                     ),
@@ -188,7 +228,7 @@ class ReportCardGenerator {
 
               // Subject-wise Marks Table
               pw.Text(
-                'SUBJECT PERFORMANCE BREAKDOWN',
+                '${examResult.examName} Marks'.toUpperCase(),
                 style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold, color: darkColor),
               ),
               pw.SizedBox(height: 8),
@@ -253,7 +293,6 @@ class ReportCardGenerator {
                     _pdfSummaryMetric('TOTAL MARKS', '${examResult.totalMarksObtained.toStringAsFixed(1)} / ${examResult.totalMaxMarks.toStringAsFixed(0)}'),
                     _pdfSummaryMetric('PERCENTAGE', '${examResult.percentage.toStringAsFixed(2)}%'),
                     _pdfSummaryMetric('OVERALL GRADE', examResult.grade),
-                    _pdfSummaryMetric('ATTENDANCE', examResult.attendancePercent != null ? '${examResult.attendancePercent!.toStringAsFixed(1)}%' : 'N/A'),
                     _pdfSummaryMetric('CLASS RANK', rankInClass != null ? '$rankInClass' : 'N/A'),
                     _pdfSummaryMetric(
                       'FINAL RESULT',
@@ -337,17 +376,23 @@ class ReportCardGenerator {
 
   static pw.Widget _pdfInfoRow(String label, String value, PdfColor textColor, [bool bold = false]) {
     return pw.Row(
+      crossAxisAlignment: pw.CrossAxisAlignment.start,
       children: [
-        pw.Text(
-          '$label ',
-          style: pw.TextStyle(fontSize: 10, color: PdfColor.fromHex('#616161'), fontWeight: pw.FontWeight.bold),
+        pw.SizedBox(
+          width: 82,
+          child: pw.Text(
+            label,
+            style: pw.TextStyle(fontSize: 9.5, color: PdfColor.fromHex('#616161'), fontWeight: pw.FontWeight.bold),
+          ),
         ),
-        pw.Text(
-          value,
-          style: pw.TextStyle(
-            fontSize: 10,
-            color: textColor,
-            fontWeight: bold ? pw.FontWeight.bold : pw.FontWeight.normal,
+        pw.Expanded(
+          child: pw.Text(
+            value,
+            style: pw.TextStyle(
+              fontSize: 9.5,
+              color: textColor,
+              fontWeight: bold ? pw.FontWeight.bold : pw.FontWeight.normal,
+            ),
           ),
         ),
       ],

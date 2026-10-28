@@ -155,6 +155,9 @@ class ExamResultData {
   final bool isPassed;
   final int? rankInClass;
   final double? attendancePercent;
+  final String? dob;
+  final String? fatherName;
+  final String? motherName;
 
   const ExamResultData({
     required this.examId,
@@ -174,6 +177,9 @@ class ExamResultData {
     required this.isPassed,
     this.rankInClass,
     this.attendancePercent,
+    this.dob,
+    this.fatherName,
+    this.motherName,
   });
 }
 

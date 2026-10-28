@@ -330,7 +330,7 @@ class LicenseService {
   /// Cryptographically verifies signature & decodes payload JSON
   LicenseDetails? _decodeAndVerifyLicensePayload(String rawKey) {
     try {
-      final cleanKey = rawKey.trim();
+      final cleanKey = rawKey.replaceAll(RegExp(r'\s+'), '');
 
       // Format: Base64Payload.Base64Signature
       if (cleanKey.contains('.')) {

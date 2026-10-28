@@ -1,7 +1,7 @@
 {
-  "latest_version": "1.0.41",
-  "download_url": "https://github.com/whoisadheep/School-Management-System/releases/download/v1.0.41/Eduvia-Installer.exe",
+  "latest_version": "1.0.42",
+  "download_url": "https://github.com/whoisadheep/School-Management-System/releases/download/v1.0.42/Eduvia-Installer.exe",
   "sha256": "",
-  "changelog": "Fix semantics parentDataDirty assertion and layout overflow in auto-updater floating card.",
+  "changelog": "Add DOB, Father's Name, Mother's Name and clean marks title to report card; sanitize license whitespace and fix Linux Wayland GTK backend.",
   "mandatory_update": false
 }

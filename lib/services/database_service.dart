@@ -4850,6 +4850,9 @@ class DatabaseService {
       gradePoint: overallGradeInfo['grade_point'] as double?,
       isPassed: overallPass,
       attendancePercent: await computeAttendancePercentForReportCard(studentId, exam.academicYear),
+      dob: student.dob,
+      fatherName: student.fatherName,
+      motherName: student.motherName,
     );
   }
 
